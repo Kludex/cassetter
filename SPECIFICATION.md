@@ -1,24 +1,10 @@
 # vcr-but-better - Specification
 
-This document describes the design decisions behind vcr-but-better, a Rust-powered HTTP cassette recorder for Python tests. Each section explains what was chosen, what alternatives were considered, and why.
+This document describes the design decisions behind vcr-but-better. Each section explains what was chosen, what alternatives were considered, and why.
 
-## 1. Architecture: Rust core with Python shell
+## 1. Cassette format (v1)
 
-The library splits into two layers: a Rust core (via PyO3) that handles YAML I/O, request matching, body processing, and security filtering, and a thin Python layer for pytest integration, HTTP library interceptors, and the public API.
-
-**Alternatives considered:**
-
-- **Pure Python.** This is what VCR.py does. YAML parsing/serialization, request matching, and body processing are all CPU-bound operations that benefit from compiled code. VCR.py's pure Python approach contributes to slow test startup when loading large cassette files (pydantic-ai's test suite has 567 cassettes totaling 100MB+). Rejected because speed is a primary goal.
-
-- **Cython.** Less ergonomic than PyO3 for complex data structures. Doesn't give access to Rust's serde ecosystem for YAML/JSON handling. Rejected because PyO3's ecosystem is stronger for this use case.
-
-- **Separate binary process.** A standalone Rust binary that Python communicates with via IPC. Rejected because the IPC overhead would negate performance gains, and the developer experience would be worse (two processes to manage, separate install).
-
-**Why this choice:** PyO3 gives us compiled speed for the hot paths while keeping the Python-facing API natural. The Python layer handles things that are inherently Python (pytest hooks, HTTP library APIs), while the Rust layer handles things that benefit from compiled performance and the serde ecosystem.
-
-## 2. Cassette format (v1)
-
-### 2.1. Structured JSON bodies
+### 1.1. Structured JSON bodies
 
 JSON request/response bodies are stored as structured YAML, not as escaped strings.
 
@@ -44,7 +30,7 @@ body: '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello!"}]}'
 
 **Why this choice:** Most cassettes are for JSON APIs. Storing JSON as structured YAML makes diffs clean, cassettes editable, and bodies inspectable without tooling.
 
-### 2.2. Typed body field
+### 1.2. Typed body field
 
 Bodies have an explicit `type` discriminator: `json`, `text`, `binary`, or `none`.
 
@@ -62,7 +48,7 @@ body:
 
 **Why this choice:** Explicit typing makes the format self-describing. A reader doesn't need to guess whether the content is JSON, plain text, or binary.
 
-### 2.3. Status code as integer
+### 1.3. Status code as integer
 
 Response status is stored as a plain integer, not a `{ code, message }` object.
 
@@ -82,17 +68,7 @@ status:
 
 **Why this choice:** Status messages are standardized (RFC 9110). Storing them adds bytes without information. The integer is cleaner and sufficient.
 
-### 2.4. No `recorded_with` metadata
-
-The cassette format does not include a `recorded_with` field identifying the tool version that created it.
-
-**Alternatives considered:**
-
-- **Include `recorded_with: "vcr-but-better 0.1.0"`.** Would help with debugging format compatibility issues. But in practice, the `version: 1` field serves this purpose - if the format changes, the version number changes. Tool identity is noise in diffs when nothing else changed. Rejected because it doesn't carry actionable information.
-
-**Why this choice:** Cassettes should contain only data needed for test replay. Metadata about the recording tool doesn't affect replay behavior.
-
-### 2.5. Optional `recorded_at` timestamp
+### 1.4. Optional `recorded_at` timestamp
 
 Each interaction has an optional `recorded_at` ISO 8601 timestamp.
 
@@ -104,7 +80,7 @@ Each interaction has an optional `recorded_at` ISO 8601 timestamp.
 
 **Why this choice:** Optional gives the best of both worlds - available when useful, not in the way when not.
 
-## 3. Interception: No monkey-patching
+## 2. Interception: No monkey-patching
 
 Each HTTP library is intercepted using its documented extension API:
 
@@ -124,7 +100,7 @@ Each HTTP library is intercepted using its documented extension API:
 
 **Why this choice:** Using documented extension points means our interceptors survive library version bumps. The tradeoff is needing per-library integration code, but there are only 3-4 HTTP libraries in common use.
 
-## 4. Security: Safe by default
+## 3. Security: Safe by default
 
 Sensitive data is filtered at write time. Cassettes never contain secrets. This is opt-out, not opt-in.
 
@@ -144,7 +120,7 @@ Sensitive data is filtered at write time. Cassettes never contain secrets. This 
 
 **Why this choice:** Write-time filtering means secrets never touch disk. The defaults cover the most common patterns (HTTP auth, OAuth tokens, API keys). Users can add custom patterns or disable filtering entirely if needed.
 
-## 5. Request matching
+## 4. Request matching
 
 Default matching is on method + URI. Configurable to include headers, body, or JSON body (with path ignoring).
 
@@ -158,9 +134,9 @@ Default matching is on method + URI. Configurable to include headers, body, or J
 
 **Why this choice:** Method + URI matching is predictable and sufficient for most API tests. JSON body matching with path ignoring handles the common case of timestamp/request-ID fields that change between runs.
 
-## 6. Body processing
+## 5. Body processing
 
-### 6.1. Auto-decompression
+### 5.1. Auto-decompression
 
 Response bodies are decompressed (gzip, brotli, zstd) before storage. The `content-encoding` header is removed from stored responses.
 
@@ -172,7 +148,7 @@ Response bodies are decompressed (gzip, brotli, zstd) before storage. The `conte
 
 **Why this choice:** Decompressing at write time makes cassettes human-readable, prevents double-decompression bugs, and reduces file size (YAML compresses differently than gzip).
 
-### 6.2. Unicode normalization
+### 5.2. Unicode normalization
 
 Smart quotes and special Unicode characters in response bodies are normalized to ASCII equivalents before storage.
 
@@ -184,9 +160,9 @@ Smart quotes and special Unicode characters in response bodies are normalized to
 
 **Why this choice:** ASCII-normalized cassettes are portable, linter-friendly, and stable across recording sessions where the LLM might use different quote styles for the same content.
 
-## 7. Pytest integration
+## 6. Pytest integration
 
-### 7.1. Auto-fixture injection
+### 6.1. Auto-fixture injection
 
 Tests marked with `@pytest.mark.vcr` automatically get the `vcr_cassette` fixture without declaring it as a parameter.
 
@@ -206,7 +182,7 @@ This is implemented via `pytest_collection_modifyitems` adding `vcr_cassette` to
 
 **Why this choice:** Matches pytest-recording's behavior, which pydantic-ai and many other projects already use. Tests that need direct cassette access can still declare the parameter.
 
-### 7.2. Cassette path resolution
+### 6.2. Cassette path resolution
 
 Cassettes are stored at `{test_dir}/cassettes/{test_file_stem}/{test_name}.yaml`.
 
@@ -228,7 +204,7 @@ tests/
 
 **Why this choice:** Matches pytest-recording's convention, which many projects already follow. One subdirectory per test module keeps things organized without deep nesting.
 
-### 7.3. Graceful missing cassettes
+### 6.3. Graceful missing cassettes
 
 When `record_mode=none` and a cassette file doesn't exist, the fixture creates an empty in-memory cassette instead of raising an error. If no interactions are recorded, nothing is saved to disk.
 
@@ -238,7 +214,7 @@ When `record_mode=none` and a cassette file doesn't exist, the fixture creates a
 
 **Why this choice:** Module-level VCR markers are convenient for test files where most-but-not-all tests need recording. Non-recording tests shouldn't be forced to have empty cassette files.
 
-## 8. Scope and non-goals
+## 7. Scope and non-goals
 
 ### In scope (Phase 1)
 - HTTP recording/replay for httpx, aiohttp, requests
