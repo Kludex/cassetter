@@ -54,6 +54,8 @@ dev = [
     "pyyaml>=6.0.3",
     "pytest-cov>=7.0.0",
     "types-requests>=2.32.4.20260107",
+    "grpcio>=1.60",
+    "websockets>=12.0",
 ]
 
 [tool.ruff]
@@ -79,7 +81,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source_pkgs = ["vcr_but_better", "tests"]
+source = ["src/vcr_but_better"]
 
 [tool.coverage.report]
 fail_under = 100

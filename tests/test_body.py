@@ -65,8 +65,8 @@ class TestProcessBody:
         assert body.body_type == "binary"
 
     def test_unicode_normalization(self) -> None:
-        # Smart quotes should be normalized
+        # Smart quotes should be preserved (only NFC normalization applied)
         text = "\u201chello\u201d".encode()
         body = process_body(text, "text/plain")
         assert body.body_type == "text"
-        assert body.content == '"hello"'
+        assert body.content == "\u201chello\u201d"

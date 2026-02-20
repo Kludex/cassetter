@@ -147,13 +147,15 @@ async with use_cassette(
 
 Available matchers: `method`, `uri`, `headers`, `body`, `json_body`.
 
-## Supported HTTP libraries
+## Supported libraries
 
-| Library | Interception method |
-|---------|-------------------|
-| **httpx** | `AsyncBaseTransport` / `BaseTransport` |
-| **aiohttp** | Session `_request` patch |
-| **requests** | Session `send` patch |
+| Library | Protocol | Interception method |
+|---------|----------|-------------------|
+| **httpx** | HTTP | `AsyncBaseTransport` / `BaseTransport` |
+| **aiohttp** | HTTP | Session `_request` patch |
+| **requests** | HTTP | Session `send` patch |
+| **grpcio** | gRPC | `grpc.aio.Channel` wrapper |
+| **websockets** | WebSocket | `websockets.connect` patch |
 
 Specify which libraries to intercept:
 
@@ -161,6 +163,90 @@ Specify which libraries to intercept:
 async with use_cassette("cassette.yaml", intercept=["httpx", "aiohttp"]):
     ...
 ```
+
+## gRPC support
+
+Install the gRPC extra:
+
+```bash
+uv add "vcr-but-better[grpc]"
+```
+
+Record and replay gRPC calls by adding `"grpc"` to the interceptor list:
+
+```python
+async with use_cassette("cassette.yaml", intercept=["grpc"]):
+    channel = grpc.aio.insecure_channel("localhost:50051")
+    stub = my_service_pb2_grpc.MyServiceStub(channel)
+    response = await stub.Echo(my_service_pb2.EchoRequest(message="hello"))
+```
+
+All four gRPC call patterns are supported: unary-unary, server streaming, client streaming, and bidirectional streaming. Request and response bodies are stored as binary in the cassette, with an optional `json_debug` section for human-readable protobuf representation (when `google.protobuf` is available):
+
+```yaml
+grpc_interactions:
+  - request:
+      method: /mypackage.MyService/Echo
+      metadata: {}
+      body:
+        type: binary
+        content: 0a0568656c6c6f
+    response:
+      status_code: 0
+      status_message: OK
+      metadata: {}
+      body:
+        type: binary
+        content: 0a0568656c6c6f
+    json_debug:
+      request:
+        message: hello
+      response:
+        message: hello
+```
+
+Streaming responses use length-prefixed binary encoding - multiple response chunks are stored in a single body field and decoded back into individual messages on replay.
+
+## WebSocket support
+
+Install the WebSocket extra:
+
+```bash
+uv add "vcr-but-better[websockets]"
+```
+
+Record and replay WebSocket connections:
+
+```python
+async with use_cassette("cassette.yaml", intercept=["websockets"]):
+    async with websockets.connect("wss://ws.example.com/stream") as ws:
+        await ws.send('{"subscribe": "ticker"}')
+        data = await ws.recv()
+```
+
+WebSocket interactions record each frame with direction, type, and timing offset:
+
+```yaml
+ws_interactions:
+  - uri: wss://ws.example.com/stream
+    headers: {}
+    frames:
+      - direction: send
+        frame_type: text
+        body:
+          type: text
+          content: '{"subscribe": "ticker"}'
+        offset_ms: 0
+      - direction: recv
+        frame_type: text
+        body:
+          type: json
+          content:
+            price: 42.5
+        offset_ms: 120
+```
+
+On replay, `recv()` returns recorded frames in order without a real connection. `send()` is a no-op. Both text and binary frames are supported.
 
 ## Streaming / SSE support
 

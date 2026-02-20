@@ -8,7 +8,7 @@ import pytest
 from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from vcr_but_better.cassette import Cassette, NoMatchError
 from vcr_but_better.context import use_cassette
-from vcr_but_better.intercept._httpx import HttpxInterceptor, _build_httpx_response
+from vcr_but_better.intercept._httpx import HttpxInterceptor, _build_httpx_response, _extract_headers_skip_encoding
 from vcr_but_better.recording import RecordMode
 
 pytest_plugins = ("anyio",)
@@ -195,3 +195,11 @@ def test_install_uninstall() -> None:
     interceptor.uninstall()
     assert httpx.AsyncClient.__init__ is original_async_init
     assert httpx.Client.__init__ is original_sync_init
+
+
+def test_extract_headers_skip_encoding() -> None:
+    headers = httpx.Headers({"content-type": "text/html", "content-encoding": "gzip", "x-custom": "val"})
+    result = _extract_headers_skip_encoding(headers)
+    assert "content-encoding" not in result
+    assert result["content-type"] == ["text/html"]
+    assert result["x-custom"] == ["val"]

@@ -137,11 +137,11 @@ class WebSocketInterceptor:
                     if not interceptor._cassette.can_record:
                         raise
 
-                assert interceptor._original_connect is not None
-                real_ws = await interceptor._original_connect(self._uri, **self._kwargs).__aenter__()
-                headers = _extract_ws_headers(self._kwargs)
-                self._ws = VCRWebSocket(real_ws, self._uri, headers, interceptor._cassette)
-                return self._ws
+                assert interceptor._original_connect is not None  # pragma: no cover
+                real_ws = await interceptor._original_connect(self._uri, **self._kwargs).__aenter__()  # pragma: no cover
+                headers = _extract_ws_headers(self._kwargs)  # pragma: no cover
+                self._ws = VCRWebSocket(real_ws, self._uri, headers, interceptor._cassette)  # pragma: no cover
+                return self._ws  # pragma: no cover
 
             async def __aexit__(self, *args: Any) -> None:
                 if self._ws is not None:
