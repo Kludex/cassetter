@@ -1,19 +1,12 @@
 use unicode_normalization::UnicodeNormalization;
 
-/// Normalize text: NFC normalization + smart quote replacement.
+/// Normalize text to NFC form for consistent matching.
+///
+/// Only applies Unicode NFC normalization. Does NOT replace smart quotes
+/// or other characters, as that would corrupt embedded JSON (e.g. in SSE
+/// responses where curly quotes are valid unescaped but ASCII quotes are not).
 pub fn normalize_text(text: &str) -> String {
-    let normalized: String = text.nfc().collect();
-    replace_smart_quotes(&normalized)
-}
-
-/// Replace smart/curly quotes with their ASCII equivalents.
-fn replace_smart_quotes(text: &str) -> String {
-    text.replace('\u{2018}', "'") // left single quote
-        .replace('\u{2019}', "'") // right single quote
-        .replace('\u{201C}', "\"") // left double quote
-        .replace('\u{201D}', "\"") // right double quote
-        .replace('\u{2013}', "-") // en dash
-        .replace('\u{2014}', "-") // em dash
+    text.nfc().collect()
 }
 
 #[cfg(test)]
@@ -21,14 +14,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_smart_quotes() {
-        let input = "\u{201C}hello\u{201D} \u{2018}world\u{2019}";
-        assert_eq!(normalize_text(input), "\"hello\" 'world'");
+    fn test_nfc_normalization() {
+        // e + combining acute -> precomposed e-acute
+        let input = "caf\u{0065}\u{0301}";
+        assert_eq!(normalize_text(input), "caf\u{00E9}");
     }
 
     #[test]
-    fn test_dashes() {
-        assert_eq!(normalize_text("a\u{2013}b\u{2014}c"), "a-b-c");
+    fn test_smart_quotes_preserved() {
+        // Smart quotes must NOT be replaced - they are valid in JSON strings
+        // and replacing them with ASCII quotes would break embedded JSON
+        let input = "\u{201C}hello\u{201D} \u{2018}world\u{2019}";
+        assert_eq!(normalize_text(input), "\u{201C}hello\u{201D} \u{2018}world\u{2019}");
     }
 
     #[test]
