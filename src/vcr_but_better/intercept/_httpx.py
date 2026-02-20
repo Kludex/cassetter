@@ -24,14 +24,17 @@ class VCRTransport(httpx.AsyncBaseTransport):
 
         try:
             response = self._cassette.play(method, uri, headers, body)
-            return _build_httpx_response(response)
+            return _build_httpx_response(response, request)
         except NoMatchError:
             if not self._cassette.can_record:
                 raise
 
         real_response = await self._real_transport.handle_async_request(request)
+        await real_response.aread()
         resp_body = real_response.content
-        resp_headers = _extract_headers(real_response.headers)
+        # httpx already decompresses the body, so strip content-encoding
+        # to prevent double-decompression in the cassette recorder
+        resp_headers = _extract_headers_skip_encoding(real_response.headers)
 
         self._cassette.record(
             method=method,
@@ -60,14 +63,16 @@ class VCRSyncTransport(httpx.BaseTransport):
 
         try:
             response = self._cassette.play(method, uri, headers, body)
-            return _build_httpx_response(response)
+            return _build_httpx_response(response, request)
         except NoMatchError:
             if not self._cassette.can_record:
                 raise
 
         real_response = self._real_transport.handle_request(request)
+        real_response.read()
         resp_body = real_response.content
-        resp_headers = _extract_headers(real_response.headers)
+        # httpx already decompresses the body, so strip content-encoding
+        resp_headers = _extract_headers_skip_encoding(real_response.headers)
 
         self._cassette.record(
             method=method,
@@ -122,7 +127,17 @@ def _extract_headers(headers: httpx.Headers) -> dict[str, list[str]]:
     return result
 
 
-def _build_httpx_response(response: _HttpResponse) -> httpx.Response:
+def _extract_headers_skip_encoding(headers: httpx.Headers) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for key, value in headers.multi_items():
+        lower = key.lower()
+        if lower == "content-encoding":
+            continue
+        result.setdefault(lower, []).append(value)
+    return result
+
+
+def _build_httpx_response(response: _HttpResponse, request: httpx.Request | None = None) -> httpx.Response:
     headers_list: list[tuple[str, str]] = []
     for key, values in response.headers.items():
         for v in values:
@@ -142,4 +157,7 @@ def _build_httpx_response(response: _HttpResponse) -> httpx.Response:
         status_code=response.status,
         headers=headers_list,
         content=content,
+        request=request,
     )
+
+
