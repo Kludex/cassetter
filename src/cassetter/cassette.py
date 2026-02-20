@@ -153,7 +153,7 @@ class Cassette:
             timestamps.append(i.recorded_at)
         if not timestamps:
             return None
-        return max(datetime.fromisoformat(ts) for ts in timestamps)
+        return max(datetime.fromisoformat(ts.replace("Z", "+00:00")) for ts in timestamps)
 
     def save(self) -> None:
         """Save the cassette to disk if modified and has any interactions."""
