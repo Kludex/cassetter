@@ -1,4 +1,4 @@
-# cassetter
+# Cassetter
 
 Rust-powered HTTP cassette recorder for Python tests. Safe by default, no monkey-patching.
 
