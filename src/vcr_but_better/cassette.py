@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+import re
+import warnings
+from datetime import datetime, timedelta, timezone
 
 from vcr_but_better._core import (
     Body,
@@ -29,8 +31,29 @@ class CassetteNotFoundError(Exception):
     """Raised when a cassette file is not found and record mode doesn't allow recording."""
 
 
+class CassetteExpiredWarning(UserWarning):
+    """Emitted when a cassette is older than the configured max_age."""
+
+
+class CassetteExpiredError(Exception):
+    """Raised when a cassette is older than the configured max_age and on_expiry is 'fail'."""
+
+
 class NoMatchError(Exception):
     """Raised when no matching interaction is found in the cassette."""
+
+
+_DURATION_RE = re.compile(r"^(\d+)([dhw])$")
+_UNIT_MAP = {"d": "days", "h": "hours", "w": "weeks"}
+
+
+def _parse_duration(s: str) -> timedelta:
+    """Parse a duration string like '30d', '24h', '4w' into a timedelta."""
+    m = _DURATION_RE.match(s)
+    if m is None:
+        raise ValueError(f"invalid duration string: {s!r} (expected <number><d|h|w>)")
+    value, unit = int(m.group(1)), m.group(2)
+    return timedelta(**{_UNIT_MAP[unit]: value})
 
 
 class Cassette:
@@ -43,11 +66,15 @@ class Cassette:
         record_mode: RecordMode = RecordMode.ONCE,
         match_config: MatchConfig | None = None,
         security_config: SecurityConfig | None = None,
+        max_age: str | None = None,
+        on_expiry: str = "warn",
     ) -> None:
         self._path = path
         self._record_mode = record_mode
         self._match_config = match_config or MatchConfig()
         self._security_config = security_config or SecurityConfig()
+        self._max_age = _parse_duration(max_age) if max_age is not None else None
+        self._on_expiry = on_expiry
         self._inner: _RustCassette | None = None
         self._dirty = False
 
@@ -88,6 +115,45 @@ class Cassette:
             return
 
         self._inner = _RustCassette.load(self._path)
+        self._check_expiry()
+
+    def _check_expiry(self) -> None:
+        """Check if the cassette is expired based on max_age, and apply on_expiry action."""
+        if self._max_age is None or self._inner is None:
+            return
+
+        newest = self._newest_recorded_at()
+        if newest is None:
+            return
+
+        cutoff = datetime.now(timezone.utc) - self._max_age
+        if newest >= cutoff:
+            return
+
+        age_days = (datetime.now(timezone.utc) - newest).days
+        msg = f"cassette {self._path!r} is {age_days} days old (max_age={self._max_age})"
+
+        if self._on_expiry == "fail":
+            raise CassetteExpiredError(msg)
+        if self._on_expiry == "rerecord":
+            self._inner = _RustCassette()
+            self._dirty = True
+            return
+        warnings.warn(msg, CassetteExpiredWarning, stacklevel=3)
+
+    def _newest_recorded_at(self) -> datetime | None:
+        """Return the newest recorded_at timestamp across all interaction types."""
+        assert self._inner is not None  # caller guards this
+        timestamps: list[str] = []
+        for i in self._inner.interactions:
+            timestamps.append(i.recorded_at)
+        for i in self._inner.grpc_interactions:
+            timestamps.append(i.recorded_at)
+        for i in self._inner.ws_interactions:
+            timestamps.append(i.recorded_at)
+        if not timestamps:
+            return None
+        return max(datetime.fromisoformat(ts) for ts in timestamps)
 
     def save(self) -> None:
         """Save the cassette to disk if modified and has any interactions."""

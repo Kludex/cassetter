@@ -70,15 +70,21 @@ def _resolve_cassette(
         security_kwargs["replacement"] = vcr_config["filter_replacement"]
     security_config = SecurityConfig(**security_kwargs)
 
+    max_age = marker_kwargs.get("max_age", vcr_config.get("max_age"))
+    on_expiry = marker_kwargs.get("on_expiry", vcr_config.get("on_expiry", "warn"))
+
     cassette = Cassette(
         cassette_path,
         record_mode=record_mode,
         match_config=match_config,
         security_config=security_config,
+        max_age=max_age,
+        on_expiry=on_expiry,
     )
     cassette.load()
 
-    interceptors = resolve_interceptors(["httpx"])
+    intercept_names = vcr_config.get("intercept")
+    interceptors = resolve_interceptors(intercept_names)
     return cassette, interceptors
 
 

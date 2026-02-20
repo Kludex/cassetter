@@ -4,7 +4,8 @@ import httpx
 import pytest
 
 from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.context import _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
+from vcr_but_better.cassette import CassetteExpiredWarning
+from vcr_but_better.context import _AUTO_DETECT_ORDER, _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
 from vcr_but_better.recording import RecordMode
 
 pytest_plugins = ("anyio",)
@@ -94,3 +95,25 @@ class TestResolveInterceptors:
     def test_multiple_interceptors(self) -> None:
         interceptors = resolve_interceptors(["httpx", "aiohttp", "requests"])
         assert len(interceptors) == 3
+
+    def test_auto_detect(self) -> None:
+        interceptors = resolve_interceptors()
+        assert len(interceptors) >= 1
+
+    def test_auto_detect_none_arg(self) -> None:
+        interceptors = resolve_interceptors(None)
+        assert len(interceptors) >= 1
+
+    def test_auto_detect_no_interceptors(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for name in _AUTO_DETECT_ORDER:
+            monkeypatch.setitem(_INTERCEPTOR_MAP, name, None)
+        with pytest.raises(ImportError, match="no HTTP interceptors available"):
+            resolve_interceptors()
+
+
+@pytest.mark.anyio
+async def test_use_cassette_expired_warns(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    with pytest.warns(CassetteExpiredWarning):
+        async with use_cassette(path, record_mode="none", max_age="1h", on_expiry="warn"):
+            pass

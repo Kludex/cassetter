@@ -6,8 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vcr_but_better._core import Cassette as RustCassette
+from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from vcr_but_better._types import CassetteConfig
+from vcr_but_better.cassette import CassetteExpiredError, CassetteExpiredWarning
 from vcr_but_better.pytest_plugin.fixtures import _resolve_cassette
 from vcr_but_better.pytest_plugin.markers import configure
 from vcr_but_better.pytest_plugin.orphans import check_orphans, session_finish
@@ -113,7 +114,7 @@ class TestResolveCassette:
 
         assert cassette.path.endswith("test_func.yaml")
         assert cassette.record_mode == RecordMode.NONE
-        assert len(interceptors) == 1
+        assert len(interceptors) >= 1
 
     def test_custom_cassette_name(self, tmp_path: object) -> None:
         test_dir = str(tmp_path)
@@ -189,3 +190,53 @@ class TestResolveCassette:
         )
 
         assert cassette is not None
+
+    def test_max_age_from_vcr_config(self, tmp_path: object) -> None:
+        test_dir = str(tmp_path)
+        cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+        os.makedirs(cassette_dir, exist_ok=True)
+        path = os.path.join(cassette_dir, "test_func.yaml")
+        c = RustCassette()
+        c.add_interaction(
+            HttpInteraction(
+                request=HttpRequest("GET", "https://example.com/"),
+                response=HttpResponse(200, body=Body("text", "ok")),
+                recorded_at="2020-01-01T00:00:00Z",
+            )
+        )
+        c.save(path)
+
+        with pytest.warns(CassetteExpiredWarning):
+            _resolve_cassette(
+                node_name="test_func",
+                marker_args=(),
+                marker_kwargs={},
+                vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes", max_age="1d"),
+                cli_record_mode=None,
+                test_fspath=os.path.join(test_dir, "test_example.py"),
+            )
+
+    def test_max_age_marker_override(self, tmp_path: object) -> None:
+        test_dir = str(tmp_path)
+        cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+        os.makedirs(cassette_dir, exist_ok=True)
+        path = os.path.join(cassette_dir, "test_func.yaml")
+        c = RustCassette()
+        c.add_interaction(
+            HttpInteraction(
+                request=HttpRequest("GET", "https://example.com/"),
+                response=HttpResponse(200, body=Body("text", "ok")),
+                recorded_at="2020-01-01T00:00:00Z",
+            )
+        )
+        c.save(path)
+
+        with pytest.raises(CassetteExpiredError):
+            _resolve_cassette(
+                node_name="test_func",
+                marker_args=(),
+                marker_kwargs={"max_age": "1d", "on_expiry": "fail"},
+                vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+                cli_record_mode=None,
+                test_fspath=os.path.join(test_dir, "test_example.py"),
+            )

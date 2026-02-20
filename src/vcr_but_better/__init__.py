@@ -15,6 +15,8 @@ from vcr_but_better._core import (
 )
 from vcr_but_better.cassette import (
     Cassette as Cassette,
+    CassetteExpiredError as CassetteExpiredError,
+    CassetteExpiredWarning as CassetteExpiredWarning,
     CassetteNotFoundError as CassetteNotFoundError,
     NoMatchError as NoMatchError,
 )
@@ -24,6 +26,8 @@ from vcr_but_better.recording import RecordMode as RecordMode
 __all__ = [
     "Body",
     "Cassette",
+    "CassetteExpiredError",
+    "CassetteExpiredWarning",
     "CassetteNotFoundError",
     "GrpcInteraction",
     "GrpcRequest",

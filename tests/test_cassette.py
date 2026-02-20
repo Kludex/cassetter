@@ -1,11 +1,28 @@
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 import pytest
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
+from vcr_but_better._core import (
+    Body,
+    Cassette as RustCassette,
+    GrpcInteraction,
+    GrpcRequest,
+    GrpcResponse,
+    HttpInteraction,
+    HttpRequest,
+    HttpResponse,
+    WsInteraction,
+)
+from vcr_but_better.cassette import (
+    Cassette,
+    CassetteExpiredError,
+    CassetteExpiredWarning,
+    NoMatchError,
+    _parse_duration,
+)
 from vcr_but_better.recording import RecordMode
 
 
@@ -241,3 +258,132 @@ class TestRecordMode:
     def test_from_str_invalid(self) -> None:
         with pytest.raises(ValueError, match="unknown record mode"):
             RecordMode.from_str("invalid")
+
+
+class TestParseDuration:
+    def test_days(self) -> None:
+        assert _parse_duration("30d") == timedelta(days=30)
+
+    def test_hours(self) -> None:
+        assert _parse_duration("24h") == timedelta(hours=24)
+
+    def test_weeks(self) -> None:
+        assert _parse_duration("4w") == timedelta(weeks=4)
+
+    def test_invalid_unit(self) -> None:
+        with pytest.raises(ValueError, match="invalid duration string"):
+            _parse_duration("10m")
+
+    def test_invalid_format(self) -> None:
+        with pytest.raises(ValueError, match="invalid duration string"):
+            _parse_duration("abc")
+
+    def test_empty_string(self) -> None:
+        with pytest.raises(ValueError, match="invalid duration string"):
+            _parse_duration("")
+
+
+def _make_old_cassette(path: str, recorded_at: str) -> None:
+    """Create a cassette file with a single interaction at the given timestamp."""
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            request=HttpRequest("GET", "https://example.com/"),
+            response=HttpResponse(200, body=Body("text", "ok")),
+            recorded_at=recorded_at,
+        )
+    )
+    c.save(path)
+
+
+class TestCassetteExpiry:
+    def test_no_expiry_when_max_age_none(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "test.yaml")
+        _make_old_cassette(path, "2020-01-01T00:00:00Z")
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE)
+        cassette.load()
+        assert len(cassette.interactions) == 1
+
+    def test_not_expired(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "test.yaml")
+        _make_old_cassette(path, "2099-01-01T00:00:00Z")
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="30d")
+        cassette.load()
+        assert len(cassette.interactions) == 1
+
+    def test_warn_on_expiry(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "test.yaml")
+        _make_old_cassette(path, "2020-01-01T00:00:00Z")
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="1d", on_expiry="warn")
+        with pytest.warns(CassetteExpiredWarning, match="days old"):
+            cassette.load()
+        assert len(cassette.interactions) == 1
+
+    def test_fail_on_expiry(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "test.yaml")
+        _make_old_cassette(path, "2020-01-01T00:00:00Z")
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="1d", on_expiry="fail")
+        with pytest.raises(CassetteExpiredError, match="days old"):
+            cassette.load()
+
+    def test_rerecord_on_expiry(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "test.yaml")
+        _make_old_cassette(path, "2020-01-01T00:00:00Z")
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="1d", on_expiry="rerecord")
+        cassette.load()
+        assert len(cassette.interactions) == 0
+
+    def test_empty_cassette_not_expired(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "test.yaml")
+        RustCassette().save(path)
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="1d")
+        cassette.load()
+        assert len(cassette.interactions) == 0
+
+    def test_no_check_when_record_mode_all(self, tmp_path: object) -> None:
+        """RecordMode.ALL creates a fresh cassette, so expiry check never runs."""
+        path = os.path.join(str(tmp_path), "test.yaml")
+        _make_old_cassette(path, "2020-01-01T00:00:00Z")
+
+        cassette = Cassette(path, record_mode=RecordMode.ALL, max_age="1d", on_expiry="fail")
+        cassette.load()
+        assert len(cassette.interactions) == 0
+
+    def test_no_check_when_file_missing(self, tmp_path: object) -> None:
+        """Missing file creates empty cassette, no expiry check."""
+        path = os.path.join(str(tmp_path), "missing.yaml")
+
+        cassette = Cassette(path, record_mode=RecordMode.ONCE, max_age="1d", on_expiry="fail")
+        cassette.load()
+        assert len(cassette.interactions) == 0
+
+    def test_uses_newest_across_interaction_types(self, tmp_path: object) -> None:
+        """Expiry is based on the newest recorded_at across HTTP, gRPC, and WS interactions."""
+        path = os.path.join(str(tmp_path), "mixed.yaml")
+        c = RustCassette()
+        c.add_interaction(
+            HttpInteraction(
+                request=HttpRequest("GET", "https://example.com/"),
+                response=HttpResponse(200, body=Body("text", "ok")),
+                recorded_at="2020-01-01T00:00:00Z",
+            )
+        )
+        c.add_grpc_interaction(
+            GrpcInteraction(
+                request=GrpcRequest("/svc/Method", {}, Body("text", "")),
+                response=GrpcResponse(0, "OK", None, Body("text", "")),
+                recorded_at="2020-06-01T00:00:00Z",
+            )
+        )
+        c.add_ws_interaction(WsInteraction("wss://example.com", {}, [], "2020-03-01T00:00:00Z"))
+        c.save(path)
+
+        with pytest.warns(CassetteExpiredWarning):
+            cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="1d", on_expiry="warn")
+            cassette.load()
