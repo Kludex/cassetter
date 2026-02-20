@@ -12,8 +12,6 @@ use crate::protocol::http::HttpInteraction;
 pub struct Cassette {
     #[pyo3(get, set)]
     pub version: u32,
-    #[pyo3(get, set)]
-    pub recorded_with: String,
     pub interactions: Vec<HttpInteraction>,
     /// Tracks which interactions have been played back (by index).
     pub played_indices: Vec<bool>,
@@ -25,7 +23,6 @@ impl Cassette {
     fn new() -> Self {
         Cassette {
             version: 1,
-            recorded_with: format!("vcr-but-better {}", env!("CARGO_PKG_VERSION")),
             interactions: Vec::new(),
             played_indices: Vec::new(),
         }
@@ -76,8 +73,7 @@ impl Cassette {
         let raw: format::RawCassette = serde_yaml::from_str(&content).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("YAML parse error: {e}"))
         })?;
-        let cassette = format::from_raw(raw)?;
-        Ok(cassette)
+        format::from_raw(raw)
     }
 
     fn save(&self, path: &str) -> PyResult<()> {

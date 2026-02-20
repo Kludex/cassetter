@@ -1,0 +1,261 @@
+# vcr-but-better - Specification
+
+This document describes the design decisions behind vcr-but-better, a Rust-powered HTTP cassette recorder for Python tests. Each section explains what was chosen, what alternatives were considered, and why.
+
+## 1. Architecture: Rust core with Python shell
+
+The library splits into two layers: a Rust core (via PyO3) that handles YAML I/O, request matching, body processing, and security filtering, and a thin Python layer for pytest integration, HTTP library interceptors, and the public API.
+
+**Alternatives considered:**
+
+- **Pure Python.** This is what VCR.py does. YAML parsing/serialization, request matching, and body processing are all CPU-bound operations that benefit from compiled code. VCR.py's pure Python approach contributes to slow test startup when loading large cassette files (pydantic-ai's test suite has 567 cassettes totaling 100MB+). Rejected because speed is a primary goal.
+
+- **Cython.** Less ergonomic than PyO3 for complex data structures. Doesn't give access to Rust's serde ecosystem for YAML/JSON handling. Rejected because PyO3's ecosystem is stronger for this use case.
+
+- **Separate binary process.** A standalone Rust binary that Python communicates with via IPC. Rejected because the IPC overhead would negate performance gains, and the developer experience would be worse (two processes to manage, separate install).
+
+**Why this choice:** PyO3 gives us compiled speed for the hot paths while keeping the Python-facing API natural. The Python layer handles things that are inherently Python (pytest hooks, HTTP library APIs), while the Rust layer handles things that benefit from compiled performance and the serde ecosystem.
+
+## 2. Cassette format (v1)
+
+### 2.1. Structured JSON bodies
+
+JSON request/response bodies are stored as structured YAML, not as escaped strings.
+
+```yaml
+# vcr-but-better
+body:
+  type: json
+  content:
+    model: gpt-4o
+    messages:
+      - role: user
+        content: Hello!
+
+# VCR.py
+body: '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello!"}]}'
+```
+
+**Alternatives considered:**
+
+- **Escaped string (VCR.py approach).** Unreadable in diffs, hard to manually edit, causes noisy git diffs when only formatting changes. Rejected because human readability is a primary goal.
+
+- **Separate JSON files per body.** Each body stored as a `.json` sidecar file. Would be cleaner for large payloads but fragments cassettes across many files, makes atomic operations harder, and complicates the matching engine. Rejected because the complexity isn't justified - structured YAML is readable enough.
+
+**Why this choice:** Most cassettes are for JSON APIs. Storing JSON as structured YAML makes diffs clean, cassettes editable, and bodies inspectable without tooling.
+
+### 2.2. Typed body field
+
+Bodies have an explicit `type` discriminator: `json`, `text`, `binary`, or `none`.
+
+```yaml
+body:
+  type: json
+  content: { ... }
+```
+
+**Alternatives considered:**
+
+- **Infer type from content-type header.** Less explicit, breaks when headers are stripped by filtering, and requires the matching engine to re-infer types at match time. Rejected because explicit typing is more reliable.
+
+- **Flat field like VCR.py's `parsed_body`.** VCR.py (via pydantic-ai's custom serializer) uses `parsed_body` as a peer field to `headers`/`method`/`uri`. This mixes concerns - the body representation bleeds into the request/response structure. Our `body: { type, content }` keeps it contained. Rejected because it's less structured.
+
+**Why this choice:** Explicit typing makes the format self-describing. A reader doesn't need to guess whether the content is JSON, plain text, or binary.
+
+### 2.3. Status code as integer
+
+Response status is stored as a plain integer, not a `{ code, message }` object.
+
+```yaml
+# vcr-but-better
+status: 200
+
+# VCR.py
+status:
+  code: 200
+  message: OK
+```
+
+**Alternatives considered:**
+
+- **`{ code, message }` object (VCR.py approach).** The status message is derivable from the code and adds no information. It's extra noise in the YAML. Rejected because it's redundant.
+
+**Why this choice:** Status messages are standardized (RFC 9110). Storing them adds bytes without information. The integer is cleaner and sufficient.
+
+### 2.4. No `recorded_with` metadata
+
+The cassette format does not include a `recorded_with` field identifying the tool version that created it.
+
+**Alternatives considered:**
+
+- **Include `recorded_with: "vcr-but-better 0.1.0"`.** Would help with debugging format compatibility issues. But in practice, the `version: 1` field serves this purpose - if the format changes, the version number changes. Tool identity is noise in diffs when nothing else changed. Rejected because it doesn't carry actionable information.
+
+**Why this choice:** Cassettes should contain only data needed for test replay. Metadata about the recording tool doesn't affect replay behavior.
+
+### 2.5. Optional `recorded_at` timestamp
+
+Each interaction has an optional `recorded_at` ISO 8601 timestamp.
+
+**Alternatives considered:**
+
+- **Required timestamp.** Would complicate migration from other formats and add noise to manually-created cassettes. Rejected because it's not always useful.
+
+- **No timestamp at all.** Timestamps help when debugging stale cassettes or understanding when a recording was made. Keeping it optional preserves this information without mandating it. Rejected because the information can be valuable.
+
+**Why this choice:** Optional gives the best of both worlds - available when useful, not in the way when not.
+
+## 3. Interception: No monkey-patching
+
+Each HTTP library is intercepted using its documented extension API:
+
+| Library | Method |
+|---------|--------|
+| httpx | `AsyncBaseTransport` / `BaseTransport` wrapping |
+| aiohttp | Session `_request` method override |
+| requests | Session `send` method override |
+
+**Alternatives considered:**
+
+- **Monkey-patching socket/ssl modules (VCR.py approach).** VCR.py patches `http.client`, `urllib3`, and `aiohttp` internals. This breaks on library version bumps (VCR.py has a long history of breakage reports), is thread-unsafe, and creates subtle ordering dependencies. Rejected because it's the root cause of VCR.py's fragility.
+
+- **Proxy server.** Run a local HTTP proxy that records traffic. Works for any library without per-library integration. But adds network hops (slower), requires configuring each client to use the proxy, doesn't work well with TLS, and is harder to set up in CI. Rejected because the integration overhead outweighs the generality benefit.
+
+- **Custom transport (httpx only).** httpx's transport API is the cleanest extension point. For aiohttp and requests, there's no equivalent of `AsyncBaseTransport`, so we override at the session level. This is less clean but still uses documented behavior rather than patching internals. Accepted as the pragmatic choice.
+
+**Why this choice:** Using documented extension points means our interceptors survive library version bumps. The tradeoff is needing per-library integration code, but there are only 3-4 HTTP libraries in common use.
+
+## 4. Security: Safe by default
+
+Sensitive data is filtered at write time. Cassettes never contain secrets. This is opt-out, not opt-in.
+
+**Default filtered headers:** `authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`
+
+**Default filtered query params:** `api_key`, `apikey`, `token`, `access_token`, `client_secret`
+
+**Default body scrub patterns:** `access_token`, `refresh_token`, `client_secret`, `password`
+
+**Alternatives considered:**
+
+- **Filter at read time (VCR.py approach).** VCR.py stores everything and filters on playback. This means cassette files committed to git contain API keys, tokens, and passwords. Once committed, secrets are in git history forever. Rejected because it's a security anti-pattern.
+
+- **No default filtering.** Let users configure everything. Most users won't bother, and secrets will leak. Rejected because safe defaults prevent the most common mistake.
+
+- **Environment variable detection.** Auto-detect values that match environment variables and filter them. Clever but fragile - doesn't catch secrets from config files, key vaults, or hardcoded test values. Also adds runtime overhead scanning all values. Rejected because it's unreliable.
+
+**Why this choice:** Write-time filtering means secrets never touch disk. The defaults cover the most common patterns (HTTP auth, OAuth tokens, API keys). Users can add custom patterns or disable filtering entirely if needed.
+
+## 5. Request matching
+
+Default matching is on method + URI. Configurable to include headers, body, or JSON body (with path ignoring).
+
+**Alternatives considered:**
+
+- **Match on everything by default.** Too strict - minor header changes (user-agent version, date) would break playback. Rejected because it creates brittle tests.
+
+- **Fuzzy matching.** Score-based matching that picks the "best" match. Hard to reason about, unpredictable, and can silently return wrong responses when cassettes are stale. Rejected because predictability matters more than flexibility.
+
+- **Sequential matching (VCR.py's default).** Return interactions in order regardless of request content. Simple but breaks when test execution order changes or when tests make requests in different orders on retry. Rejected because it couples tests to request ordering.
+
+**Why this choice:** Method + URI matching is predictable and sufficient for most API tests. JSON body matching with path ignoring handles the common case of timestamp/request-ID fields that change between runs.
+
+## 6. Body processing
+
+### 6.1. Auto-decompression
+
+Response bodies are decompressed (gzip, brotli, zstd) before storage. The `content-encoding` header is removed from stored responses.
+
+**Alternatives considered:**
+
+- **Store compressed (VCR.py approach).** VCR.py stores compressed bodies and relies on `decode_compressed_response: True` in config. This causes a double-decompression bug: the HTTP client decompresses on replay, then VCR.py also decompresses, corrupting the body. Rejected because it's a known source of bugs.
+
+- **Store both compressed and decompressed.** Wastes space and creates format ambiguity. Rejected because decompression is lossless - we can always re-compress if needed.
+
+**Why this choice:** Decompressing at write time makes cassettes human-readable, prevents double-decompression bugs, and reduces file size (YAML compresses differently than gzip).
+
+### 6.2. Unicode normalization
+
+Smart quotes and special Unicode characters in response bodies are normalized to ASCII equivalents before storage.
+
+**Alternatives considered:**
+
+- **Store raw Unicode.** LLM APIs return smart quotes, em dashes, and other special characters that cause linter warnings in test snapshots. Developers end up manually fixing these in every cassette update. Rejected because it creates unnecessary maintenance work.
+
+- **Normalize only in snapshot assertions.** Moves the problem downstream - cassettes still contain non-ASCII characters that cause issues in other tools. Rejected because normalizing at the source is cleaner.
+
+**Why this choice:** ASCII-normalized cassettes are portable, linter-friendly, and stable across recording sessions where the LLM might use different quote styles for the same content.
+
+## 7. Pytest integration
+
+### 7.1. Auto-fixture injection
+
+Tests marked with `@pytest.mark.vcr` automatically get the `vcr_cassette` fixture without declaring it as a parameter.
+
+```python
+@pytest.mark.vcr
+async def test_api():  # No need for `vcr_cassette` param
+    ...
+```
+
+This is implemented via `pytest_collection_modifyitems` adding `vcr_cassette` to `fixturenames`.
+
+**Alternatives considered:**
+
+- **Require explicit fixture parameter (our initial approach).** More explicit, but adds noise to every VCR test. In pydantic-ai's test suite, most tests don't need to interact with the cassette directly - they just need recording/playback to happen. Rejected because it adds boilerplate.
+
+- **Autouse fixture on all tests.** Too broad - would affect tests that don't need VCR. Rejected because it violates the principle of least surprise.
+
+**Why this choice:** Matches pytest-recording's behavior, which pydantic-ai and many other projects already use. Tests that need direct cassette access can still declare the parameter.
+
+### 7.2. Cassette path resolution
+
+Cassettes are stored at `{test_dir}/cassettes/{test_file_stem}/{test_name}.yaml`.
+
+```
+tests/
+  models/
+    test_openai.py
+    cassettes/
+      test_openai/
+        test_simple_chat.yaml
+        test_streaming.yaml
+```
+
+**Alternatives considered:**
+
+- **Flat directory.** All cassettes in one `cassettes/` dir. Name collisions between test files (e.g., `test_simple` in two different modules). Rejected because it doesn't scale.
+
+- **Mirror full test path.** Store cassettes mirroring the full test module path. Over-nested for most projects. Rejected because the test file stem provides sufficient namespacing.
+
+**Why this choice:** Matches pytest-recording's convention, which many projects already follow. One subdirectory per test module keeps things organized without deep nesting.
+
+### 7.3. Graceful missing cassettes
+
+When `record_mode=none` and a cassette file doesn't exist, the fixture creates an empty in-memory cassette instead of raising an error. If no interactions are recorded, nothing is saved to disk.
+
+**Alternatives considered:**
+
+- **Raise error on missing cassette (our initial approach).** Breaks tests that use module-level `pytestmark = [pytest.mark.vcr]` where many tests use mock clients and never make HTTP requests. These tests have no cassettes and don't need them. Rejected because it breaks a common pattern.
+
+**Why this choice:** Module-level VCR markers are convenient for test files where most-but-not-all tests need recording. Non-recording tests shouldn't be forced to have empty cassette files.
+
+## 8. Scope and non-goals
+
+### In scope (Phase 1)
+- HTTP recording/replay for httpx, aiohttp, requests
+- Structured YAML cassette format with typed bodies
+- Safe-by-default security filtering
+- Configurable request matching
+- Auto-decompression and Unicode normalization
+- Pytest plugin with markers, fixtures, and orphan detection
+
+### Future phases
+- WebSocket frame recording (Phase 2)
+- gRPC message recording (Phase 2)
+- VCR.py cassette migration tool (Phase 3)
+- Cassette semantic diffing (Phase 3)
+- Thread-safe parallel test support (Phase 3)
+
+### Non-goals
+- Proxy mode for recording (adds complexity without clear benefit over transport interception)
+- Built-in cassette TTL/expiration (better handled by CI scripts or git hooks)
+- Support for HTTP libraries beyond httpx/aiohttp/requests (covers 99% of Python HTTP usage)

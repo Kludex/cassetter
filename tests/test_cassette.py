@@ -5,7 +5,7 @@ import os
 import pytest
 
 from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import Cassette, CassetteNotFoundError, NoMatchError
+from vcr_but_better.cassette import Cassette, NoMatchError
 from vcr_but_better.recording import RecordMode
 
 
@@ -82,8 +82,9 @@ class TestRustCassette:
 class TestCassetteWrapper:
     def test_record_mode_none_missing_file(self) -> None:
         cassette = Cassette("/nonexistent.yaml", record_mode=RecordMode.NONE)
-        with pytest.raises(CassetteNotFoundError):
-            cassette.load()
+        cassette.load()
+        # Missing cassette in NONE mode creates empty cassette - no error
+        assert cassette.interactions == []
 
     def test_record_mode_once_creates_new(self, tmp_path: object) -> None:
         path = os.path.join(str(tmp_path), "new.yaml")

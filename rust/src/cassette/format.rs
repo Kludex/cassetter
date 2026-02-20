@@ -10,7 +10,6 @@ use super::Cassette;
 #[derive(Serialize, Deserialize)]
 pub struct RawCassette {
     pub version: u32,
-    pub recorded_with: String,
     pub interactions: Vec<RawInteraction>,
 }
 
@@ -18,7 +17,8 @@ pub struct RawCassette {
 pub struct RawInteraction {
     pub request: RawRequest,
     pub response: RawResponse,
-    pub recorded_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -72,7 +72,7 @@ pub fn from_raw(raw: RawCassette) -> pyo3::PyResult<Cassette> {
             HttpInteraction {
                 request,
                 response,
-                recorded_at: ri.recorded_at,
+                recorded_at: ri.recorded_at.unwrap_or_default(),
             }
         })
         .collect();
@@ -81,7 +81,6 @@ pub fn from_raw(raw: RawCassette) -> pyo3::PyResult<Cassette> {
 
     Ok(Cassette {
         version: raw.version,
-        recorded_with: raw.recorded_with,
         interactions,
         played_indices,
     })
@@ -104,13 +103,16 @@ pub fn to_raw(cassette: &Cassette) -> RawCassette {
                 headers: i.response.headers.clone(),
                 body: body_to_raw(&i.response.body),
             },
-            recorded_at: i.recorded_at.clone(),
+            recorded_at: if i.recorded_at.is_empty() {
+                None
+            } else {
+                Some(i.recorded_at.clone())
+            },
         })
         .collect();
 
     RawCassette {
         version: cassette.version,
-        recorded_with: cassette.recorded_with.clone(),
         interactions,
     }
 }
@@ -133,9 +135,8 @@ fn body_from_raw(raw: RawBody) -> Body {
             }
         }
         "binary" => {
-            // Binary stored as base64 in YAML
             if let Some(serde_yaml::Value::String(s)) = raw.content {
-                match base64_decode(&s) {
+                match hex_decode(&s) {
                     Ok(bytes) => Body::binary(bytes),
                     Err(_) => Body::text(s),
                 }
@@ -159,7 +160,7 @@ fn body_to_raw(body: &Body) -> RawBody {
         },
         BodyContent::Binary(b) => RawBody {
             body_type: "binary".to_string(),
-            content: Some(serde_yaml::Value::String(base64_encode(b))),
+            content: Some(serde_yaml::Value::String(hex_encode(b))),
         },
         BodyContent::None => RawBody {
             body_type: "none".to_string(),
@@ -234,21 +235,11 @@ fn json_to_yaml(json: &serde_json::Value) -> serde_yaml::Value {
     }
 }
 
-fn base64_encode(data: &[u8]) -> String {
-    use std::io::Write;
-    let mut buf = Vec::new();
-    {
-        let mut encoder = flate2::write::GzEncoder::new(&mut buf, flate2::Compression::none());
-        let _ = encoder.write_all(data);
-        let _ = encoder.finish();
-    }
-    // Simple base64 encoding without pulling in another crate
-    // Just use hex for now - this is for binary bodies which are rare
+fn hex_encode(data: &[u8]) -> String {
     data.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
-    // Decode hex string
+fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     if s.len() % 2 != 0 {
         return Err("invalid hex length".to_string());
     }

@@ -43,7 +43,6 @@ class HttpInteraction:
 
 class Cassette:
     version: int
-    recorded_with: str
     interactions: list[HttpInteraction]
     unplayed_count: int
 

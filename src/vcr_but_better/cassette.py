@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from vcr_but_better._core import (
     Cassette as _RustCassette,
@@ -15,6 +16,8 @@ from vcr_but_better._core import (
     scrub_interaction,
 )
 from vcr_but_better.recording import RecordMode
+
+_LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
 
 class CassetteNotFoundError(Exception):
@@ -35,11 +38,13 @@ class Cassette:
         record_mode: RecordMode = RecordMode.ONCE,
         match_config: MatchConfig | None = None,
         security_config: SecurityConfig | None = None,
+        ignore_localhost: bool = False,
     ) -> None:
         self._path = path
         self._record_mode = record_mode
         self._match_config = match_config or MatchConfig()
         self._security_config = security_config or SecurityConfig()
+        self._ignore_localhost = ignore_localhost
         self._inner: _RustCassette | None = None
         self._dirty = False
 
@@ -61,9 +66,6 @@ class Cassette:
         """Load the cassette from disk, or create a new one based on record mode."""
         exists = os.path.exists(self._path)
 
-        if self._record_mode == RecordMode.NONE and not exists:
-            raise CassetteNotFoundError(f"cassette not found: {self._path}")
-
         if self._record_mode == RecordMode.ALL or not exists:
             self._inner = _RustCassette()
             if self._record_mode == RecordMode.ALL:
@@ -73,14 +75,20 @@ class Cassette:
         self._inner = _RustCassette.load(self._path)
 
     def save(self) -> None:
-        """Save the cassette to disk if it has been modified."""
-        if self._inner is not None and self._dirty:
+        """Save the cassette to disk if it has been modified and has interactions."""
+        if self._inner is not None and self._dirty and len(self._inner) > 0:
             self._inner.save(self._path)
             self._dirty = False
 
     @property
     def can_record(self) -> bool:
         return self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES, RecordMode.ONCE)
+
+    def _is_localhost(self, uri: str) -> bool:
+        if not self._ignore_localhost:
+            return False
+        parsed = urlparse(uri)
+        return parsed.hostname in _LOCALHOST_HOSTS
 
     def play(
         self,

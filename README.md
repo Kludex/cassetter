@@ -100,7 +100,6 @@ JSON bodies are stored as structured YAML - not escaped strings:
 
 ```yaml
 version: 1
-recorded_with: vcr-but-better 0.1.0
 interactions:
   - request:
       method: POST

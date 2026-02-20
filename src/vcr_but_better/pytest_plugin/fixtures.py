@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,20 +12,20 @@ from vcr_but_better.cassette import Cassette
 from vcr_but_better.recording import RecordMode
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def vcr_config() -> CassetteConfig:
     """Override this fixture to provide default VCR configuration."""
     return CassetteConfig()
 
 
 @pytest.fixture
-def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig, tmp_path: Any) -> Cassette:
+def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Cassette:
     """Provides a Cassette for the current test based on marker or config."""
     marker = request.node.get_closest_marker("vcr")
 
     cassette_name = request.node.name + ".yaml"
     cassette_dir = vcr_config.get("cassette_dir", "cassettes")
-    record_mode_str = vcr_config.get("record_mode", "once")
+    record_mode_str = vcr_config.get("record_mode", "none")
 
     # Marker can override
     if marker is not None:
@@ -42,11 +44,11 @@ def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig, tmp
 
     record_mode = RecordMode.from_str(record_mode_str)
 
-    import os
-
-    # Resolve cassette path relative to test file
-    test_dir = os.path.dirname(request.fspath)
-    cassette_path = os.path.join(test_dir, cassette_dir, cassette_name)
+    # Resolve cassette path: {test_dir}/cassettes/{test_file_stem}/{cassette_name}
+    test_file = Path(str(request.fspath))
+    test_dir = str(test_file.parent)
+    test_file_stem = test_file.stem
+    cassette_path = os.path.join(test_dir, cassette_dir, test_file_stem, cassette_name)
 
     match_config = MatchConfig(
         match_on=vcr_config.get("match_on"),
@@ -64,11 +66,14 @@ def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig, tmp
         security_kwargs["replacement"] = vcr_config["filter_replacement"]
     security_config = SecurityConfig(**security_kwargs)
 
+    ignore_localhost = vcr_config.get("ignore_localhost", False)
+
     cassette = Cassette(
         cassette_path,
         record_mode=record_mode,
         match_config=match_config,
         security_config=security_config,
+        ignore_localhost=ignore_localhost,
     )
     cassette.load()
 
