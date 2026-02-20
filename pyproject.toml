@@ -56,6 +56,7 @@ dev = [
     "types-requests>=2.32.4.20260107",
     "grpcio>=1.60",
     "websockets>=12.0",
+    "vcrpy>=8.1.1",
 ]
 
 [tool.ruff]
