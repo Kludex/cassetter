@@ -6,13 +6,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better._types import CassetteConfig
-from vcr_but_better.cassette import CassetteExpiredError, CassetteExpiredWarning
-from vcr_but_better.pytest_plugin.fixtures import _resolve_cassette
-from vcr_but_better.pytest_plugin.markers import configure
-from vcr_but_better.pytest_plugin.orphans import check_orphans, session_finish
-from vcr_but_better.recording import RecordMode
+from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter._types import CassetteConfig
+from cassetter.cassette import CassetteExpiredError, CassetteExpiredWarning
+from cassetter.pytest_plugin.fixtures import _resolve_cassette
+from cassetter.pytest_plugin.markers import configure
+from cassetter.pytest_plugin.orphans import check_orphans, session_finish
+from cassetter.recording import RecordMode
 
 
 class TestConfigure:

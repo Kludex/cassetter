@@ -75,6 +75,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
+name = "cassetter"
+version = "0.1.0"
+dependencies = [
+ "brotli",
+ "chrono",
+ "flate2",
+ "pyo3",
+ "pythonize",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "unicode-normalization",
+ "url",
+ "zstd",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -729,24 +747,6 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
-
-[[package]]
-name = "vcr-but-better"
-version = "0.1.0"
-dependencies = [
- "brotli",
- "chrono",
- "flate2",
- "pyo3",
- "pythonize",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "unicode-normalization",
- "url",
- "zstd",
-]
 
 [[package]]
 name = "wasip2"

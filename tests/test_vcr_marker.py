@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vcr_but_better._types import CassetteConfig
-from vcr_but_better.cassette import Cassette
+from cassetter._types import CassetteConfig
+from cassetter.cassette import Cassette
 
 
 @pytest.fixture(scope="module")

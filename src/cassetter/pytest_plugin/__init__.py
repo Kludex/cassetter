@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from vcr_but_better.pytest_plugin.fixtures import vcr_cassette as vcr_cassette, vcr_config as vcr_config
-from vcr_but_better.pytest_plugin.markers import configure as configure
-from vcr_but_better.pytest_plugin.orphans import add_options, check_orphans as check_orphans, session_finish
+from cassetter.pytest_plugin.fixtures import vcr_cassette as vcr_cassette, vcr_config as vcr_config
+from cassetter.pytest_plugin.markers import configure as configure
+from cassetter.pytest_plugin.orphans import add_options, check_orphans as check_orphans, session_finish
 
 __all__ = ["vcr_cassette", "vcr_config", "configure", "check_orphans"]
 

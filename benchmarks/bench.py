@@ -1,4 +1,4 @@
-"""Benchmark: vcr-but-better (Rust/PyO3) vs vcrpy (pure Python).
+"""Benchmark: cassetter (Rust/PyO3) vs vcrpy (pure Python).
 
 Usage: uv run python benchmarks/bench.py
 """
@@ -14,8 +14,8 @@ import yaml
 from vcr.cassette import Cassette as VcrpyCassette
 from vcr.request import Request as VcrpyRequest
 
-from vcr_but_better._core import Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse, Body, MatchConfig
-from vcr_but_better._core import find_match
+from cassetter._core import Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse, Body, MatchConfig
+from cassetter._core import find_match
 
 ITERATIONS = 20
 TRIM = 4  # drop 2 lowest + 2 highest for trimmed mean
@@ -33,7 +33,7 @@ def trimmed_mean(times: list[float]) -> float:
 # ---------------------------------------------------------------------------
 
 
-def generate_vcr_but_better_cassette(path: str, n: int) -> None:
+def generate_cassetter_cassette(path: str, n: int) -> None:
     c = RustCassette()
     for i in range(n):
         c.add_interaction(
@@ -106,7 +106,7 @@ def run_scale(n: int, tmpdir: Path) -> list[tuple[str, float, float]]:
     vbb_path = str(tmpdir / f"vbb_{n}.yaml")
     vcrpy_path = str(tmpdir / f"vcrpy_{n}.yaml")
 
-    generate_vcr_but_better_cassette(vbb_path, n)
+    generate_cassetter_cassette(vbb_path, n)
     generate_vcrpy_cassette(vcrpy_path, n)
 
     results: list[tuple[str, float, float]] = []
@@ -172,7 +172,7 @@ def detect_yaml_backend() -> str:
 
 
 def main() -> None:
-    print("vcr-but-better vs vcrpy benchmark")
+    print("cassetter vs vcrpy benchmark")
     print("=" * 40)
     print(f"yaml: {detect_yaml_backend()}")
     print(f"iterations: {ITERATIONS} (trimmed mean, drop {TRIM})")
@@ -181,7 +181,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         for n in SCALES:
             print(f"  {n} interactions")
-            header = f"  {'':18s}{'vcr-but-better':>16s}{'vcrpy':>16s}{'speedup':>12s}"
+            header = f"  {'':18s}{'cassetter':>16s}{'vcrpy':>16s}{'speedup':>12s}"
             print(header)
 
             results = run_scale(n, Path(tmpdir))

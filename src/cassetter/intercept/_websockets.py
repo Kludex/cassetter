@@ -7,8 +7,8 @@ from typing import Any
 import websockets
 import websockets.asyncio.client
 
-from vcr_but_better._core import Body, WsFrame, WsInteraction
-from vcr_but_better.cassette import Cassette, NoMatchError
+from cassetter._core import Body, WsFrame, WsInteraction
+from cassetter.cassette import Cassette, NoMatchError
 
 
 class VCRWebSocket:

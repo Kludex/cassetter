@@ -10,16 +10,16 @@ import urllib3
 import urllib3.connectionpool
 import urllib3.response
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
-from vcr_but_better.intercept._urllib3 import (
+from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._urllib3 import (
     Urllib3Interceptor,
     _build_urllib3_response,
     _extract_headers,
     _is_default_port,
     _reconstruct_url,
 )
-from vcr_but_better.recording import RecordMode
+from cassetter.recording import RecordMode
 
 
 def _preload_cassette(path: str) -> Cassette:

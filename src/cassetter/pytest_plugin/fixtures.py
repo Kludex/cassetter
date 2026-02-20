@@ -7,12 +7,12 @@ from typing import Any
 
 import pytest
 
-from vcr_but_better._core import MatchConfig, SecurityConfig
-from vcr_but_better._types import CassetteConfig
-from vcr_but_better.cassette import Cassette
-from vcr_but_better.context import resolve_interceptors
-from vcr_but_better.intercept._base import InterceptorProtocol
-from vcr_but_better.recording import RecordMode
+from cassetter._core import MatchConfig, SecurityConfig
+from cassetter._types import CassetteConfig
+from cassetter.cassette import Cassette
+from cassetter.context import resolve_interceptors
+from cassetter.intercept._base import InterceptorProtocol
+from cassetter.recording import RecordMode
 
 
 @pytest.fixture(scope="module")

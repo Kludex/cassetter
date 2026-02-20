@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vcr_but_better._core import (
+from cassetter._core import (
     Body as Body,
     GrpcInteraction as GrpcInteraction,
     GrpcRequest as GrpcRequest,
@@ -13,15 +13,15 @@ from vcr_but_better._core import (
     WsFrame as WsFrame,
     WsInteraction as WsInteraction,
 )
-from vcr_but_better.cassette import (
+from cassetter.cassette import (
     Cassette as Cassette,
     CassetteExpiredError as CassetteExpiredError,
     CassetteExpiredWarning as CassetteExpiredWarning,
     CassetteNotFoundError as CassetteNotFoundError,
     NoMatchError as NoMatchError,
 )
-from vcr_but_better.context import use_cassette as use_cassette
-from vcr_but_better.recording import RecordMode as RecordMode
+from cassetter.context import use_cassette as use_cassette
+from cassetter.recording import RecordMode as RecordMode
 
 __all__ = [
     "Body",

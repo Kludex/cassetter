@@ -4,34 +4,34 @@ import contextlib
 from collections.abc import AsyncIterator
 from typing import Any
 
-from vcr_but_better._core import MatchConfig, SecurityConfig
-from vcr_but_better.cassette import Cassette
-from vcr_but_better.intercept._base import InterceptorProtocol
-from vcr_but_better.intercept._httpx import HttpxInterceptor
-from vcr_but_better.recording import RecordMode
+from cassetter._core import MatchConfig, SecurityConfig
+from cassetter.cassette import Cassette
+from cassetter.intercept._base import InterceptorProtocol
+from cassetter.intercept._httpx import HttpxInterceptor
+from cassetter.recording import RecordMode
 
 try:
-    from vcr_but_better.intercept._aiohttp import AiohttpInterceptor
+    from cassetter.intercept._aiohttp import AiohttpInterceptor
 except ImportError:  # pragma: no cover
     AiohttpInterceptor = None  # type: ignore[assignment, misc]
 
 try:
-    from vcr_but_better.intercept._requests import RequestsInterceptor
+    from cassetter.intercept._requests import RequestsInterceptor
 except ImportError:  # pragma: no cover
     RequestsInterceptor = None  # type: ignore[assignment, misc]
 
 try:
-    from vcr_but_better.intercept._grpc import GrpcInterceptor
+    from cassetter.intercept._grpc import GrpcInterceptor
 except ImportError:  # pragma: no cover
     GrpcInterceptor = None  # type: ignore[assignment, misc]
 
 try:
-    from vcr_but_better.intercept._websockets import WebSocketInterceptor
+    from cassetter.intercept._websockets import WebSocketInterceptor
 except ImportError:  # pragma: no cover
     WebSocketInterceptor = None  # type: ignore[assignment, misc]
 
 try:
-    from vcr_but_better.intercept._urllib3 import Urllib3Interceptor
+    from cassetter.intercept._urllib3 import Urllib3Interceptor
 except ImportError:  # pragma: no cover
     Urllib3Interceptor = None  # type: ignore[assignment, misc]
 

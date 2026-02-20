@@ -6,15 +6,15 @@ import pytest
 import requests
 import requests.adapters
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
-from vcr_but_better.intercept._requests import (
+from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._requests import (
     RequestsInterceptor,
     VCRAdapter,
     _build_requests_response,
     _extract_headers,
 )
-from vcr_but_better.recording import RecordMode
+from cassetter.recording import RecordMode
 
 
 def _preload_cassette(path: str) -> Cassette:

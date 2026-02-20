@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vcr_but_better._core import (
+from cassetter._core import (
     Body,
     HttpInteraction,
     HttpRequest,

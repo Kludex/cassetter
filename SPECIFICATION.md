@@ -1,6 +1,6 @@
-# vcr-but-better - Specification
+# cassetter - Specification
 
-This document describes the design decisions behind vcr-but-better. Each section explains what was chosen, what alternatives were considered, and why.
+This document describes the design decisions behind cassetter. Each section explains what was chosen, what alternatives were considered, and why.
 
 ## 1. Cassette format (v1)
 
@@ -9,7 +9,7 @@ This document describes the design decisions behind vcr-but-better. Each section
 JSON request/response bodies are stored as structured YAML, not as escaped strings.
 
 ```yaml
-# vcr-but-better
+# cassetter
 body:
   type: json
   content:
@@ -53,7 +53,7 @@ body:
 Response status is stored as a plain integer, not a `{ code, message }` object.
 
 ```yaml
-# vcr-but-better
+# cassetter
 status: 200
 
 # VCR.py

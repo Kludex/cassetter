@@ -1,5 +1,5 @@
 [project]
-name = "vcr-but-better"
+name = "cassetter"
 version = "0.1.0"
 description = "Rust-powered HTTP cassette recorder for Python tests. Safe by default, no monkey-patching."
 readme = "README.md"
@@ -26,7 +26,7 @@ grpc = ["grpcio>=1.60"]
 websockets = ["websockets>=12.0"]
 
 [project.entry-points.pytest11]
-vcr_but_better = "vcr_but_better.pytest_plugin"
+cassetter = "cassetter.pytest_plugin"
 
 [build-system]
 requires = ["maturin>=1.7,<2"]
@@ -34,7 +34,7 @@ build-backend = "maturin"
 
 [tool.maturin]
 python-source = "src"
-module-name = "vcr_but_better._core"
+module-name = "cassetter._core"
 features = ["pyo3/extension-module"]
 manifest-path = "rust/Cargo.toml"
 
@@ -82,7 +82,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/vcr_but_better"]
+source = ["src/cassetter"]
 
 [tool.coverage.report]
 fail_under = 100

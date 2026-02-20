@@ -5,16 +5,16 @@ import os
 import aiohttp
 import pytest
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
-from vcr_but_better.intercept._aiohttp import (
+from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._aiohttp import (
     AiohttpInterceptor,
     _build_aiohttp_response,
     _extract_request_body,
     _extract_request_headers,
     _extract_response_headers,
 )
-from vcr_but_better.recording import RecordMode
+from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)
 

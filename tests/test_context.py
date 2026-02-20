@@ -3,10 +3,10 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import CassetteExpiredWarning
-from vcr_but_better.context import _AUTO_DETECT_ORDER, _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
-from vcr_but_better.recording import RecordMode
+from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter.cassette import CassetteExpiredWarning
+from cassetter.context import _AUTO_DETECT_ORDER, _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
+from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)
 

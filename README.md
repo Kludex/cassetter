@@ -1,4 +1,4 @@
-# vcr-but-better
+# cassetter
 
 Rust-powered HTTP cassette recorder for Python tests. Safe by default, no monkey-patching.
 
@@ -7,16 +7,17 @@ Rust-powered HTTP cassette recorder for Python tests. Safe by default, no monkey
 VCR.py works, but has fundamental problems:
 
 - **Unsafe by default** - doesn't filter sensitive headers, tokens, or API keys
+- **Unsafe YAML** - uses `yaml.load()` with an unsafe loader that can execute arbitrary Python code from cassette files
 - **Slow** - pure Python YAML parsing, matching, and serialization
 - **Fragile** - monkey-patches library internals that break on minor version bumps
 - **Poor readability** - JSON bodies stored as escaped strings in YAML
 
-`vcr-but-better` fixes all of this with a Rust core (PyO3) for speed, safe-by-default security filtering, and stable interception via documented library extension points.
+`cassetter` fixes all of this with a Rust core (PyO3) for speed, safe-by-default security filtering, secure YAML parsing, and stable interception via documented library extension points.
 
 ## Install
 
 ```bash
-uv add vcr-but-better
+uv add cassetter
 ```
 
 ## Quick start
@@ -41,7 +42,7 @@ First run records real HTTP interactions. Subsequent runs replay from the casset
 If you need direct access to the cassette (e.g. to inspect recorded interactions), request the fixture explicitly:
 
 ```python
-from vcr_but_better import Cassette
+from cassetter import Cassette
 
 @pytest.mark.vcr
 async def test_with_cassette(vcr_cassette: Cassette):
@@ -52,7 +53,7 @@ async def test_with_cassette(vcr_cassette: Cassette):
 ### With the context manager
 
 ```python
-from vcr_but_better import use_cassette
+from cassetter import use_cassette
 
 async with use_cassette("tests/cassettes/my_test.yaml", record_mode="once"):
     async with httpx.AsyncClient() as client:
@@ -83,7 +84,7 @@ JSON body fields like `password`, `access_token`, `refresh_token`, `client_secre
 Customize filtering:
 
 ```python
-from vcr_but_better import use_cassette
+from cassetter import use_cassette
 
 async with use_cassette(
     "cassette.yaml",
@@ -135,7 +136,7 @@ interactions:
 Default: match on method + URI. Configurable:
 
 ```python
-from vcr_but_better import use_cassette
+from cassetter import use_cassette
 
 async with use_cassette(
     "cassette.yaml",
@@ -154,10 +155,11 @@ Available matchers: `method`, `uri`, `headers`, `body`, `json_body`.
 | **httpx** | HTTP | `AsyncBaseTransport` / `BaseTransport` |
 | **aiohttp** | HTTP | Session `_request` patch |
 | **requests** | HTTP | Session `send` patch |
+| **urllib3** | HTTP | `HTTPConnectionPool.urlopen` patch |
 | **grpcio** | gRPC | `grpc.aio.Channel` wrapper |
 | **websockets** | WebSocket | `websockets.connect` patch |
 
-Specify which libraries to intercept:
+By default, interceptors are auto-detected based on which libraries are installed. To limit interception to specific libraries:
 
 ```python
 async with use_cassette("cassette.yaml", intercept=["httpx", "aiohttp"]):
@@ -169,7 +171,7 @@ async with use_cassette("cassette.yaml", intercept=["httpx", "aiohttp"]):
 Install the gRPC extra:
 
 ```bash
-uv add "vcr-but-better[grpc]"
+uv add "cassetter[grpc]"
 ```
 
 Record and replay gRPC calls by adding `"grpc"` to the interceptor list:
@@ -212,7 +214,7 @@ Streaming responses use length-prefixed binary encoding - multiple response chun
 Install the WebSocket extra:
 
 ```bash
-uv add "vcr-but-better[websockets]"
+uv add "cassetter[websockets]"
 ```
 
 Record and replay WebSocket connections:
@@ -270,6 +272,39 @@ response:
 
 On replay, the buffered body is returned to the client SDK, which parses SSE events from it. This matches how VCR.py handles streaming - chunk boundaries aren't preserved, but SSE parsers split on `\n\n` boundaries regardless of how bytes are delivered.
 
+## Cassette expiry
+
+Force re-recording when cassettes get stale:
+
+```python
+async with use_cassette("cassette.yaml", max_age="30d", on_expiry="rerecord"):
+    ...
+```
+
+`max_age` accepts durations like `"24h"`, `"7d"`, `"4w"`. `on_expiry` controls the behavior:
+
+| Action | Behavior |
+|--------|----------|
+| `warn` | Emit a warning (default) |
+| `fail` | Raise `CassetteExpiredError` |
+| `rerecord` | Delete and re-record the cassette |
+
+Also configurable via pytest:
+
+```ini
+[tool.pytest.ini_options]
+vcr_max_age = "30d"
+vcr_on_expiry = "warn"
+```
+
+Or per-test:
+
+```python
+@pytest.mark.vcr(max_age="7d", on_expiry="fail")
+async def test_fresh_data():
+    ...
+```
+
 ## Orphan detection
 
 Find cassette files that no test uses:
@@ -278,13 +313,33 @@ Find cassette files that no test uses:
 pytest --vcr-check-orphans=tests/cassettes/
 ```
 
+## Performance
+
+Rust-powered YAML parsing and serialization is 3-6x faster than vcrpy (which uses PyYAML/libyaml):
+
+```
+  1000 interactions
+                    cassetter    vcrpy         speedup
+  load              13.53 ms          58.90 ms      4.4x
+  match             0.98 ms           1.29 ms       1.3x
+  save              7.58 ms           45.64 ms      6.0x
+```
+
+Run `uv run python benchmarks/bench.py` to reproduce.
+
+## YAML safety
+
+vcrpy uses `yaml.load()` with an unsafe loader (`CLoader`/`Loader`) that can execute arbitrary Python via `!!python/object` tags. A malicious cassette file could run code when loaded.
+
+cassetter parses YAML in Rust, which has no concept of Python object construction - only data types are supported.
+
 ## Development
 
 Requires Rust toolchain and Python 3.10+.
 
 ```bash
-git clone https://github.com/marcelotryle/vcr-but-better.git
-cd vcr-but-better
+git clone https://github.com/marcelotryle/cassetter.git
+cd cassetter
 uv sync
 uv run maturin develop
 uv run pytest

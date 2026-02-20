@@ -4,7 +4,7 @@ import gzip
 
 import pytest
 
-from vcr_but_better._core import Body, process_body
+from cassetter._core import Body, process_body
 
 
 class TestBody:

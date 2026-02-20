@@ -7,8 +7,8 @@ from typing import Any
 import grpc
 import grpc.aio
 
-from vcr_but_better._core import Body, GrpcResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
+from cassetter._core import Body, GrpcResponse
+from cassetter.cassette import Cassette, NoMatchError
 
 
 class VCRUnaryUnaryCallable:

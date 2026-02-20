@@ -5,7 +5,7 @@ import re
 import warnings
 from datetime import datetime, timedelta, timezone
 
-from vcr_but_better._core import (
+from cassetter._core import (
     Body,
     Cassette as _RustCassette,
     GrpcInteraction,
@@ -24,7 +24,7 @@ from vcr_but_better._core import (
     process_body,
     scrub_interaction,
 )
-from vcr_but_better.recording import RecordMode
+from cassetter.recording import RecordMode
 
 
 class CassetteNotFoundError(Exception):

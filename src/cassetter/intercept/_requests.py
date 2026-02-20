@@ -7,8 +7,8 @@ from unittest.mock import patch
 import requests
 import requests.adapters
 
-from vcr_but_better._core import HttpResponse as _HttpResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
+from cassetter._core import HttpResponse as _HttpResponse
+from cassetter.cassette import Cassette, NoMatchError
 
 
 class VCRAdapter(requests.adapters.HTTPAdapter):

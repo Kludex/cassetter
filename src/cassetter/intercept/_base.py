@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing_extensions import Protocol
 
-from vcr_but_better.cassette import Cassette
+from cassetter.cassette import Cassette
 
 
 class InterceptorProtocol(Protocol):

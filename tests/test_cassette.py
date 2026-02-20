@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import pytest
 
-from vcr_but_better._core import (
+from cassetter._core import (
     Body,
     Cassette as RustCassette,
     GrpcInteraction,
@@ -16,14 +16,14 @@ from vcr_but_better._core import (
     HttpResponse,
     WsInteraction,
 )
-from vcr_but_better.cassette import (
+from cassetter.cassette import (
     Cassette,
     CassetteExpiredError,
     CassetteExpiredWarning,
     NoMatchError,
     _parse_duration,
 )
-from vcr_but_better.recording import RecordMode
+from cassetter.recording import RecordMode
 
 
 class TestRustCassette:

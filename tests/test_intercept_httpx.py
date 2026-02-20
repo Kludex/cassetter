@@ -5,11 +5,11 @@ import os
 import httpx
 import pytest
 
-from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from vcr_but_better.cassette import Cassette, NoMatchError
-from vcr_but_better.context import use_cassette
-from vcr_but_better.intercept._httpx import HttpxInterceptor, _build_httpx_response, _extract_headers_skip_encoding
-from vcr_but_better.recording import RecordMode
+from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter.cassette import Cassette, NoMatchError
+from cassetter.context import use_cassette
+from cassetter.intercept._httpx import HttpxInterceptor, _build_httpx_response, _extract_headers_skip_encoding
+from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)
 
