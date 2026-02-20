@@ -8,6 +8,7 @@ import pytest
 from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from vcr_but_better.cassette import Cassette, NoMatchError
 from vcr_but_better.context import use_cassette
+from vcr_but_better.intercept._httpx import HttpxInterceptor, _build_httpx_response
 from vcr_but_better.recording import RecordMode
 
 pytest_plugins = ("anyio",)
@@ -85,3 +86,112 @@ async def test_record_and_replay(cassette_path: str) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"items": [1, 2, 3]}
+
+
+def test_sync_replay(preloaded_cassette: str) -> None:
+    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE)
+    cassette.load()
+
+    interceptor = HttpxInterceptor()
+    interceptor.install(cassette)
+
+    try:
+        with httpx.Client() as client:
+            response = client.get("https://httpbin.org/get")
+        assert response.status_code == 200
+        assert response.json()["origin"] == "127.0.0.1"
+    finally:
+        interceptor.uninstall()
+
+
+def test_sync_no_match_raises(preloaded_cassette: str) -> None:
+    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE)
+    cassette.load()
+
+    interceptor = HttpxInterceptor()
+    interceptor.install(cassette)
+
+    try:
+        with httpx.Client() as client:
+            with pytest.raises(NoMatchError):
+                client.get("https://httpbin.org/unknown")
+    finally:
+        interceptor.uninstall()
+
+
+def test_sync_record(cassette_path: str) -> None:
+    cassette = Cassette(cassette_path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    interceptor = HttpxInterceptor()
+    interceptor.install(cassette)
+
+    try:
+        transport = httpx.MockTransport(lambda request: httpx.Response(201, json={"created": True}))
+        with httpx.Client(transport=transport) as client:
+            response = client.get("https://example.com/create")
+        assert response.status_code == 201
+        assert len(cassette.interactions) == 1
+    finally:
+        interceptor.uninstall()
+
+
+@pytest.mark.anyio
+async def test_async_record(cassette_path: str) -> None:
+    cassette = Cassette(cassette_path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    interceptor = HttpxInterceptor()
+    interceptor.install(cassette)
+
+    try:
+        transport = httpx.MockTransport(lambda request: httpx.Response(201, json={"created": True}))
+        async with httpx.AsyncClient(transport=transport) as client:
+            response = await client.get("https://example.com/create")
+        assert response.status_code == 201
+        assert len(cassette.interactions) == 1
+    finally:
+        interceptor.uninstall()
+
+
+class TestBuildHttpxResponse:
+    def test_json_body(self) -> None:
+        response = _build_httpx_response(
+            HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
+        )
+        assert response.json() == {"key": "value"}
+
+    def test_text_body(self) -> None:
+        response = _build_httpx_response(
+            HttpResponse(200, body=Body("text", "hello world")),
+        )
+        assert response.text == "hello world"
+
+    def test_binary_body(self) -> None:
+        response = _build_httpx_response(
+            HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
+        )
+        assert response.content == b"\x00\x01\x02"
+
+    def test_none_body(self) -> None:
+        response = _build_httpx_response(
+            HttpResponse(200, body=Body("none")),
+        )
+        assert response.content == b""
+
+
+def test_install_uninstall() -> None:
+    interceptor = HttpxInterceptor()
+    original_async_init = httpx.AsyncClient.__init__
+    original_sync_init = httpx.Client.__init__
+
+    cassette = Cassette("/nonexistent", record_mode=RecordMode.NONE)
+    cassette.load()
+
+    interceptor.install(cassette)
+    assert httpx.AsyncClient.__init__ is not original_async_init
+    assert httpx.Client.__init__ is not original_sync_init
+
+    interceptor.uninstall()
+    assert httpx.AsyncClient.__init__ is original_async_init
+    assert httpx.Client.__init__ is original_sync_init

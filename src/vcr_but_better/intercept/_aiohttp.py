@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import patch
@@ -9,6 +10,7 @@ import aiohttp.client_reqrep
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
+from vcr_but_better._core import HttpResponse as _HttpResponse
 from vcr_but_better.cassette import Cassette, NoMatchError
 
 
@@ -72,12 +74,8 @@ def _extract_request_headers(headers: Any) -> dict[str, list[str]]:
     if headers is None:
         return {}
     result: dict[str, list[str]] = {}
-    if isinstance(headers, dict):
-        for k, v in headers.items():
-            result.setdefault(str(k).lower(), []).append(str(v))
-    else:
-        for k, v in headers.items():
-            result.setdefault(str(k).lower(), []).append(str(v))
+    for k, v in headers.items():
+        result.setdefault(str(k).lower(), []).append(str(v))
     return result
 
 
@@ -100,10 +98,7 @@ def _extract_response_headers(headers: CIMultiDictProxy[str]) -> dict[str, list[
     return result
 
 
-def _build_aiohttp_response(method: str, uri: str, response: object) -> aiohttp.ClientResponse:
-    from vcr_but_better._core import HttpResponse as _HttpResponse
-
-    assert isinstance(response, _HttpResponse)
+def _build_aiohttp_response(method: str, uri: str, response: _HttpResponse) -> aiohttp.ClientResponse:
 
     body = response.body
     if body.body_type == "json":
@@ -124,7 +119,7 @@ def _build_aiohttp_response(method: str, uri: str, response: object) -> aiohttp.
     resp = aiohttp.ClientResponse(
         method=method,
         url=URL(uri),
-        writer=None,  # type: ignore[arg-type]
+        writer=None,
         continue100=None,
         timer=None,  # type: ignore[arg-type]
         request_info=aiohttp.RequestInfo(
@@ -134,10 +129,10 @@ def _build_aiohttp_response(method: str, uri: str, response: object) -> aiohttp.
             real_url=URL(uri),
         ),
         traces=[],
-        loop=None,  # type: ignore[arg-type]
+        loop=asyncio.get_running_loop(),
         session=None,  # type: ignore[arg-type]
     )
     resp.status = response.status
-    resp._headers = CIMultiDictProxy(headers_multi)  # type: ignore[assignment]
-    resp._body = content  # type: ignore[assignment]
+    resp._headers = CIMultiDictProxy(headers_multi)
+    resp._body = content
     return resp

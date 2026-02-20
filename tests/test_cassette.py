@@ -79,6 +79,61 @@ class TestRustCassette:
             RustCassette.load("/nonexistent/path.yaml")
 
 
+class TestCassetteProperties:
+    def test_path(self) -> None:
+        cassette = Cassette("/tmp/test.yaml")
+        assert cassette.path == "/tmp/test.yaml"
+
+    def test_record_mode(self) -> None:
+        cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
+        assert cassette.record_mode == RecordMode.ALL
+
+    def test_interactions_before_load(self) -> None:
+        cassette = Cassette("/tmp/test.yaml")
+        assert cassette.interactions == []
+
+    def test_can_record(self) -> None:
+        assert Cassette("/tmp/t.yaml", record_mode=RecordMode.ALL).can_record is True
+        assert Cassette("/tmp/t.yaml", record_mode=RecordMode.NEW_EPISODES).can_record is True
+        assert Cassette("/tmp/t.yaml", record_mode=RecordMode.ONCE).can_record is True
+        assert Cassette("/tmp/t.yaml", record_mode=RecordMode.NONE).can_record is False
+
+    def test_play_before_load(self) -> None:
+        cassette = Cassette("/tmp/test.yaml")
+        with pytest.raises(NoMatchError, match="cassette not loaded"):
+            cassette.play("GET", "https://example.com", {}, None)
+
+    def test_record_before_load(self) -> None:
+        cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
+        response = cassette.record(
+            method="GET",
+            uri="https://example.com/",
+            request_headers={},
+            request_body=None,
+            status=200,
+            response_headers={},
+            response_body=b"ok",
+        )
+        assert response.status == 200
+        assert len(cassette.interactions) == 1
+
+    def test_load_existing_file(self, tmp_path: object) -> None:
+        path = os.path.join(str(tmp_path), "existing.yaml")
+        c = RustCassette()
+        c.add_interaction(
+            HttpInteraction(
+                request=HttpRequest("GET", "https://example.com/"),
+                response=HttpResponse(200, body=Body("text", "ok")),
+                recorded_at="2026-01-01T00:00:00Z",
+            )
+        )
+        c.save(path)
+
+        cassette = Cassette(path, record_mode=RecordMode.NONE)
+        cassette.load()
+        assert len(cassette.interactions) == 1
+
+
 class TestCassetteWrapper:
     def test_record_mode_none_missing_file(self) -> None:
         cassette = Cassette("/nonexistent.yaml", record_mode=RecordMode.NONE)

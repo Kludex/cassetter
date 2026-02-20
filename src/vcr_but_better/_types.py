@@ -16,8 +16,6 @@ class CassetteConfig(TypedDict, total=False):
     body_scrub_patterns: list[str]
     filter_replacement: str
     cassette_dir: str
-    ignore_localhost: bool
-    decode_compressed_response: bool
 
 
 class Interceptor(Protocol):

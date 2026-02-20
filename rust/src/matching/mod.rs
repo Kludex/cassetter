@@ -8,11 +8,13 @@ use crate::protocol::http::{HttpInteraction, HttpRequest};
 use config::MatchConfig;
 
 /// Find a matching interaction for the given request.
+/// Prefers unplayed interactions; falls back to already-played ones.
 /// Returns (index, interaction) if found.
 #[pyfunction]
 pub fn find_match(
     request: &HttpRequest,
     interactions: Vec<HttpInteraction>,
+    played: Vec<bool>,
     config: &MatchConfig,
 ) -> Option<(usize, HttpInteraction)> {
     let match_fields = &config.match_on;
@@ -28,14 +30,23 @@ pub fn find_match(
         (0..interactions.len()).collect()
     };
 
-    for idx in candidates {
+    // First pass: prefer unplayed interactions
+    let mut fallback: Option<(usize, HttpInteraction)> = None;
+    for &idx in &candidates {
         let interaction = &interactions[idx];
         if matches_all(request, &interaction.request, config) {
-            return Some((idx, interaction.clone()));
+            let is_played = idx < played.len() && played[idx];
+            if !is_played {
+                return Some((idx, interaction.clone()));
+            }
+            if fallback.is_none() {
+                fallback = Some((idx, interaction.clone()));
+            }
         }
     }
 
-    None
+    // Fall back to first matching played interaction
+    fallback
 }
 
 fn matches_all(incoming: &HttpRequest, recorded: &HttpRequest, config: &MatchConfig) -> bool {

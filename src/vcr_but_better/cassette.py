@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 from vcr_but_better._core import (
     Cassette as _RustCassette,
@@ -16,8 +15,6 @@ from vcr_but_better._core import (
     scrub_interaction,
 )
 from vcr_but_better.recording import RecordMode
-
-_LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
 
 class CassetteNotFoundError(Exception):
@@ -38,13 +35,11 @@ class Cassette:
         record_mode: RecordMode = RecordMode.ONCE,
         match_config: MatchConfig | None = None,
         security_config: SecurityConfig | None = None,
-        ignore_localhost: bool = False,
     ) -> None:
         self._path = path
         self._record_mode = record_mode
         self._match_config = match_config or MatchConfig()
         self._security_config = security_config or SecurityConfig()
-        self._ignore_localhost = ignore_localhost
         self._inner: _RustCassette | None = None
         self._dirty = False
 
@@ -84,12 +79,6 @@ class Cassette:
     def can_record(self) -> bool:
         return self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES, RecordMode.ONCE)
 
-    def _is_localhost(self, uri: str) -> bool:
-        if not self._ignore_localhost:
-            return False
-        parsed = urlparse(uri)
-        return parsed.hostname in _LOCALHOST_HOSTS
-
     def play(
         self,
         method: str,
@@ -106,7 +95,7 @@ class Cassette:
         processed_body = process_body(body or b"", content_type, content_encoding)
 
         request = HttpRequest(method, uri, headers, processed_body)
-        result = find_match(request, self._inner.interactions, self._match_config)
+        result = find_match(request, self._inner.interactions, self._inner.played_indices, self._match_config)
 
         if result is None:
             raise NoMatchError(f"no matching interaction for {method} {uri}")
@@ -135,9 +124,7 @@ class Cassette:
         resp_body = process_body(response_body or b"", resp_ct, resp_ce)
 
         # Remove content-encoding since we've already decompressed
-        clean_resp_headers = {
-            k: v for k, v in response_headers.items() if k.lower() != "content-encoding"
-        }
+        clean_resp_headers = {k: v for k, v in response_headers.items() if k.lower() != "content-encoding"}
 
         request = HttpRequest(method, uri, request_headers, req_body)
         response = HttpResponse(status, clean_resp_headers, resp_body)
@@ -153,23 +140,6 @@ class Cassette:
         self._inner.add_interaction(interaction)
         self._dirty = True
         return interaction.response
-
-    def play_or_record(
-        self,
-        method: str,
-        uri: str,
-        request_headers: dict[str, list[str]],
-        request_body: bytes | None,
-        real_fetch: object,
-    ) -> HttpResponse:
-        """Try to play a matching interaction. If none found and recording is allowed, fetch for real and record."""
-        try:
-            return self.play(method, uri, request_headers, request_body)
-        except NoMatchError:
-            if not self.can_record:
-                raise
-            # real_fetch is handled by the caller (interceptor) - this method is not used directly
-            raise
 
 
 def _get_header(headers: dict[str, list[str]], name: str) -> str | None:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import gzip
 
+import pytest
+
 from vcr_but_better._core import Body, process_body
 
 
@@ -27,8 +29,6 @@ class TestBody:
         assert body.content is None
 
     def test_invalid_body_type(self) -> None:
-        import pytest
-
         with pytest.raises(ValueError, match="unknown body type"):
             Body("invalid", "data")
 
@@ -56,7 +56,7 @@ class TestProcessBody:
         assert body.content == {"decompressed": True}
 
     def test_auto_detect_json(self) -> None:
-        body = process_body(b'[1, 2, 3]')
+        body = process_body(b"[1, 2, 3]")
         assert body.body_type == "json"
         assert body.content == [1, 2, 3]
 

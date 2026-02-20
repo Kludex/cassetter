@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,8 @@ import pytest
 from vcr_but_better._core import MatchConfig, SecurityConfig
 from vcr_but_better._types import CassetteConfig
 from vcr_but_better.cassette import Cassette
+from vcr_but_better.context import resolve_interceptors
+from vcr_but_better.intercept._base import InterceptorProtocol
 from vcr_but_better.recording import RecordMode
 
 
@@ -18,34 +21,35 @@ def vcr_config() -> CassetteConfig:
     return CassetteConfig()
 
 
-@pytest.fixture
-def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Cassette:
-    """Provides a Cassette for the current test based on marker or config."""
-    marker = request.node.get_closest_marker("vcr")
-
-    cassette_name = request.node.name + ".yaml"
+def _resolve_cassette(
+    node_name: str,
+    marker_args: tuple[Any, ...],
+    marker_kwargs: dict[str, Any],
+    vcr_config: CassetteConfig,
+    cli_record_mode: str | None,
+    test_fspath: str,
+) -> tuple[Cassette, list[InterceptorProtocol]]:
+    """Resolve cassette configuration and create a Cassette instance."""
+    cassette_name = node_name + ".yaml"
     cassette_dir = vcr_config.get("cassette_dir", "cassettes")
     record_mode_str = vcr_config.get("record_mode", "none")
 
     # Marker can override
-    if marker is not None:
-        if marker.args:
-            cassette_name = marker.args[0]
-        marker_kwargs = dict(marker.kwargs)
-        if "record_mode" in marker_kwargs:
-            record_mode_str = marker_kwargs["record_mode"]
-        if "cassette_dir" in marker_kwargs:
-            cassette_dir = marker_kwargs["cassette_dir"]
+    if marker_args:
+        cassette_name = marker_args[0]
+    if "record_mode" in marker_kwargs:
+        record_mode_str = marker_kwargs["record_mode"]
+    if "cassette_dir" in marker_kwargs:
+        cassette_dir = marker_kwargs["cassette_dir"]
 
     # CLI override
-    cli_record_mode = request.config.getoption("--record-mode", default=None)
     if cli_record_mode is not None:
         record_mode_str = cli_record_mode
 
     record_mode = RecordMode.from_str(record_mode_str)
 
     # Resolve cassette path: {test_dir}/cassettes/{test_file_stem}/{cassette_name}
-    test_file = Path(str(request.fspath))
+    test_file = Path(test_fspath)
     test_dir = str(test_file.parent)
     test_file_stem = test_file.stem
     cassette_path = os.path.join(test_dir, cassette_dir, test_file_stem, cassette_name)
@@ -66,22 +70,48 @@ def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> 
         security_kwargs["replacement"] = vcr_config["filter_replacement"]
     security_config = SecurityConfig(**security_kwargs)
 
-    ignore_localhost = vcr_config.get("ignore_localhost", False)
-
     cassette = Cassette(
         cassette_path,
         record_mode=record_mode,
         match_config=match_config,
         security_config=security_config,
-        ignore_localhost=ignore_localhost,
     )
     cassette.load()
+
+    interceptors = resolve_interceptors(["httpx"])
+    return cassette, interceptors
+
+
+@pytest.fixture(autouse=True)
+def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Iterator[Cassette | None]:
+    """Activates cassette recording/replay for tests marked with @pytest.mark.vcr."""
+    marker = request.node.get_closest_marker("vcr")
+    if marker is None:
+        yield None
+        return
+
+    cli_record_mode = request.config.getoption("--record-mode", default=None)
+
+    cassette, interceptors = _resolve_cassette(
+        node_name=request.node.name,
+        marker_args=marker.args,
+        marker_kwargs=dict(marker.kwargs),
+        vcr_config=vcr_config,
+        cli_record_mode=cli_record_mode,
+        test_fspath=str(request.path),
+    )
 
     # Track loaded cassette paths for orphan detection
     _loaded_cassettes = getattr(request.config, "_vcr_loaded_cassettes", None)
     if _loaded_cassettes is not None:
-        _loaded_cassettes.add(os.path.abspath(cassette_path))
+        _loaded_cassettes.add(os.path.abspath(cassette.path))
 
-    yield cassette  # type: ignore[misc]
+    for interceptor in interceptors:
+        interceptor.install(cassette)
 
+    yield cassette
+
+    # Uninstall interceptors and save
+    for interceptor in reversed(interceptors):
+        interceptor.uninstall()
     cassette.save()

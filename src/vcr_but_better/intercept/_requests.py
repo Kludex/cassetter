@@ -7,6 +7,7 @@ from unittest.mock import patch
 import requests
 import requests.adapters
 
+from vcr_but_better._core import HttpResponse as _HttpResponse
 from vcr_but_better.cassette import Cassette, NoMatchError
 
 
@@ -18,7 +19,7 @@ class VCRAdapter(requests.adapters.HTTPAdapter):
         self._cassette = cassette
         self._real_adapter = real_adapter
 
-    def send(
+    def send(  # type: ignore[override]
         self,
         request: requests.PreparedRequest,
         stream: bool = False,
@@ -119,10 +120,7 @@ def _extract_headers(headers: Any) -> dict[str, list[str]]:
     return result
 
 
-def _build_requests_response(request: requests.PreparedRequest, response: object) -> requests.Response:
-    from vcr_but_better._core import HttpResponse as _HttpResponse
-
-    assert isinstance(response, _HttpResponse)
+def _build_requests_response(request: requests.PreparedRequest, response: _HttpResponse) -> requests.Response:
 
     body = response.body
     if body.body_type == "json":
@@ -136,7 +134,7 @@ def _build_requests_response(request: requests.PreparedRequest, response: object
 
     resp = requests.Response()
     resp.status_code = response.status
-    resp._content = content  # type: ignore[attr-defined]
+    resp._content = content
     resp.encoding = "utf-8"
     resp.url = request.url or ""
     resp.request = request

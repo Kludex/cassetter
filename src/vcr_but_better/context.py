@@ -6,7 +6,25 @@ from typing import Any
 
 from vcr_but_better._core import MatchConfig, SecurityConfig
 from vcr_but_better.cassette import Cassette
+from vcr_but_better.intercept._base import InterceptorProtocol
+from vcr_but_better.intercept._httpx import HttpxInterceptor
 from vcr_but_better.recording import RecordMode
+
+try:
+    from vcr_but_better.intercept._aiohttp import AiohttpInterceptor
+except ImportError:  # pragma: no cover
+    AiohttpInterceptor = None  # type: ignore[assignment, misc]
+
+try:
+    from vcr_but_better.intercept._requests import RequestsInterceptor
+except ImportError:  # pragma: no cover
+    RequestsInterceptor = None  # type: ignore[assignment, misc]
+
+_INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
+    "httpx": HttpxInterceptor,
+    "aiohttp": AiohttpInterceptor,
+    "requests": RequestsInterceptor,
+}
 
 
 @contextlib.asynccontextmanager
@@ -59,7 +77,7 @@ async def use_cassette(
     )
     cassette.load()
 
-    interceptors = _resolve_interceptors(intercept or ["httpx"])
+    interceptors = resolve_interceptors(intercept or ["httpx"])
 
     for interceptor in interceptors:
         interceptor.install(cassette)
@@ -72,22 +90,14 @@ async def use_cassette(
         cassette.save()
 
 
-def _resolve_interceptors(names: list[str]) -> list[Any]:
-    """Lazily import and instantiate interceptors by name."""
-    interceptors = []
+def resolve_interceptors(names: list[str]) -> list[InterceptorProtocol]:
+    """Import and instantiate interceptors by name."""
+    interceptors: list[InterceptorProtocol] = []
     for name in names:
-        if name == "httpx":
-            from vcr_but_better.intercept._httpx import HttpxInterceptor
-
-            interceptors.append(HttpxInterceptor())
-        elif name == "aiohttp":
-            from vcr_but_better.intercept._aiohttp import AiohttpInterceptor
-
-            interceptors.append(AiohttpInterceptor())
-        elif name == "requests":
-            from vcr_but_better.intercept._requests import RequestsInterceptor
-
-            interceptors.append(RequestsInterceptor())
-        else:
+        cls = _INTERCEPTOR_MAP.get(name)
+        if cls is None:
+            if name in _INTERCEPTOR_MAP:
+                raise ImportError(f"interceptor {name!r} requires installing the '{name}' extra")
             raise ValueError(f"unknown interceptor: {name!r}")
+        interceptors.append(cls())
     return interceptors

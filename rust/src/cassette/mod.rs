@@ -33,6 +33,11 @@ impl Cassette {
         self.interactions.clone()
     }
 
+    #[getter]
+    fn played_indices(&self) -> Vec<bool> {
+        self.played_indices.clone()
+    }
+
     #[setter]
     fn set_interactions(&mut self, interactions: Vec<HttpInteraction>) {
         self.played_indices = vec![false; interactions.len()];

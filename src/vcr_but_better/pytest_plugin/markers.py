@@ -16,4 +16,4 @@ def configure(config: Any) -> None:
     except AttributeError:
         return
 
-    config._vcr_loaded_cassettes = set()  # type: ignore[attr-defined]
+    config._vcr_loaded_cassettes = set()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from typing import Any
 
 
@@ -43,8 +44,6 @@ def session_finish(session: Any) -> None:
 
     if orphans:
         orphan_list = "\n  ".join(sorted(orphans))
-        import warnings
-
         warnings.warn(
             f"Found {len(orphans)} orphaned cassette file(s) in {orphan_dir}:\n  {orphan_list}",
             stacklevel=1,

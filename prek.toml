@@ -1,0 +1,9 @@
+#:schema https://www.schemastore.org/prek.json
+
+[[repos]]
+repo = "local"
+hooks = [
+    { id = "ruff-check", name = "ruff check", language = "system", entry = "uv run ruff check --fix", types = ["python"] },
+    { id = "ruff-format", name = "ruff format", language = "system", entry = "uv run ruff format", types = ["python"] },
+    { id = "mypy", name = "mypy", language = "system", entry = "uv run mypy src/", types = ["python"], pass_filenames = false },
+]

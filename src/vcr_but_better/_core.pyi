@@ -44,6 +44,7 @@ class HttpInteraction:
 class Cassette:
     version: int
     interactions: list[HttpInteraction]
+    played_indices: list[bool]
     unplayed_count: int
 
     def __init__(self) -> None: ...
@@ -81,11 +82,10 @@ class SecurityConfig:
 def find_match(
     request: HttpRequest,
     interactions: list[HttpInteraction],
+    played: list[bool],
     config: MatchConfig,
 ) -> tuple[int, HttpInteraction] | None: ...
-
 def scrub_interaction(interaction: HttpInteraction, config: SecurityConfig) -> HttpInteraction: ...
-
 def process_body(
     raw_bytes: bytes,
     content_type: str | None = None,

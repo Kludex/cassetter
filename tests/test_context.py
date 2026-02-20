@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import httpx
+import pytest
+
+from vcr_but_better._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from vcr_but_better.context import _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
+from vcr_but_better.recording import RecordMode
+
+pytest_plugins = ("anyio",)
+
+
+def _make_cassette(path: str) -> str:
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            request=HttpRequest("GET", "https://example.com/api"),
+            response=HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"ok": True})),
+            recorded_at="2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(path)
+    return path
+
+
+@pytest.mark.anyio
+async def test_use_cassette_with_filtered_headers(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    async with use_cassette(path, record_mode="none", filtered_headers=["x-custom"]):
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://example.com/api")
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_use_cassette_with_filtered_query_params(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    async with use_cassette(path, record_mode="none", filtered_query_params=["token"]):
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://example.com/api")
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_use_cassette_with_body_scrub_patterns(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    async with use_cassette(path, record_mode="none", body_scrub_patterns=["secret"]):
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://example.com/api")
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_use_cassette_with_filter_replacement(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    async with use_cassette(path, record_mode="none", filter_replacement="[REDACTED]"):
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://example.com/api")
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_use_cassette_string_record_mode(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    async with use_cassette(path, record_mode="none"):
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://example.com/api")
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_use_cassette_enum_record_mode(tmp_path: object) -> None:
+    path = _make_cassette(f"{tmp_path}/test.yaml")
+    async with use_cassette(path, record_mode=RecordMode.NONE):
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://example.com/api")
+    assert response.status_code == 200
+
+
+class TestResolveInterceptors:
+    def test_unknown_interceptor(self) -> None:
+        with pytest.raises(ValueError, match="unknown interceptor"):
+            resolve_interceptors(["nonexistent"])
+
+    def test_missing_optional_dependency(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(_INTERCEPTOR_MAP, "aiohttp", None)
+        with pytest.raises(ImportError, match="requires installing"):
+            resolve_interceptors(["aiohttp"])
+
+    def test_httpx_interceptor(self) -> None:
+        interceptors = resolve_interceptors(["httpx"])
+        assert len(interceptors) == 1
+
+    def test_multiple_interceptors(self) -> None:
+        interceptors = resolve_interceptors(["httpx", "aiohttp", "requests"])
+        assert len(interceptors) == 3
