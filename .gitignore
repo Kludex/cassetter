@@ -9,3 +9,8 @@ wheels/
 
 # Rust
 rust/target/
+
+# Compiled extensions
+*.so
+*.pyd
+*.dylib
