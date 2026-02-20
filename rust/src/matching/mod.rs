@@ -4,7 +4,9 @@ pub mod matchers;
 use pyo3::prelude::*;
 
 use crate::cassette::index::CassetteIndex;
+use crate::protocol::grpc::GrpcInteraction;
 use crate::protocol::http::{HttpInteraction, HttpRequest};
+use crate::protocol::ws::WsInteraction;
 use config::MatchConfig;
 
 /// Find a matching interaction for the given request.
@@ -46,6 +48,52 @@ pub fn find_match(
     }
 
     // Fall back to first matching played interaction
+    fallback
+}
+
+/// Find a matching gRPC interaction by method string.
+/// Prefers unplayed interactions; falls back to already-played ones.
+#[pyfunction]
+pub fn find_grpc_match(
+    method: &str,
+    interactions: Vec<GrpcInteraction>,
+    played: Vec<bool>,
+) -> Option<(usize, GrpcInteraction)> {
+    let mut fallback: Option<(usize, GrpcInteraction)> = None;
+    for (idx, interaction) in interactions.iter().enumerate() {
+        if interaction.request.method == method {
+            let is_played = idx < played.len() && played[idx];
+            if !is_played {
+                return Some((idx, interaction.clone()));
+            }
+            if fallback.is_none() {
+                fallback = Some((idx, interaction.clone()));
+            }
+        }
+    }
+    fallback
+}
+
+/// Find a matching WebSocket interaction by URI.
+/// Prefers unplayed interactions; falls back to already-played ones.
+#[pyfunction]
+pub fn find_ws_match(
+    uri: &str,
+    interactions: Vec<WsInteraction>,
+    played: Vec<bool>,
+) -> Option<(usize, WsInteraction)> {
+    let mut fallback: Option<(usize, WsInteraction)> = None;
+    for (idx, interaction) in interactions.iter().enumerate() {
+        if interaction.uri == uri {
+            let is_played = idx < played.len() && played[idx];
+            if !is_played {
+                return Some((idx, interaction.clone()));
+            }
+            if fallback.is_none() {
+                fallback = Some((idx, interaction.clone()));
+            }
+        }
+    }
     fallback
 }
 

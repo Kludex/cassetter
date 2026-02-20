@@ -22,6 +22,8 @@ dependencies = []
 httpx = ["httpx>=0.24"]
 aiohttp = ["aiohttp>=3.9"]
 requests = ["requests>=2.28"]
+grpc = ["grpcio>=1.60"]
+websockets = ["websockets>=12.0"]
 
 [project.entry-points.pytest11]
 vcr_but_better = "vcr_but_better.pytest_plugin"

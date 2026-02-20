@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from vcr_but_better._core import (
     Body as Body,
+    GrpcInteraction as GrpcInteraction,
+    GrpcRequest as GrpcRequest,
+    GrpcResponse as GrpcResponse,
     HttpInteraction as HttpInteraction,
     HttpRequest as HttpRequest,
     HttpResponse as HttpResponse,
     MatchConfig as MatchConfig,
     SecurityConfig as SecurityConfig,
+    WsFrame as WsFrame,
+    WsInteraction as WsInteraction,
 )
 from vcr_but_better.cassette import (
     Cassette as Cassette,
@@ -20,6 +25,9 @@ __all__ = [
     "Body",
     "Cassette",
     "CassetteNotFoundError",
+    "GrpcInteraction",
+    "GrpcRequest",
+    "GrpcResponse",
     "HttpInteraction",
     "HttpRequest",
     "HttpResponse",
@@ -27,5 +35,7 @@ __all__ = [
     "NoMatchError",
     "RecordMode",
     "SecurityConfig",
+    "WsFrame",
+    "WsInteraction",
     "use_cassette",
 ]

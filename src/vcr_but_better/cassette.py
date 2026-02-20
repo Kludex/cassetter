@@ -4,13 +4,21 @@ import os
 from datetime import datetime, timezone
 
 from vcr_but_better._core import (
+    Body,
     Cassette as _RustCassette,
+    GrpcInteraction,
+    GrpcRequest,
+    GrpcResponse,
     HttpInteraction,
     HttpRequest,
     HttpResponse,
     MatchConfig,
     SecurityConfig,
+    WsFrame,
+    WsInteraction,
+    find_grpc_match,
     find_match,
+    find_ws_match,
     process_body,
     scrub_interaction,
 )
@@ -57,6 +65,18 @@ class Cassette:
             return []
         return self._inner.interactions
 
+    @property
+    def grpc_interactions(self) -> list[GrpcInteraction]:
+        if self._inner is None:
+            return []
+        return self._inner.grpc_interactions
+
+    @property
+    def ws_interactions(self) -> list[WsInteraction]:
+        if self._inner is None:
+            return []
+        return self._inner.ws_interactions
+
     def load(self) -> None:
         """Load the cassette from disk, or create a new one based on record mode."""
         exists = os.path.exists(self._path)
@@ -70,7 +90,7 @@ class Cassette:
         self._inner = _RustCassette.load(self._path)
 
     def save(self) -> None:
-        """Save the cassette to disk if it has been modified and has interactions."""
+        """Save the cassette to disk if modified and has any interactions."""
         if self._inner is not None and self._dirty and len(self._inner) > 0:
             self._inner.save(self._path)
             self._dirty = False
@@ -140,6 +160,76 @@ class Cassette:
         self._inner.add_interaction(interaction)
         self._dirty = True
         return interaction.response
+
+    # --- gRPC ---
+
+    def play_grpc(self, method: str) -> GrpcResponse:
+        """Find a matching gRPC response for the given method, or raise NoMatchError."""
+        if self._inner is None:
+            raise NoMatchError("cassette not loaded")
+
+        result = find_grpc_match(method, self._inner.grpc_interactions, self._inner.grpc_played)
+        if result is None:
+            raise NoMatchError(f"no matching gRPC interaction for {method}")
+
+        idx, interaction = result
+        self._inner.mark_grpc_played(idx)
+        return interaction.response
+
+    def record_grpc(
+        self,
+        method: str,
+        metadata: dict[str, list[str]],
+        request_body: Body,
+        response_body: Body,
+        status_code: int = 0,
+        status_message: str = "OK",
+        response_metadata: dict[str, list[str]] | None = None,
+        json_debug: dict[str, object] | None = None,
+    ) -> GrpcResponse:
+        """Record a gRPC interaction and return the response."""
+        request = GrpcRequest(method, metadata, request_body)
+        response = GrpcResponse(status_code, status_message, response_metadata, response_body)
+        recorded_at = datetime.now(timezone.utc).isoformat()
+        interaction = GrpcInteraction(request, response, recorded_at, json_debug)
+
+        if self._inner is None:
+            self._inner = _RustCassette()
+
+        self._inner.add_grpc_interaction(interaction)
+        self._dirty = True
+        return interaction.response
+
+    # --- WebSocket ---
+
+    def play_ws(self, uri: str) -> WsInteraction:
+        """Find a matching WebSocket interaction for the given URI, or raise NoMatchError."""
+        if self._inner is None:
+            raise NoMatchError("cassette not loaded")
+
+        result = find_ws_match(uri, self._inner.ws_interactions, self._inner.ws_played)
+        if result is None:
+            raise NoMatchError(f"no matching WebSocket interaction for {uri}")
+
+        idx, interaction = result
+        self._inner.mark_ws_played(idx)
+        return interaction
+
+    def record_ws(
+        self,
+        uri: str,
+        headers: dict[str, list[str]],
+        frames: list[WsFrame],
+    ) -> None:
+        """Record a WebSocket interaction."""
+        recorded_at = datetime.now(timezone.utc).isoformat()
+        interaction = WsInteraction(uri, headers, frames, recorded_at)
+
+        if self._inner is None:
+            self._inner = _RustCassette()
+
+        self._inner.add_ws_interaction(interaction)
+        self._dirty = True
 
 
 def _get_header(headers: dict[str, list[str]], name: str) -> str | None:

@@ -5,7 +5,9 @@ use std::path::Path;
 
 use pyo3::prelude::*;
 
+use crate::protocol::grpc::GrpcInteraction;
 use crate::protocol::http::HttpInteraction;
+use crate::protocol::ws::WsInteraction;
 
 #[pyclass(from_py_object)]
 #[derive(Clone, Debug)]
@@ -13,8 +15,11 @@ pub struct Cassette {
     #[pyo3(get, set)]
     pub version: u32,
     pub interactions: Vec<HttpInteraction>,
-    /// Tracks which interactions have been played back (by index).
     pub played_indices: Vec<bool>,
+    pub grpc_interactions: Vec<GrpcInteraction>,
+    pub grpc_played: Vec<bool>,
+    pub ws_interactions: Vec<WsInteraction>,
+    pub ws_played: Vec<bool>,
 }
 
 #[pymethods]
@@ -25,6 +30,10 @@ impl Cassette {
             version: 1,
             interactions: Vec::new(),
             played_indices: Vec::new(),
+            grpc_interactions: Vec::new(),
+            grpc_played: Vec::new(),
+            ws_interactions: Vec::new(),
+            ws_played: Vec::new(),
         }
     }
 
@@ -64,6 +73,72 @@ impl Cassette {
         self.played_indices.iter().filter(|&&p| !p).count()
     }
 
+    // --- gRPC ---
+
+    #[getter]
+    fn grpc_interactions(&self) -> Vec<GrpcInteraction> {
+        self.grpc_interactions.clone()
+    }
+
+    #[getter]
+    fn grpc_played(&self) -> Vec<bool> {
+        self.grpc_played.clone()
+    }
+
+    #[setter]
+    fn set_grpc_interactions(&mut self, interactions: Vec<GrpcInteraction>) {
+        self.grpc_played = vec![false; interactions.len()];
+        self.grpc_interactions = interactions;
+    }
+
+    fn add_grpc_interaction(&mut self, interaction: GrpcInteraction) {
+        self.grpc_interactions.push(interaction);
+        self.grpc_played.push(false);
+    }
+
+    fn mark_grpc_played(&mut self, index: usize) -> PyResult<()> {
+        if index >= self.grpc_played.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "gRPC interaction index out of range",
+            ));
+        }
+        self.grpc_played[index] = true;
+        Ok(())
+    }
+
+    // --- WebSocket ---
+
+    #[getter]
+    fn ws_interactions(&self) -> Vec<WsInteraction> {
+        self.ws_interactions.clone()
+    }
+
+    #[getter]
+    fn ws_played(&self) -> Vec<bool> {
+        self.ws_played.clone()
+    }
+
+    #[setter]
+    fn set_ws_interactions(&mut self, interactions: Vec<WsInteraction>) {
+        self.ws_played = vec![false; interactions.len()];
+        self.ws_interactions = interactions;
+    }
+
+    fn add_ws_interaction(&mut self, interaction: WsInteraction) {
+        self.ws_interactions.push(interaction);
+        self.ws_played.push(false);
+    }
+
+    fn mark_ws_played(&mut self, index: usize) -> PyResult<()> {
+        if index >= self.ws_played.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "WebSocket interaction index out of range",
+            ));
+        }
+        self.ws_played[index] = true;
+        Ok(())
+    }
+
     #[staticmethod]
     fn load(path: &str) -> PyResult<Cassette> {
         let p = Path::new(path);
@@ -100,14 +175,16 @@ impl Cassette {
     }
 
     fn __len__(&self) -> usize {
-        self.interactions.len()
+        self.interactions.len() + self.grpc_interactions.len() + self.ws_interactions.len()
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "Cassette(version={}, interactions={})",
+            "Cassette(version={}, http={}, grpc={}, ws={})",
             self.version,
-            self.interactions.len()
+            self.interactions.len(),
+            self.grpc_interactions.len(),
+            self.ws_interactions.len(),
         )
     }
 }

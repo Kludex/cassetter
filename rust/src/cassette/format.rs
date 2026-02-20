@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::protocol::grpc::{GrpcInteraction, GrpcRequest, GrpcResponse};
 use crate::protocol::http::{Body, BodyContent, HttpInteraction, HttpRequest, HttpResponse};
+use crate::protocol::ws::{WsFrame, WsInteraction};
 
 use super::Cassette;
 
@@ -11,6 +13,10 @@ use super::Cassette;
 pub struct RawCassette {
     pub version: u32,
     pub interactions: Vec<RawInteraction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grpc_interactions: Vec<RawGrpcInteraction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ws_interactions: Vec<RawWsInteraction>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -52,6 +58,65 @@ fn default_none_type() -> String {
     "none".to_string()
 }
 
+// --- gRPC raw types ---
+
+#[derive(Serialize, Deserialize)]
+pub struct RawGrpcInteraction {
+    pub request: RawGrpcRequest,
+    pub response: RawGrpcResponse,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json_debug: Option<serde_yaml::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawGrpcRequest {
+    pub method: String,
+    #[serde(default)]
+    pub metadata: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub body: RawBody,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawGrpcResponse {
+    pub status_code: u32,
+    #[serde(default = "default_ok")]
+    pub status_message: String,
+    #[serde(default)]
+    pub metadata: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub body: RawBody,
+}
+
+fn default_ok() -> String {
+    "OK".to_string()
+}
+
+// --- WebSocket raw types ---
+
+#[derive(Serialize, Deserialize)]
+pub struct RawWsInteraction {
+    pub uri: String,
+    #[serde(default)]
+    pub headers: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub frames: Vec<RawWsFrame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawWsFrame {
+    pub direction: String,
+    pub frame_type: String,
+    #[serde(default)]
+    pub body: RawBody,
+    #[serde(default)]
+    pub offset_ms: u64,
+}
+
 /// Convert raw YAML format to internal Cassette.
 pub fn from_raw(raw: RawCassette) -> pyo3::PyResult<Cassette> {
     let interactions: Vec<HttpInteraction> = raw
@@ -77,12 +142,30 @@ pub fn from_raw(raw: RawCassette) -> pyo3::PyResult<Cassette> {
         })
         .collect();
 
+    let grpc_interactions: Vec<GrpcInteraction> = raw
+        .grpc_interactions
+        .into_iter()
+        .map(|ri| grpc_from_raw(ri))
+        .collect();
+
+    let ws_interactions: Vec<WsInteraction> = raw
+        .ws_interactions
+        .into_iter()
+        .map(|ri| ws_from_raw(ri))
+        .collect();
+
     let played_indices = vec![false; interactions.len()];
+    let grpc_played = vec![false; grpc_interactions.len()];
+    let ws_played = vec![false; ws_interactions.len()];
 
     Ok(Cassette {
         version: raw.version,
         interactions,
         played_indices,
+        grpc_interactions,
+        grpc_played,
+        ws_interactions,
+        ws_played,
     })
 }
 
@@ -111,9 +194,106 @@ pub fn to_raw(cassette: &Cassette) -> RawCassette {
         })
         .collect();
 
+    let grpc_interactions = cassette
+        .grpc_interactions
+        .iter()
+        .map(|i| grpc_to_raw(i))
+        .collect();
+
+    let ws_interactions = cassette
+        .ws_interactions
+        .iter()
+        .map(|i| ws_to_raw(i))
+        .collect();
+
     RawCassette {
         version: cassette.version,
         interactions,
+        grpc_interactions,
+        ws_interactions,
+    }
+}
+
+fn grpc_from_raw(raw: RawGrpcInteraction) -> GrpcInteraction {
+    let json_debug = raw.json_debug.map(yaml_to_json);
+    GrpcInteraction {
+        request: GrpcRequest {
+            method: raw.request.method,
+            metadata: raw.request.metadata,
+            body: body_from_raw(raw.request.body),
+        },
+        response: GrpcResponse {
+            status_code: raw.response.status_code,
+            status_message: raw.response.status_message,
+            metadata: raw.response.metadata,
+            body: body_from_raw(raw.response.body),
+        },
+        json_debug,
+        recorded_at: raw.recorded_at.unwrap_or_default(),
+    }
+}
+
+fn grpc_to_raw(i: &GrpcInteraction) -> RawGrpcInteraction {
+    RawGrpcInteraction {
+        request: RawGrpcRequest {
+            method: i.request.method.clone(),
+            metadata: i.request.metadata.clone(),
+            body: body_to_raw(&i.request.body),
+        },
+        response: RawGrpcResponse {
+            status_code: i.response.status_code,
+            status_message: i.response.status_message.clone(),
+            metadata: i.response.metadata.clone(),
+            body: body_to_raw(&i.response.body),
+        },
+        json_debug: i.json_debug.as_ref().map(json_to_yaml),
+        recorded_at: if i.recorded_at.is_empty() {
+            None
+        } else {
+            Some(i.recorded_at.clone())
+        },
+    }
+}
+
+fn ws_from_raw(raw: RawWsInteraction) -> WsInteraction {
+    let frames = raw
+        .frames
+        .into_iter()
+        .map(|f| WsFrame {
+            direction: f.direction,
+            frame_type: f.frame_type,
+            body: body_from_raw(f.body),
+            offset_ms: f.offset_ms,
+        })
+        .collect();
+    WsInteraction {
+        uri: raw.uri,
+        headers: raw.headers,
+        frames,
+        recorded_at: raw.recorded_at.unwrap_or_default(),
+    }
+}
+
+fn ws_to_raw(i: &WsInteraction) -> RawWsInteraction {
+    let frames = i
+        .frames
+        .iter()
+        .map(|f| RawWsFrame {
+            direction: f.direction.clone(),
+            frame_type: f.frame_type.clone(),
+            body: body_to_raw(&f.body),
+            offset_ms: f.offset_ms,
+        })
+        .collect();
+    RawWsInteraction {
+        uri: i.uri.clone(),
+        headers: i.headers.clone(),
+        frames,
+        recorded_at: if i.recorded_at.is_empty() {
+            None
+        } else {
+            Some(i.recorded_at.clone())
+        },
     }
 }
 

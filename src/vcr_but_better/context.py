@@ -20,10 +20,22 @@ try:
 except ImportError:  # pragma: no cover
     RequestsInterceptor = None  # type: ignore[assignment, misc]
 
+try:
+    from vcr_but_better.intercept._grpc import GrpcInterceptor
+except ImportError:  # pragma: no cover
+    GrpcInterceptor = None  # type: ignore[assignment, misc]
+
+try:
+    from vcr_but_better.intercept._websockets import WebSocketInterceptor
+except ImportError:  # pragma: no cover
+    WebSocketInterceptor = None  # type: ignore[assignment, misc]
+
 _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "httpx": HttpxInterceptor,
     "aiohttp": AiohttpInterceptor,
     "requests": RequestsInterceptor,
+    "grpc": GrpcInterceptor,
+    "websockets": WebSocketInterceptor,
 }
 
 
