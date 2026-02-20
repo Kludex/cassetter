@@ -162,6 +162,28 @@ async with use_cassette("cassette.yaml", intercept=["httpx", "aiohttp"]):
     ...
 ```
 
+## Streaming / SSE support
+
+SSE (Server-Sent Events) responses - used by OpenAI, Anthropic, Groq, and other LLM APIs for streaming - work out of the box. The full response body is recorded as readable text in the cassette:
+
+```yaml
+response:
+  status: 200
+  headers:
+    content-type:
+      - text/event-stream
+  body:
+    type: text
+    content: |+
+      data: {"id":"chatcmpl-abc","choices":[{"delta":{"role":"assistant"}}]}
+
+      data: {"id":"chatcmpl-abc","choices":[{"delta":{"content":"Hello"}}]}
+
+      data: [DONE]
+```
+
+On replay, the buffered body is returned to the client SDK, which parses SSE events from it. This matches how VCR.py handles streaming - chunk boundaries aren't preserved, but SSE parsers split on `\n\n` boundaries regardless of how bytes are delivered.
+
 ## Orphan detection
 
 Find cassette files that no test uses:
