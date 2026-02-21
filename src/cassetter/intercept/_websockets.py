@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator
 from typing import Any
 
 import websockets
@@ -69,7 +68,7 @@ class VCRWebSocket:
             return await self.recv()
         except websockets.exceptions.ConnectionClosed:
             self._flush()
-            raise StopAsyncIteration  # noqa: B904
+            raise StopAsyncIteration
 
 
 class VCRWebSocketReplay:
@@ -138,7 +137,8 @@ class WebSocketInterceptor:
                         raise
 
                 assert interceptor._original_connect is not None  # pragma: no cover
-                real_ws = await interceptor._original_connect(self._uri, **self._kwargs).__aenter__()  # pragma: no cover
+                conn = interceptor._original_connect(self._uri, **self._kwargs)  # pragma: no cover
+                real_ws = await conn.__aenter__()  # pragma: no cover
                 headers = _extract_ws_headers(self._kwargs)  # pragma: no cover
                 self._ws = VCRWebSocket(real_ws, self._uri, headers, interceptor._cassette)  # pragma: no cover
                 return self._ws  # pragma: no cover
@@ -147,13 +147,13 @@ class WebSocketInterceptor:
                 if self._ws is not None:
                     await self._ws.__aexit__(*args)
 
-        websockets.asyncio.client.connect = PatchedConnect  # type: ignore[assignment]
-        websockets.connect = PatchedConnect  # type: ignore[assignment]
+        websockets.asyncio.client.connect = PatchedConnect  # type: ignore[assignment,misc]
+        websockets.connect = PatchedConnect  # type: ignore[assignment,misc]
 
     def uninstall(self) -> None:
         if self._original_connect is not None:
-            websockets.asyncio.client.connect = self._original_connect  # type: ignore[assignment]
-            websockets.connect = self._original_connect  # type: ignore[assignment]
+            websockets.asyncio.client.connect = self._original_connect  # type: ignore[misc]
+            websockets.connect = self._original_connect  # type: ignore[misc]
         self._cassette = None
 
 

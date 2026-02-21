@@ -160,18 +160,14 @@ class TestWsMatching:
 class TestRustCassetteGrpcWs:
     def test_add_grpc_interaction(self) -> None:
         c = RustCassette()
-        c.add_grpc_interaction(
-            GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1")
-        )
+        c.add_grpc_interaction(GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1"))
         assert len(c) == 1
         assert len(c.grpc_interactions) == 1
         assert c.grpc_played == [False]
 
     def test_mark_grpc_played(self) -> None:
         c = RustCassette()
-        c.add_grpc_interaction(
-            GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1")
-        )
+        c.add_grpc_interaction(GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1"))
         c.mark_grpc_played(0)
         assert c.grpc_played == [True]
 
@@ -200,20 +196,14 @@ class TestRustCassetteGrpcWs:
 
     def test_len_mixed(self) -> None:
         c = RustCassette()
-        c.add_interaction(
-            HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "t1")
-        )
-        c.add_grpc_interaction(
-            GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1")
-        )
+        c.add_interaction(HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "t1"))
+        c.add_grpc_interaction(GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1"))
         c.add_ws_interaction(WsInteraction("wss://ws.example.com"))
         assert len(c) == 3
 
     def test_repr(self) -> None:
         c = RustCassette()
-        c.add_grpc_interaction(
-            GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1")
-        )
+        c.add_grpc_interaction(GrpcInteraction(GrpcRequest("/pkg.Svc/M"), GrpcResponse(0), "t1"))
         assert "grpc=1" in repr(c)
 
 
@@ -291,9 +281,7 @@ class TestCassetteRoundtrip:
                 "2026-01-01T00:00:00Z",
             )
         )
-        c.add_ws_interaction(
-            WsInteraction("wss://ws.example.com", recorded_at="2026-01-01T00:00:00Z")
-        )
+        c.add_ws_interaction(WsInteraction("wss://ws.example.com", recorded_at="2026-01-01T00:00:00Z"))
         c.save(path)
 
         c2 = RustCassette.load(path)
@@ -535,9 +523,9 @@ class TestGrpcInterceptor:
         assert results == ["got:0"]
 
     def test_install_uninstall(self) -> None:
-        from cassetter.intercept._grpc import GrpcInterceptor
-
         import grpc.aio
+
+        from cassetter.intercept._grpc import GrpcInterceptor
 
         original_insecure = grpc.aio.insecure_channel
         original_secure = grpc.aio.secure_channel
@@ -982,15 +970,15 @@ class TestWebSocketInterceptor:
             import websockets.asyncio.client
 
             with pytest.raises(NoMatchError):
-                async with websockets.asyncio.client.connect("wss://ws.example.com/unknown") as ws:
+                async with websockets.asyncio.client.connect("wss://ws.example.com/unknown"):
                     pass
         finally:
             interceptor.uninstall()
 
     def test_install_uninstall(self) -> None:
-        from cassetter.intercept._websockets import WebSocketInterceptor
-
         import websockets.asyncio.client
+
+        from cassetter.intercept._websockets import WebSocketInterceptor
 
         original = websockets.asyncio.client.connect
 
@@ -1144,7 +1132,13 @@ class TestGrpcRecording:
 
 class TestVCRChannel:
     def test_channel_wraps_methods(self) -> None:
-        from cassetter.intercept._grpc import VCRChannel, VCRStreamStreamCallable, VCRStreamUnaryCallable, VCRUnaryStreamCallable, VCRUnaryUnaryCallable
+        from cassetter.intercept._grpc import (
+            VCRChannel,
+            VCRStreamStreamCallable,
+            VCRStreamUnaryCallable,
+            VCRUnaryStreamCallable,
+            VCRUnaryUnaryCallable,
+        )
 
         class FakeChannel:
             def unary_unary(self, method: str, *args: object) -> str:
@@ -1218,7 +1212,7 @@ class TestVCRChannel:
 
 class TestGrpcInterceptorPatching:
     def test_patched_channels_create_vcr_channels(self) -> None:
-        from cassetter.intercept._grpc import GrpcInterceptor, VCRChannel
+        from cassetter.intercept._grpc import GrpcInterceptor
 
         cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
         cassette.load()

@@ -44,7 +44,8 @@ class VCRUnaryUnaryCallable:
 
         try:
             grpc_resp = self._cassette.play_grpc(self._method)
-            return self._response_deserializer(grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b"")
+            content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
+            return self._response_deserializer(content)
         except NoMatchError:
             if not self._cassette.can_record:
                 raise
@@ -112,7 +113,16 @@ class VCRUnaryStreamCallable:
                 raise
 
         assert self._real is not None
-        return self._record_unary_stream(request, req_body, md, timeout, metadata, credentials, wait_for_ready, compression)
+        return self._record_unary_stream(
+            request,
+            req_body,
+            md,
+            timeout,
+            metadata,
+            credentials,
+            wait_for_ready,
+            compression,
+        )
 
     async def _record_unary_stream(
         self,
@@ -138,8 +148,7 @@ class VCRUnaryStreamCallable:
         async for response in call:
             resp_bytes = response.SerializeToString()
             chunks.append(resp_bytes)
-            yield response  # type: ignore[misc]
-
+            yield response
         resp_body = Body("binary", _encode_chunks(chunks))
         self._cassette.record_grpc(
             method=self._method,
@@ -184,7 +193,8 @@ class VCRStreamUnaryCallable:
 
         try:
             grpc_resp = self._cassette.play_grpc(self._method)
-            return self._response_deserializer(grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b"")
+            content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
+            return self._response_deserializer(content)
         except NoMatchError:
             if not self._cassette.can_record:
                 raise
@@ -279,8 +289,7 @@ class VCRStreamStreamCallable:
         async for response in call:
             resp_bytes = response.SerializeToString()
             resp_chunks.append(resp_bytes)
-            yield response  # type: ignore[misc]
-
+            yield response
         resp_body = Body("binary", _encode_chunks(resp_chunks))
         self._cassette.record_grpc(
             method=self._method,
@@ -337,7 +346,7 @@ class VCRChannel:
         return getattr(self._real, name)
 
     async def close(self) -> None:
-        await self._real.close()  # type: ignore[misc]
+        await self._real.close()
 
     async def __aenter__(self) -> VCRChannel:
         await self._real.__aenter__()
@@ -373,14 +382,14 @@ class GrpcInterceptor:
             real = interceptor._original_secure(target, credentials, **kwargs)
             return VCRChannel(real, interceptor._cassette)
 
-        grpc.aio.insecure_channel = patched_insecure  # type: ignore[assignment]
-        grpc.aio.secure_channel = patched_secure  # type: ignore[assignment]
+        grpc.aio.insecure_channel = patched_insecure
+        grpc.aio.secure_channel = patched_secure
 
     def uninstall(self) -> None:
         if self._original_insecure is not None:
-            grpc.aio.insecure_channel = self._original_insecure  # type: ignore[assignment]
+            grpc.aio.insecure_channel = self._original_insecure
         if self._original_secure is not None:
-            grpc.aio.secure_channel = self._original_secure  # type: ignore[assignment]
+            grpc.aio.secure_channel = self._original_secure
         self._cassette = None
 
 
@@ -433,15 +442,15 @@ async def _replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIte
     chunks = _decode_chunks(data)
     if chunks:
         for chunk in chunks:
-            yield deserializer(chunk)  # type: ignore[misc]
+            yield deserializer(chunk)
     else:
         # Single message (non-chunked) fallback
-        yield deserializer(data)  # type: ignore[misc]
+        yield deserializer(data)
 
 
 async def _async_iter(chunks: list[bytes]) -> AsyncIterator[bytes]:
     for chunk in chunks:
-        yield chunk  # type: ignore[misc]
+        yield chunk
 
 
 def _iter_bytes(chunks: list[bytes], deserializer: Any) -> AsyncIterator[Any]:

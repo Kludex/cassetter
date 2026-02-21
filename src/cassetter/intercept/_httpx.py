@@ -159,5 +159,3 @@ def _build_httpx_response(response: _HttpResponse, request: httpx.Request | None
         content=content,
         request=request,
     )
-
-

@@ -82,8 +82,6 @@ class TestUrllib3InterceptorRecord:
         )
         fake_response._body = b'{"recorded": true}'
 
-        original_urlopen = urllib3.connectionpool.HTTPConnectionPool.urlopen
-
         monkeypatch.setattr(
             urllib3.connectionpool.HTTPConnectionPool,
             "urlopen",

@@ -14,8 +14,15 @@ import yaml
 from vcr.cassette import Cassette as VcrpyCassette
 from vcr.request import Request as VcrpyRequest
 
-from cassetter._core import Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse, Body, MatchConfig
-from cassetter._core import find_match
+from cassetter._core import (
+    Body,
+    Cassette as RustCassette,
+    HttpInteraction,
+    HttpRequest,
+    HttpResponse,
+    MatchConfig,
+    find_match,
+)
 
 ITERATIONS = 20
 TRIM = 4  # drop 2 lowest + 2 highest for trimmed mean
@@ -142,8 +149,6 @@ def run_scale(n: int, tmpdir: Path) -> list[tuple[str, float, float]]:
 
     # -- Save ------------------------------------------------------------------
     vbb_save_path = str(tmpdir / f"vbb_save_{n}.yaml")
-    vcrpy_save_path = str(tmpdir / f"vcrpy_save_{n}.yaml")
-
     source_vbb = RustCassette.load(vbb_path)
 
     def save_vbb() -> None:

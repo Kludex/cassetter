@@ -145,12 +145,12 @@ class Cassette:
         """Return the newest recorded_at timestamp across all interaction types."""
         assert self._inner is not None  # caller guards this
         timestamps: list[str] = []
-        for i in self._inner.interactions:
-            timestamps.append(i.recorded_at)
-        for i in self._inner.grpc_interactions:
-            timestamps.append(i.recorded_at)
-        for i in self._inner.ws_interactions:
-            timestamps.append(i.recorded_at)
+        for http_i in self._inner.interactions:
+            timestamps.append(http_i.recorded_at)
+        for grpc_i in self._inner.grpc_interactions:
+            timestamps.append(grpc_i.recorded_at)
+        for ws_i in self._inner.ws_interactions:
+            timestamps.append(ws_i.recorded_at)
         if not timestamps:
             return None
         return max(datetime.fromisoformat(ts.replace("Z", "+00:00")) for ts in timestamps)
