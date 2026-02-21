@@ -1,7 +1,7 @@
 [project]
 name = "cassetter"
 version = "0.1.0"
-description = "Rust-powered HTTP cassette recorder for Python tests. Safe by default, no monkey-patching."
+description = "Rust-powered HTTP cassette recorder for Python tests. Safe by default."
 readme = "README.md"
 authors = [
     { name = "Marcelo Trylesinski", email = "marcelotryle@gmail.com" },
