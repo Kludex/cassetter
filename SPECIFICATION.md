@@ -80,25 +80,28 @@ Each interaction has an optional `recorded_at` ISO 8601 timestamp.
 
 **Why this choice:** Optional gives the best of both worlds - available when useful, not in the way when not.
 
-## 2. Interception: No monkey-patching
+## 2. Interception
 
-Each HTTP library is intercepted using its documented extension API:
+Each library is intercepted at the highest-level extension point available:
 
-| Library | Method |
-|---------|--------|
-| httpx | `AsyncBaseTransport` / `BaseTransport` wrapping |
-| aiohttp | Session `_request` method override |
-| requests | Session `send` method override |
+| Library | Protocol | Method |
+|---------|----------|--------|
+| httpx | HTTP | `AsyncBaseTransport` / `BaseTransport` wrapping |
+| aiohttp | HTTP | Session `_request` patch |
+| requests | HTTP | Session `send` patch |
+| urllib3 | HTTP | `HTTPConnectionPool.urlopen` patch |
+| grpcio | gRPC | `grpc.aio.Channel` wrapper |
+| websockets | WebSocket | `websockets.connect` patch |
+
+httpx is the only library with a proper transport API. The rest require monkey-patching at the session or connection level - the same general approach as VCR.py, but patching at a higher layer where possible.
 
 **Alternatives considered:**
 
-- **Monkey-patching socket/ssl modules (VCR.py approach).** VCR.py patches `http.client`, `urllib3`, and `aiohttp` internals. This breaks on library version bumps (VCR.py has a long history of breakage reports), is thread-unsafe, and creates subtle ordering dependencies. Rejected because it's the root cause of VCR.py's fragility.
+- **Monkey-patching socket/ssl modules (VCR.py approach).** VCR.py patches `http.client`, `urllib3`, and low-level socket internals. Patching at a higher layer (session/transport) is more resilient to internal refactors, though still not immune. Accepted as a pragmatic middle ground.
 
 - **Proxy server.** Run a local HTTP proxy that records traffic. Works for any library without per-library integration. But adds network hops (slower), requires configuring each client to use the proxy, doesn't work well with TLS, and is harder to set up in CI. Rejected because the integration overhead outweighs the generality benefit.
 
-- **Custom transport (httpx only).** httpx's transport API is the cleanest extension point. For aiohttp and requests, there's no equivalent of `AsyncBaseTransport`, so we override at the session level. This is less clean but still uses documented behavior rather than patching internals. Accepted as the pragmatic choice.
-
-**Why this choice:** Using documented extension points means our interceptors survive library version bumps. The tradeoff is needing per-library integration code, but there are only 3-4 HTTP libraries in common use.
+**Why this choice:** Per-library integration at the session/transport layer is more stable than low-level socket patching while avoiding the complexity of a proxy. The tradeoff is needing per-library code, but auto-detection handles this transparently.
 
 ## 3. Security: Safe by default
 
@@ -150,15 +153,15 @@ Response bodies are decompressed (gzip, brotli, zstd) before storage. The `conte
 
 ### 5.2. Unicode normalization
 
-Smart quotes and special Unicode characters in response bodies are normalized to ASCII equivalents before storage.
+Text response bodies are NFC-normalized before storage.
 
 **Alternatives considered:**
 
-- **Store raw Unicode.** LLM APIs return smart quotes, em dashes, and other special characters that cause linter warnings in test snapshots. Developers end up manually fixing these in every cassette update. Rejected because it creates unnecessary maintenance work.
+- **Store raw Unicode.** Different Unicode representations of the same text (e.g., composed vs decomposed characters) cause spurious cassette diffs. NFC normalization makes recordings stable. Rejected because it creates unnecessary maintenance work.
 
-- **Normalize only in snapshot assertions.** Moves the problem downstream - cassettes still contain non-ASCII characters that cause issues in other tools. Rejected because normalizing at the source is cleaner.
+- **ASCII normalization (smart quotes to ASCII).** An earlier version also replaced smart quotes (`\u201c`/`\u201d`) with ASCII `"`. This corrupted JSON embedded in text bodies (e.g., SSE streams) because curly quotes are valid unescaped in JSON while ASCII `"` is not. Rejected and removed.
 
-**Why this choice:** ASCII-normalized cassettes are portable, linter-friendly, and stable across recording sessions where the LLM might use different quote styles for the same content.
+**Why this choice:** NFC normalization stabilizes Unicode representation without altering content semantics. It prevents spurious diffs while preserving the original characters.
 
 ## 6. Pytest integration
 
@@ -216,22 +219,21 @@ When `record_mode=none` and a cassette file doesn't exist, the fixture creates a
 
 ## 7. Scope and non-goals
 
-### In scope (Phase 1)
-- HTTP recording/replay for httpx, aiohttp, requests
+### Implemented
+- HTTP recording/replay for httpx, aiohttp, requests, urllib3
+- gRPC message recording via grpcio
+- WebSocket frame recording via websockets
 - Structured YAML cassette format with typed bodies
 - Safe-by-default security filtering
 - Configurable request matching
 - Auto-decompression and Unicode normalization
+- Cassette TTL/expiration (`max_age`)
 - Pytest plugin with markers, fixtures, and orphan detection
 
-### Future phases
-- WebSocket frame recording (Phase 2)
-- gRPC message recording (Phase 2)
-- VCR.py cassette migration tool (Phase 3)
-- Cassette semantic diffing (Phase 3)
-- Thread-safe parallel test support (Phase 3)
+### Future
+- VCR.py cassette migration tool
+- Cassette semantic diffing
+- Thread-safe parallel test support
 
 ### Non-goals
 - Proxy mode for recording (adds complexity without clear benefit over transport interception)
-- Built-in cassette TTL/expiration (better handled by CI scripts or git hooks)
-- Support for HTTP libraries beyond httpx/aiohttp/requests (covers 99% of Python HTTP usage)
