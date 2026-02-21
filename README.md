@@ -1,6 +1,6 @@
 # Cassetter
 
-Rust-powered HTTP cassette recorder for Python tests. Safe by default, no monkey-patching.
+Rust-powered HTTP cassette recorder for Python tests. Safe by default.
 
 ## Why?
 
@@ -9,10 +9,10 @@ VCR.py works, but has fundamental problems:
 - **Unsafe by default** - doesn't filter sensitive headers, tokens, or API keys
 - **Unsafe YAML** - uses `yaml.load()` with an unsafe loader that can execute arbitrary Python code from cassette files
 - **Slow** - pure Python YAML parsing, matching, and serialization
-- **Fragile** - monkey-patches library internals that break on minor version bumps
+- **Fragile** - relies on undocumented internals that break on minor version bumps
 - **Poor readability** - JSON bodies stored as escaped strings in YAML
 
-`cassetter` fixes all of this with a Rust core (PyO3) for speed, safe-by-default security filtering, secure YAML parsing, and stable interception via documented library extension points.
+`cassetter` fixes all of this with a Rust core (PyO3) for speed, safe-by-default security filtering, and secure YAML parsing.
 
 ## Install
 
