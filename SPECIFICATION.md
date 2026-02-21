@@ -233,7 +233,6 @@ When `record_mode=none` and a cassette file doesn't exist, the fixture creates a
 ### Future
 - VCR.py cassette migration tool
 - Cassette semantic diffing
-- Thread-safe parallel test support
 
 ### Non-goals
 - Proxy mode for recording (adds complexity without clear benefit over transport interception)
