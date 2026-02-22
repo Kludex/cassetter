@@ -28,9 +28,8 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
+          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
           manylinux: auto
-          manifest-path: rust/Cargo.toml
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
@@ -43,8 +42,7 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist
-          manifest-path: rust/Cargo.toml
+          args: --out dist --manifest-path rust/Cargo.toml
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
