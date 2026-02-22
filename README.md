@@ -344,7 +344,3 @@ uv sync
 uv run maturin develop
 uv run pytest
 ```
-
-## License
-
-MIT
