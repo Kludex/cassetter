@@ -73,6 +73,8 @@ def _resolve_cassette(
     max_age = marker_kwargs.get("max_age", vcr_config.get("max_age"))
     on_expiry = marker_kwargs.get("on_expiry", vcr_config.get("on_expiry", "warn"))
 
+    ignore_localhost = vcr_config.get("ignore_localhost", False)
+
     cassette = Cassette(
         cassette_path,
         record_mode=record_mode,
@@ -80,6 +82,7 @@ def _resolve_cassette(
         security_config=security_config,
         max_age=max_age,
         on_expiry=on_expiry,
+        ignore_localhost=ignore_localhost,
     )
     cassette.load()
 

@@ -64,6 +64,7 @@ async def use_cassette(
     intercept: list[str] | None = None,
     max_age: str | None = None,
     on_expiry: str = "warn",
+    ignore_localhost: bool = False,
 ) -> AsyncIterator[Cassette]:
     """Async context manager for recording/replaying HTTP interactions.
 
@@ -101,6 +102,7 @@ async def use_cassette(
         security_config=security_config,
         max_age=max_age,
         on_expiry=on_expiry,
+        ignore_localhost=ignore_localhost,
     )
     cassette.load()
 

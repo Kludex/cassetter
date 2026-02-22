@@ -7,6 +7,7 @@ import httpx
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._base import is_localhost
 
 
 class VCRTransport(httpx.AsyncBaseTransport):
@@ -19,6 +20,10 @@ class VCRTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         method = request.method
         uri = str(request.url)
+
+        if self._cassette.ignore_localhost and is_localhost(uri):
+            return await self._real_transport.handle_async_request(request)
+
         headers = _extract_headers(request.headers)
         body = request.content
 
@@ -58,6 +63,10 @@ class VCRSyncTransport(httpx.BaseTransport):
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         method = request.method
         uri = str(request.url)
+
+        if self._cassette.ignore_localhost and is_localhost(uri):
+            return self._real_transport.handle_request(request)
+
         headers = _extract_headers(request.headers)
         body = request.content
 
