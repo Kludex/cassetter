@@ -12,6 +12,7 @@ from yarl import URL
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._base import is_localhost
 
 
 class AiohttpInterceptor:
@@ -35,6 +36,10 @@ class AiohttpInterceptor:
         ) -> aiohttp.ClientResponse:
             assert interceptor._cassette is not None
             uri = str(URL(str_or_url))
+
+            if interceptor._cassette.ignore_localhost and is_localhost(uri):
+                return await original_request(session, method, str_or_url, **kwargs)
+
             headers = _extract_request_headers(kwargs.get("headers"))
             body = _extract_request_body(kwargs)
 

@@ -11,6 +11,7 @@ import urllib3.response
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._base import is_localhost
 
 
 class Urllib3Interceptor:
@@ -36,6 +37,10 @@ class Urllib3Interceptor:
         ) -> urllib3.response.HTTPResponse:
             assert interceptor._cassette is not None
             full_url = _reconstruct_url(pool, url)
+
+            if interceptor._cassette.ignore_localhost and is_localhost(full_url):
+                return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
+
             norm_method = method.upper()
             norm_headers = _extract_headers(headers)
             norm_body = body.encode() if isinstance(body, str) else body

@@ -68,6 +68,7 @@ class Cassette:
         security_config: SecurityConfig | None = None,
         max_age: str | None = None,
         on_expiry: str = "warn",
+        ignore_localhost: bool = False,
     ) -> None:
         self._path = path
         self._record_mode = record_mode
@@ -75,6 +76,7 @@ class Cassette:
         self._security_config = security_config or SecurityConfig()
         self._max_age = _parse_duration(max_age) if max_age is not None else None
         self._on_expiry = on_expiry
+        self._ignore_localhost = ignore_localhost
         self._inner: _RustCassette | None = None
         self._dirty = False
 
@@ -85,6 +87,10 @@ class Cassette:
     @property
     def record_mode(self) -> RecordMode:
         return self._record_mode
+
+    @property
+    def ignore_localhost(self) -> bool:
+        return self._ignore_localhost
 
     @property
     def interactions(self) -> list[HttpInteraction]:

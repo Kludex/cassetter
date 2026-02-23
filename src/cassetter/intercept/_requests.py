@@ -9,6 +9,7 @@ import requests.adapters
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._base import is_localhost
 
 
 class VCRAdapter(requests.adapters.HTTPAdapter):
@@ -74,8 +75,12 @@ class RequestsInterceptor:
             session: requests.Session, request: requests.PreparedRequest, **kwargs: Any
         ) -> requests.Response:
             assert interceptor._cassette is not None
-            method = (request.method or "GET").upper()
             uri = request.url or ""
+
+            if interceptor._cassette.ignore_localhost and is_localhost(uri):
+                return original_send(session, request, **kwargs)
+
+            method = (request.method or "GET").upper()
             headers = _extract_headers(request.headers)
             raw_body = request.body
             body = raw_body if isinstance(raw_body, bytes) else (raw_body.encode() if raw_body else None)

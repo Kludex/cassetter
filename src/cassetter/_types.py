@@ -19,6 +19,7 @@ class CassetteConfig(TypedDict, total=False):
     intercept: list[str]
     max_age: str
     on_expiry: str
+    ignore_localhost: bool
 
 
 class Interceptor(Protocol):

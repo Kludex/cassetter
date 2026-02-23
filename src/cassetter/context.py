@@ -35,6 +35,11 @@ try:
 except ImportError:  # pragma: no cover
     Urllib3Interceptor = None  # type: ignore[assignment, misc]
 
+try:
+    from cassetter.intercept._pyreqwest import PyreqwestInterceptor
+except ImportError:  # pragma: no cover
+    PyreqwestInterceptor = None  # type: ignore[assignment, misc]
+
 _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "httpx": HttpxInterceptor,
     "aiohttp": AiohttpInterceptor,
@@ -42,6 +47,7 @@ _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "grpc": GrpcInterceptor,
     "websockets": WebSocketInterceptor,
     "urllib3": Urllib3Interceptor,
+    "pyreqwest": PyreqwestInterceptor,
 }
 
 # Interceptors to enable by default, in order. urllib3 subsumes requests,
@@ -64,6 +70,7 @@ async def use_cassette(
     intercept: list[str] | None = None,
     max_age: str | None = None,
     on_expiry: str = "warn",
+    ignore_localhost: bool = False,
 ) -> AsyncIterator[Cassette]:
     """Async context manager for recording/replaying HTTP interactions.
 
@@ -101,6 +108,7 @@ async def use_cassette(
         security_config=security_config,
         max_age=max_age,
         on_expiry=on_expiry,
+        ignore_localhost=ignore_localhost,
     )
     cassette.load()
 
