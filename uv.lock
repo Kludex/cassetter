@@ -196,6 +196,9 @@ grpc = [
 httpx = [
     { name = "httpx" },
 ]
+pyreqwest = [
+    { name = "pyreqwest-impersonate" },
+]
 requests = [
     { name = "requests" },
 ]
@@ -213,6 +216,7 @@ dev = [
     { name = "logfire" },
     { name = "maturin" },
     { name = "mypy" },
+    { name = "pyreqwest-impersonate" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pyyaml" },
@@ -229,10 +233,11 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'aiohttp'", specifier = ">=3.9" },
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.24" },
+    { name = "pyreqwest-impersonate", marker = "extra == 'pyreqwest'", specifier = ">=0.5" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.28" },
     { name = "websockets", marker = "extra == 'websockets'", specifier = ">=12.0" },
 ]
-provides-extras = ["httpx", "aiohttp", "requests", "grpc", "websockets"]
+provides-extras = ["httpx", "aiohttp", "requests", "grpc", "websockets", "pyreqwest"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -244,6 +249,7 @@ dev = [
     { name = "logfire", specifier = ">=2.0" },
     { name = "maturin", specifier = ">=1.7" },
     { name = "mypy", specifier = ">=1.8" },
+    { name = "pyreqwest-impersonate", specifier = ">=0.5" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -1527,6 +1533,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631, upload-time = "2025-06-21T13:39:12.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217, upload-time = "2025-06-21T13:39:07.939Z" },
+]
+
+[[package]]
+name = "pyreqwest-impersonate"
+version = "0.5.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/fa/1907e6ab36f51dcfdcd89905941b994b78a3c6609a11884b653ebe7a9ea3/pyreqwest_impersonate-0.5.3.tar.gz", hash = "sha256:f21c10609958ff5be18df0c329eed42d2b3ba8a339b65dc5f96ab74537231692", size = 79283, upload-time = "2024-07-23T16:02:35.971Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/34/b8/8ab81ac9394ffb1aeea1fb0894c74e3b16d69a3c0005e0958f1c6df56971/pyreqwest_impersonate-0.5.3-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:f15922496f728769fb9e1b116d5d9d7ba5525d0f2f7a76a41a1daef8b2e0c6c3", size = 2943303, upload-time = "2024-07-23T16:02:29.495Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/e1/90085ca84f5894469e26238a46f9a22b631897278beb45bbabbaa6450914/pyreqwest_impersonate-0.5.3-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:77533133ae73020e59bc56d776eea3fe3af4ac41d763a89f39c495436da0f4cf", size = 2729281, upload-time = "2024-07-23T16:02:27.059Z" },
+    { url = "https://files.pythonhosted.org/packages/27/45/446787685472687cfc2c2ff7ba0c520978b2ee96808ec7c7057e142c760e/pyreqwest_impersonate-0.5.3-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:436055fa3eeb3e01e2e8efd42a9f6c4ab62fd643eddc7c66d0e671b71605f273", size = 2835298, upload-time = "2024-07-23T16:02:22.291Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/ec/95514b593277c77e371292001cc1837790362749d5839f4e4e5f1e0d7a20/pyreqwest_impersonate-0.5.3-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7e9d2e981a525fb72c1521f454e5581d2c7a3b1fcf1c97c0acfcb7a923d8cf3e", size = 3040478, upload-time = "2024-07-23T16:02:24.596Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/7c/9e6a5fe7219595387261fa455276f95716c3ed81bdbbf1998e82366a3d99/pyreqwest_impersonate-0.5.3-cp38-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:a6bf986d4a165f6976b3e862111e2a46091883cb55e9e6325150f5aea2644229", size = 2830484, upload-time = "2024-07-23T16:02:31.745Z" },
+    { url = "https://files.pythonhosted.org/packages/24/4d/edddabb322a69e042f2b85d17163c847080d6b8fee4789238108197fdfef/pyreqwest_impersonate-0.5.3-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:b7397f6dad3d5ae158e0b272cb3eafe8382e71775d829b286ae9c21cb5a879ff", size = 3038107, upload-time = "2024-07-23T16:02:34.064Z" },
+    { url = "https://files.pythonhosted.org/packages/04/19/413f07ecfa18382ac48d4a0f01a17aeb0a9d124b78d9e3ebaca534e413c8/pyreqwest_impersonate-0.5.3-cp38-abi3-win_amd64.whl", hash = "sha256:6026e4751b5912aec1e45238c07daf1e2c9126b3b32b33396b72885021e8990c", size = 3005601, upload-time = "2024-07-23T16:02:37.828Z" },
 ]
 
 [[package]]

@@ -35,6 +35,11 @@ try:
 except ImportError:  # pragma: no cover
     Urllib3Interceptor = None  # type: ignore[assignment, misc]
 
+try:
+    from cassetter.intercept._pyreqwest import PyreqwestInterceptor
+except ImportError:  # pragma: no cover
+    PyreqwestInterceptor = None  # type: ignore[assignment, misc]
+
 _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "httpx": HttpxInterceptor,
     "aiohttp": AiohttpInterceptor,
@@ -42,6 +47,7 @@ _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "grpc": GrpcInterceptor,
     "websockets": WebSocketInterceptor,
     "urllib3": Urllib3Interceptor,
+    "pyreqwest": PyreqwestInterceptor,
 }
 
 # Interceptors to enable by default, in order. urllib3 subsumes requests,
