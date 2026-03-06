@@ -66,9 +66,13 @@ class Urllib3Interceptor:
                 response_body=resp_body,
             )
 
+            record_headers = urllib3._collections.HTTPHeaderDict(real_response.headers)
+            if "content-length" in record_headers:
+                record_headers["content-length"] = str(len(resp_body))
+
             return urllib3.response.HTTPResponse(
                 body=io.BytesIO(resp_body),
-                headers=real_response.headers,
+                headers=record_headers,
                 status=real_response.status,
                 preload_content=False,
                 decode_content=False,
@@ -124,6 +128,9 @@ def _build_urllib3_response(response: _HttpResponse, request_url: str) -> urllib
     for key, values in response.headers.items():
         for v in values:
             resp_headers.add(key, v)
+
+    if "content-length" in resp_headers:
+        resp_headers["content-length"] = str(len(content))
 
     return urllib3.response.HTTPResponse(
         body=io.BytesIO(content),
