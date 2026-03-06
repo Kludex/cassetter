@@ -82,7 +82,7 @@ class Cassette:
 
     def __init__(
         self,
-        path: str,
+        path: str | os.PathLike[str],
         *,
         record_mode: RecordMode = RecordMode.ONCE,
         match_config: MatchConfig | None = None,
@@ -93,7 +93,7 @@ class Cassette:
         ignore_hosts: list[str] | None = None,
         before_record_request: BeforeRecordRequest | None = None,
     ) -> None:
-        self._path = path
+        self._path = os.fspath(path)
         self._record_mode = record_mode
         self._match_config = match_config or MatchConfig()
         self._security_config = security_config or SecurityConfig()
