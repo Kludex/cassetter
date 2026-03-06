@@ -106,8 +106,12 @@ def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> 
 
     cli_record_mode = request.config.getoption("--record-mode", default=None)
 
+    # Include class name for class-based tests (e.g. TestOpenAI.test_query)
+    cls = request.node.cls
+    node_name = f"{cls.__name__}.{request.node.name}" if cls else request.node.name
+
     cassette, interceptor_classes = _resolve_cassette(
-        node_name=request.node.name,
+        node_name=node_name,
         marker_args=marker.args,
         marker_kwargs=dict(marker.kwargs),
         vcr_config=vcr_config,
