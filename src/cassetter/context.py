@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from collections.abc import Iterator
 from typing import Any
 
@@ -59,7 +60,7 @@ _SUBSUMED_BY: dict[str, str] = {"requests": "urllib3"}
 
 @contextlib.contextmanager
 def use_cassette(
-    path: str,
+    path: str | os.PathLike[str],
     *,
     record_mode: RecordMode | str = RecordMode.ONCE,
     match_on: list[str] | None = None,
