@@ -68,6 +68,39 @@ class TestUrllib3InterceptorReplay:
             interceptor.uninstall()
 
 
+class TestUrllib3ContentLengthMismatch:
+    def test_replay_with_mismatched_content_length(self, tmp_path: object) -> None:
+        """Replaying a cassette whose stored content-length differs from the re-serialized body must not raise."""
+        path = os.path.join(str(tmp_path), "test.yaml")
+        c = RustCassette()
+        c.add_interaction(
+            HttpInteraction(
+                request=HttpRequest("POST", "https://api.example.com/invoke"),
+                response=HttpResponse(
+                    200,
+                    {"content-type": ["application/json"], "content-length": ["999"]},
+                    Body("json", {"modelId": "test", "output": {"message": {"content": [{"text": "hi"}]}}}),
+                ),
+                recorded_at="2026-01-01T00:00:00Z",
+            )
+        )
+        c.save(path)
+        cassette = Cassette(path, record_mode=RecordMode.NONE)
+        cassette.load()
+
+        interceptor = Urllib3Interceptor()
+        interceptor.install(cassette)
+
+        try:
+            http = urllib3.PoolManager()
+            response = http.request("POST", "https://api.example.com/invoke")
+            assert response.status == 200
+            body = response.json()
+            assert body["output"]["message"]["content"][0]["text"] == "hi"
+        finally:
+            interceptor.uninstall()
+
+
 class TestUrllib3InterceptorRecord:
     def test_record(self, tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
         path = os.path.join(str(tmp_path), "test.yaml")
@@ -196,6 +229,31 @@ class TestBuildUrllib3Response:
         data = response.data
         assert b'"key"' in data
         assert b'"value"' in data
+
+    def test_content_length_recomputed_for_json(self) -> None:
+        """content-length must match the re-serialized JSON body, not the original stored value."""
+        original_body = {"key": "value"}
+        wrong_length = "999"
+        response = _build_urllib3_response(
+            HttpResponse(
+                200,
+                {"content-type": ["application/json"], "content-length": [wrong_length]},
+                Body("json", original_body),
+            ),
+            "https://example.com",
+        )
+        import json
+
+        expected = json.dumps(original_body).encode()
+        assert response.headers["content-length"] == str(len(expected))
+        assert response.data == expected
+
+    def test_content_length_absent_stays_absent(self) -> None:
+        response = _build_urllib3_response(
+            HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"a": 1})),
+            "https://example.com",
+        )
+        assert "content-length" not in response.headers
 
     def test_text_body(self) -> None:
         response = _build_urllib3_response(
