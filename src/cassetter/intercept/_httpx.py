@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -10,8 +10,8 @@ from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
 from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
 
-_OriginalAsyncHandle = Callable[[httpx.AsyncHTTPTransport, httpx.Request], httpx.Response]
-_OriginalSyncHandle = Callable[[httpx.HTTPTransport, httpx.Request], httpx.Response]
+_AsyncPassthrough = Callable[[httpx.Request], Awaitable[httpx.Response]]
+_SyncPassthrough = Callable[[httpx.Request], httpx.Response]
 
 
 class _VCRAsyncTransport(httpx.AsyncBaseTransport):
@@ -53,10 +53,10 @@ class HttpxInterceptor:
         async def patched_async_handle(
             transport_self: httpx.AsyncHTTPTransport, request: httpx.Request
         ) -> httpx.Response:
-            return await _async_intercept(request, lambda r: original_async_handle(transport_self, r))  # type: ignore[arg-type]
+            return await _async_intercept(request, lambda r: original_async_handle(transport_self, r))
 
         def patched_sync_handle(transport_self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
-            return _sync_intercept(request, lambda r: original_sync_handle(transport_self, r))  # type: ignore[arg-type]
+            return _sync_intercept(request, lambda r: original_sync_handle(transport_self, r))
 
         httpx.AsyncHTTPTransport.handle_async_request = patched_async_handle  # type: ignore[assignment,method-assign]
         httpx.HTTPTransport.handle_request = patched_sync_handle  # type: ignore[assignment,method-assign]
@@ -84,7 +84,7 @@ class HttpxInterceptor:
 
 async def _async_intercept(
     request: httpx.Request,
-    passthrough: Callable[[httpx.Request], Any],
+    passthrough: _AsyncPassthrough,
 ) -> httpx.Response:
     cassette = get_current_cassette()
     if cassette is None:
@@ -137,7 +137,7 @@ async def _async_intercept(
 
 def _sync_intercept(
     request: httpx.Request,
-    passthrough: Callable[[httpx.Request], Any],
+    passthrough: _SyncPassthrough,
 ) -> httpx.Response:
     cassette = get_current_cassette()
     if cassette is None:
