@@ -11,8 +11,7 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
-from cassetter.intercept._base import is_localhost
+from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
 
 
 class AiohttpInterceptor:
@@ -37,11 +36,18 @@ class AiohttpInterceptor:
             assert interceptor._cassette is not None
             uri = str(URL(str_or_url))
 
-            if interceptor._cassette.ignore_localhost and is_localhost(uri):
+            if interceptor._cassette.should_bypass(uri):
                 return await original_request(session, method, str_or_url, **kwargs)
 
             headers = _extract_request_headers(kwargs.get("headers"))
             body = _extract_request_body(kwargs)
+
+            hook = interceptor._cassette.before_record_request
+            if hook is not None:
+                try:
+                    hook(RawRequest(method.upper(), uri, headers, body))
+                except BypassCassette:
+                    return await original_request(session, method, str_or_url, **kwargs)
 
             try:
                 response = interceptor._cassette.play(method.upper(), uri, headers, body)

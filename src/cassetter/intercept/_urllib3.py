@@ -10,8 +10,7 @@ import urllib3.connectionpool
 import urllib3.response
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
-from cassetter.intercept._base import is_localhost
+from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
 
 
 class Urllib3Interceptor:
@@ -38,12 +37,19 @@ class Urllib3Interceptor:
             assert interceptor._cassette is not None
             full_url = _reconstruct_url(pool, url)
 
-            if interceptor._cassette.ignore_localhost and is_localhost(full_url):
+            if interceptor._cassette.should_bypass(full_url):
                 return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             norm_method = method.upper()
             norm_headers = _extract_headers(headers)
             norm_body = body.encode() if isinstance(body, str) else body
+
+            hook = interceptor._cassette.before_record_request
+            if hook is not None:
+                try:
+                    hook(RawRequest(norm_method, full_url, norm_headers, norm_body))
+                except BypassCassette:
+                    return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             try:
                 response = interceptor._cassette.play(norm_method, full_url, norm_headers, norm_body)

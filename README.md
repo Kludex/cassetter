@@ -272,6 +272,56 @@ response:
 
 On replay, the buffered body is returned to the client SDK, which parses SSE events from it. This matches how VCR.py handles streaming - chunk boundaries aren't preserved, but SSE parsers split on `\n\n` boundaries regardless of how bytes are delivered.
 
+## Request filtering
+
+### Ignore hosts
+
+Bypass the cassette entirely for requests to specific hosts. Matched requests pass through to the real server - no recording, no replay:
+
+```python
+async with use_cassette(
+    "cassette.yaml",
+    ignore_hosts=["*.googleapis.com", "accounts.google.com"],
+):
+    ...
+```
+
+Patterns use `fnmatch` syntax (`*` matches any sequence of characters). Combine with `ignore_localhost` for full control:
+
+```python
+async with use_cassette(
+    "cassette.yaml",
+    ignore_localhost=True,
+    ignore_hosts=["*.googleapis.com"],
+):
+    ...
+```
+
+### Before record request hook
+
+For advanced filtering, use a callback that runs before each request is recorded or replayed. Raise `BypassCassette` to let the request pass through live:
+
+```python
+from cassetter import BypassCassette, RawRequest, use_cassette
+
+def my_hook(request: RawRequest) -> None:
+    if not request.uri.startswith("https://api.mycompany.com"):
+        raise BypassCassette
+
+async with use_cassette("cassette.yaml", before_record_request=my_hook):
+    ...
+```
+
+Both options work with the pytest plugin via `vcr_config`:
+
+```python
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {
+        "ignore_hosts": ["*.googleapis.com"],
+    }
+```
+
 ## Cassette expiry
 
 Force re-recording when cassettes get stale:

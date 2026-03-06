@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import warnings
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from cassetter._core import (
     Body,
@@ -43,6 +47,23 @@ class NoMatchError(Exception):
     """Raised when no matching interaction is found in the cassette."""
 
 
+class BypassCassette(Exception):
+    """Raised from a before_record_request hook to let the request pass through without recording."""
+
+
+@dataclass(slots=True)
+class RawRequest:
+    """Raw HTTP request data passed to the before_record_request hook."""
+
+    method: str
+    uri: str
+    headers: dict[str, list[str]]
+    body: bytes | None
+
+
+BeforeRecordRequest = Callable[[RawRequest], None]
+
+
 _DURATION_RE = re.compile(r"^(\d+)([dhw])$")
 _UNIT_MAP = {"d": "days", "h": "hours", "w": "weeks"}
 
@@ -69,6 +90,8 @@ class Cassette:
         max_age: str | None = None,
         on_expiry: str = "warn",
         ignore_localhost: bool = False,
+        ignore_hosts: list[str] | None = None,
+        before_record_request: BeforeRecordRequest | None = None,
     ) -> None:
         self._path = path
         self._record_mode = record_mode
@@ -77,6 +100,8 @@ class Cassette:
         self._max_age = _parse_duration(max_age) if max_age is not None else None
         self._on_expiry = on_expiry
         self._ignore_localhost = ignore_localhost
+        self._ignore_hosts = ignore_hosts or []
+        self._before_record_request = before_record_request
         self._inner: _RustCassette | None = None
         self._dirty = False
 
@@ -91,6 +116,21 @@ class Cassette:
     @property
     def ignore_localhost(self) -> bool:
         return self._ignore_localhost
+
+    @property
+    def before_record_request(self) -> BeforeRecordRequest | None:
+        return self._before_record_request
+
+    def should_bypass(self, uri: str) -> bool:
+        """Check if a request URI should bypass the cassette entirely."""
+        if self._ignore_localhost and _is_localhost(uri):
+            return True
+        if self._ignore_hosts:
+            host = urlparse(uri).hostname or ""
+            for pattern in self._ignore_hosts:
+                if fnmatch.fnmatch(host, pattern):
+                    return True
+        return False
 
     @property
     def interactions(self) -> list[HttpInteraction]:
@@ -302,6 +342,14 @@ class Cassette:
 
         self._inner.add_ws_interaction(interaction)
         self._dirty = True
+
+
+_LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
+
+
+def _is_localhost(uri: str) -> bool:
+    host = urlparse(uri).hostname or ""
+    return host in _LOCALHOST_HOSTS
 
 
 def _get_header(headers: dict[str, list[str]], name: str) -> str | None:
