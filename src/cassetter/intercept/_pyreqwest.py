@@ -8,8 +8,7 @@ from unittest.mock import patch
 import pyreqwest_impersonate as pri
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
-from cassetter.intercept._base import is_localhost
+from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
 
 _METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
 _ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
@@ -104,7 +103,7 @@ def _intercept(
 ) -> Any:
     assert interceptor._cassette is not None
 
-    if interceptor._cassette.ignore_localhost and is_localhost(url):
+    if interceptor._cassette.should_bypass(url):
         return original(client, *original_args, **kwargs)
 
     norm_headers = _extract_headers(kwargs.get("headers"))
@@ -113,6 +112,13 @@ def _intercept(
         data=kwargs.get("data"),
         json_payload=kwargs.get("json"),
     )
+
+    hook = interceptor._cassette.before_record_request
+    if hook is not None:
+        try:
+            hook(RawRequest(method, url, norm_headers, body))
+        except BypassCassette:
+            return original(client, *original_args, **kwargs)
 
     try:
         response = interceptor._cassette.play(method, url, norm_headers, body)
