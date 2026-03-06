@@ -167,15 +167,15 @@ Text response bodies are NFC-normalized before storage.
 
 ### 6.1. Auto-fixture injection
 
-Tests marked with `@pytest.mark.vcr` automatically get the `vcr_cassette` fixture without declaring it as a parameter.
+Tests marked with `@pytest.mark.vcr` automatically get the `cassette` fixture without declaring it as a parameter.
 
 ```python
 @pytest.mark.vcr
-async def test_api():  # No need for `vcr_cassette` param
+async def test_api():  # No need for `cassette` param
     ...
 ```
 
-This is implemented via `pytest_collection_modifyitems` adding `vcr_cassette` to `fixturenames`.
+This is implemented via `pytest_collection_modifyitems` adding `cassette` to `fixturenames`.
 
 **Alternatives considered:**
 

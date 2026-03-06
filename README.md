@@ -45,9 +45,9 @@ If you need direct access to the cassette (e.g. to inspect recorded interactions
 from cassetter import Cassette
 
 @pytest.mark.vcr
-async def test_with_cassette(vcr_cassette: Cassette):
+async def test_with_cassette(cassette: Cassette):
     ...
-    assert len(vcr_cassette.interactions) == 1
+    assert len(cassette.interactions) == 1
 ```
 
 ### With the context manager
