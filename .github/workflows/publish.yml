@@ -25,6 +25,11 @@ jobs:
             target: x86_64
     steps:
       - uses: actions/checkout@v4
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" rust/Cargo.toml && rm -f rust/Cargo.toml.bak
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
@@ -39,6 +44,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" rust/Cargo.toml && rm -f rust/Cargo.toml.bak
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist

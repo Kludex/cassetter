@@ -1,6 +1,6 @@
 [project]
 name = "cassetter"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Rust-powered HTTP cassette recorder for Python tests. Safe by default."
 readme = "README.md"
 authors = [
