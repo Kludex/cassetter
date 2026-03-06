@@ -22,99 +22,104 @@ def _no_played(n: int) -> list[bool]:
     return [False] * n
 
 
-class TestFindMatch:
-    def test_match_method_and_uri(self) -> None:
-        interactions = [
-            _interaction("GET", "https://api.example.com/users"),
-            _interaction("POST", "https://api.example.com/users"),
-            _interaction("GET", "https://api.example.com/items"),
-        ]
-        config = MatchConfig()
+def test_find_match_method_and_uri() -> None:
+    interactions = [
+        _interaction("GET", "https://api.example.com/users"),
+        _interaction("POST", "https://api.example.com/users"),
+        _interaction("GET", "https://api.example.com/items"),
+    ]
+    config = MatchConfig()
 
-        request = HttpRequest("GET", "https://api.example.com/users")
-        result = find_match(request, interactions, _no_played(3), config)
+    request = HttpRequest("GET", "https://api.example.com/users")
+    result = find_match(request, interactions, _no_played(3), config)
 
-        assert result is not None
-        idx, interaction = result
-        assert idx == 0
-        assert interaction.request.method == "GET"
-        assert interaction.request.uri == "https://api.example.com/users"
+    assert result is not None
+    idx, interaction = result
+    assert idx == 0
+    assert interaction.request.method == "GET"
+    assert interaction.request.uri == "https://api.example.com/users"
 
-    def test_no_match(self) -> None:
-        interactions = [_interaction("GET", "https://api.example.com/users")]
-        config = MatchConfig()
 
-        request = HttpRequest("DELETE", "https://api.example.com/users")
-        result = find_match(request, interactions, _no_played(1), config)
+def test_find_match_no_match() -> None:
+    interactions = [_interaction("GET", "https://api.example.com/users")]
+    config = MatchConfig()
 
-        assert result is None
+    request = HttpRequest("DELETE", "https://api.example.com/users")
+    result = find_match(request, interactions, _no_played(1), config)
 
-    def test_case_insensitive_method(self) -> None:
-        interactions = [_interaction("GET", "https://api.example.com/users")]
-        config = MatchConfig()
+    assert result is None
 
-        request = HttpRequest("get", "https://api.example.com/users")
-        result = find_match(request, interactions, _no_played(1), config)
 
-        assert result is not None
+def test_find_match_case_insensitive_method() -> None:
+    interactions = [_interaction("GET", "https://api.example.com/users")]
+    config = MatchConfig()
 
-    def test_match_with_json_body_ignore(self) -> None:
-        interactions = [
-            HttpInteraction(
-                request=HttpRequest(
-                    "POST",
-                    "https://api.example.com/chat",
-                    body=Body("json", {"prompt": "hello", "request_id": "abc123"}),
-                ),
-                response=HttpResponse(200, body=Body("json", {"reply": "hi"})),
-                recorded_at="2026-01-01T00:00:00Z",
-            )
-        ]
-        config = MatchConfig(
-            match_on=["method", "uri", "json_body"],
-            ignore_json_paths=["request_id"],
+    request = HttpRequest("get", "https://api.example.com/users")
+    result = find_match(request, interactions, _no_played(1), config)
+
+    assert result is not None
+
+
+def test_find_match_with_json_body_ignore() -> None:
+    interactions = [
+        HttpInteraction(
+            request=HttpRequest(
+                "POST",
+                "https://api.example.com/chat",
+                body=Body("json", {"prompt": "hello", "request_id": "abc123"}),
+            ),
+            response=HttpResponse(200, body=Body("json", {"reply": "hi"})),
+            recorded_at="2026-01-01T00:00:00Z",
         )
+    ]
+    config = MatchConfig(
+        match_on=["method", "uri", "json_body"],
+        ignore_json_paths=["request_id"],
+    )
 
-        request = HttpRequest(
-            "POST",
-            "https://api.example.com/chat",
-            body=Body("json", {"prompt": "hello", "request_id": "xyz789"}),
-        )
-        result = find_match(request, interactions, _no_played(1), config)
-        assert result is not None
+    request = HttpRequest(
+        "POST",
+        "https://api.example.com/chat",
+        body=Body("json", {"prompt": "hello", "request_id": "xyz789"}),
+    )
+    result = find_match(request, interactions, _no_played(1), config)
+    assert result is not None
 
-    def test_match_uri_only(self) -> None:
-        interactions = [_interaction("POST", "https://api.example.com/data")]
-        config = MatchConfig(match_on=["uri"])
 
-        request = HttpRequest("GET", "https://api.example.com/data")
-        result = find_match(request, interactions, _no_played(1), config)
+def test_find_match_uri_only() -> None:
+    interactions = [_interaction("POST", "https://api.example.com/data")]
+    config = MatchConfig(match_on=["uri"])
 
-        assert result is not None
+    request = HttpRequest("GET", "https://api.example.com/data")
+    result = find_match(request, interactions, _no_played(1), config)
 
-    def test_prefers_unplayed_interaction(self) -> None:
-        interactions = [
-            _interaction("GET", "https://api.example.com/users"),
-            _interaction("GET", "https://api.example.com/users"),
-        ]
-        config = MatchConfig()
-        played = [True, False]
+    assert result is not None
 
-        request = HttpRequest("GET", "https://api.example.com/users")
-        result = find_match(request, interactions, played, config)
 
-        assert result is not None
-        assert result[0] == 1
+def test_find_match_prefers_unplayed_interaction() -> None:
+    interactions = [
+        _interaction("GET", "https://api.example.com/users"),
+        _interaction("GET", "https://api.example.com/users"),
+    ]
+    config = MatchConfig()
+    played = [True, False]
 
-    def test_falls_back_to_played_interaction(self) -> None:
-        interactions = [
-            _interaction("GET", "https://api.example.com/users"),
-        ]
-        config = MatchConfig()
-        played = [True]
+    request = HttpRequest("GET", "https://api.example.com/users")
+    result = find_match(request, interactions, played, config)
 
-        request = HttpRequest("GET", "https://api.example.com/users")
-        result = find_match(request, interactions, played, config)
+    assert result is not None
+    assert result[0] == 1
 
-        assert result is not None
-        assert result[0] == 0
+
+def test_find_match_falls_back_to_played_interaction() -> None:
+    interactions = [
+        _interaction("GET", "https://api.example.com/users"),
+    ]
+    config = MatchConfig()
+    played = [True]
+
+    request = HttpRequest("GET", "https://api.example.com/users")
+    result = find_match(request, interactions, played, config)
+
+    assert result is not None
+    assert result[0] == 0

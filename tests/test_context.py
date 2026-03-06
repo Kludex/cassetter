@@ -78,37 +78,42 @@ async def test_use_cassette_enum_record_mode(tmp_path: object) -> None:
     assert response.status_code == 200
 
 
-class TestResolveInterceptors:
-    def test_unknown_interceptor(self) -> None:
-        with pytest.raises(ValueError, match="unknown interceptor"):
-            resolve_interceptors(["nonexistent"])
+def test_resolve_interceptors_unknown_interceptor() -> None:
+    with pytest.raises(ValueError, match="unknown interceptor"):
+        resolve_interceptors(["nonexistent"])
 
-    def test_missing_optional_dependency(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setitem(_INTERCEPTOR_MAP, "aiohttp", None)
-        with pytest.raises(ImportError, match="requires installing"):
-            resolve_interceptors(["aiohttp"])
 
-    def test_httpx_interceptor(self) -> None:
-        interceptors = resolve_interceptors(["httpx"])
-        assert len(interceptors) == 1
+def test_resolve_interceptors_missing_optional_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(_INTERCEPTOR_MAP, "aiohttp", None)
+    with pytest.raises(ImportError, match="requires installing"):
+        resolve_interceptors(["aiohttp"])
 
-    def test_multiple_interceptors(self) -> None:
-        interceptors = resolve_interceptors(["httpx", "aiohttp", "requests"])
-        assert len(interceptors) == 3
 
-    def test_auto_detect(self) -> None:
-        interceptors = resolve_interceptors()
-        assert len(interceptors) >= 1
+def test_resolve_interceptors_httpx() -> None:
+    interceptors = resolve_interceptors(["httpx"])
+    assert len(interceptors) == 1
 
-    def test_auto_detect_none_arg(self) -> None:
-        interceptors = resolve_interceptors(None)
-        assert len(interceptors) >= 1
 
-    def test_auto_detect_no_interceptors(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        for name in _AUTO_DETECT_ORDER:
-            monkeypatch.setitem(_INTERCEPTOR_MAP, name, None)
-        with pytest.raises(ImportError, match="no HTTP interceptors available"):
-            resolve_interceptors()
+def test_resolve_interceptors_multiple() -> None:
+    interceptors = resolve_interceptors(["httpx", "aiohttp", "requests"])
+    assert len(interceptors) == 3
+
+
+def test_resolve_interceptors_auto_detect() -> None:
+    interceptors = resolve_interceptors()
+    assert len(interceptors) >= 1
+
+
+def test_resolve_interceptors_auto_detect_none_arg() -> None:
+    interceptors = resolve_interceptors(None)
+    assert len(interceptors) >= 1
+
+
+def test_resolve_interceptors_auto_detect_no_interceptors(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _AUTO_DETECT_ORDER:
+        monkeypatch.setitem(_INTERCEPTOR_MAP, name, None)
+    with pytest.raises(ImportError, match="no HTTP interceptors available"):
+        resolve_interceptors()
 
 
 @pytest.mark.anyio

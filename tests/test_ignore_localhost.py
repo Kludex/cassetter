@@ -34,33 +34,40 @@ def preloaded_cassette(cassette_path: str) -> str:
     return cassette_path
 
 
-class TestIsLocalhost:
-    def test_localhost(self) -> None:
-        assert is_localhost("http://localhost/path") is True
+def test_is_localhost_with_localhost() -> None:
+    assert is_localhost("http://localhost/path") is True
 
-    def test_localhost_with_port(self) -> None:
-        assert is_localhost("http://localhost:8080/path") is True
 
-    def test_ipv4_loopback(self) -> None:
-        assert is_localhost("http://127.0.0.1/path") is True
+def test_is_localhost_with_port() -> None:
+    assert is_localhost("http://localhost:8080/path") is True
 
-    def test_ipv4_loopback_with_port(self) -> None:
-        assert is_localhost("http://127.0.0.1:9000/api") is True
 
-    def test_ipv6_loopback_bracketed(self) -> None:
-        assert is_localhost("http://[::1]/path") is True
+def test_is_localhost_ipv4_loopback() -> None:
+    assert is_localhost("http://127.0.0.1/path") is True
 
-    def test_ipv6_loopback_bracketed_with_port(self) -> None:
-        assert is_localhost("http://[::1]:8080/path") is True
 
-    def test_non_localhost(self) -> None:
-        assert is_localhost("https://api.example.com/data") is False
+def test_is_localhost_ipv4_loopback_with_port() -> None:
+    assert is_localhost("http://127.0.0.1:9000/api") is True
 
-    def test_non_localhost_ip(self) -> None:
-        assert is_localhost("http://192.168.1.1/data") is False
 
-    def test_empty_string(self) -> None:
-        assert is_localhost("") is False
+def test_is_localhost_ipv6_loopback_bracketed() -> None:
+    assert is_localhost("http://[::1]/path") is True
+
+
+def test_is_localhost_ipv6_loopback_bracketed_with_port() -> None:
+    assert is_localhost("http://[::1]:8080/path") is True
+
+
+def test_is_localhost_non_localhost() -> None:
+    assert is_localhost("https://api.example.com/data") is False
+
+
+def test_is_localhost_non_localhost_ip() -> None:
+    assert is_localhost("http://192.168.1.1/data") is False
+
+
+def test_is_localhost_empty_string() -> None:
+    assert is_localhost("") is False
 
 
 @pytest.mark.anyio

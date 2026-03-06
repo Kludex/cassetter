@@ -154,30 +154,32 @@ async def test_async_record(cassette_path: str) -> None:
         interceptor.uninstall()
 
 
-class TestBuildHttpxResponse:
-    def test_json_body(self) -> None:
-        response = _build_httpx_response(
-            HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
-        )
-        assert response.json() == {"key": "value"}
+def test_build_httpx_response_json_body() -> None:
+    response = _build_httpx_response(
+        HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
+    )
+    assert response.json() == {"key": "value"}
 
-    def test_text_body(self) -> None:
-        response = _build_httpx_response(
-            HttpResponse(200, body=Body("text", "hello world")),
-        )
-        assert response.text == "hello world"
 
-    def test_binary_body(self) -> None:
-        response = _build_httpx_response(
-            HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
-        )
-        assert response.content == b"\x00\x01\x02"
+def test_build_httpx_response_text_body() -> None:
+    response = _build_httpx_response(
+        HttpResponse(200, body=Body("text", "hello world")),
+    )
+    assert response.text == "hello world"
 
-    def test_none_body(self) -> None:
-        response = _build_httpx_response(
-            HttpResponse(200, body=Body("none")),
-        )
-        assert response.content == b""
+
+def test_build_httpx_response_binary_body() -> None:
+    response = _build_httpx_response(
+        HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
+    )
+    assert response.content == b"\x00\x01\x02"
+
+
+def test_build_httpx_response_none_body() -> None:
+    response = _build_httpx_response(
+        HttpResponse(200, body=Body("none")),
+    )
+    assert response.content == b""
 
 
 def test_install_uninstall() -> None:
