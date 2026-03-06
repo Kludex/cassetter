@@ -1327,7 +1327,6 @@ async def test_vcr_channel_close() -> None:
             self.closed = True
 
     fake = FakeChannel()
-    cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
     channel = VCRChannel(fake)  # type: ignore[arg-type]
     await channel.close()
     assert fake.closed
@@ -1352,7 +1351,6 @@ async def test_vcr_channel_context_manager() -> None:
             pass
 
     fake = FakeChannel()
-    cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
     channel = VCRChannel(fake)  # type: ignore[arg-type]
 
     async with channel as ch:
