@@ -13,7 +13,7 @@ def vcr_config() -> CassetteConfig:
 
 
 @pytest.mark.vcr
-def test_with_marker(vcr_cassette: Cassette) -> None:
+def test_with_marker(cassette: Cassette) -> None:
     with httpx.Client() as client:
         response = client.get("https://example.com/marker-test")
     assert response.status_code == 200

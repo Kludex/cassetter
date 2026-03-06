@@ -97,7 +97,7 @@ def _resolve_cassette(
 
 
 @pytest.fixture(autouse=True)
-def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Iterator[Cassette | None]:
+def cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Iterator[Cassette | None]:
     """Activates cassette recording/replay for tests marked with @pytest.mark.vcr."""
     marker = request.node.get_closest_marker("vcr")
     if marker is None:
