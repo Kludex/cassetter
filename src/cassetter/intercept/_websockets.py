@@ -129,7 +129,7 @@ class WebSocketInterceptor:
                 cassette = get_current_cassette()
                 if cassette is None:
                     conn = original_connect(self._uri, **self._kwargs)  # pragma: no cover
-                    return await conn.__aenter__()  # pragma: no cover
+                    return await conn.__aenter__()  # type: ignore[no-any-return]  # pragma: no cover
 
                 try:
                     interaction = cassette.play_ws(self._uri)

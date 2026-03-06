@@ -113,7 +113,7 @@ class VCRUnaryStreamCallable:
         cassette = get_current_cassette()
         if cassette is None:
             assert self._real is not None
-            return self._real(
+            return self._real(  # type: ignore[no-any-return]
                 request,
                 timeout=timeout,
                 metadata=metadata,
@@ -282,7 +282,7 @@ class VCRStreamStreamCallable:
         cassette = get_current_cassette()
         if cassette is None:
             assert self._real is not None
-            return self._real(
+            return self._real(  # type: ignore[no-any-return]
                 request_iterator,
                 timeout=timeout,
                 metadata=metadata,
