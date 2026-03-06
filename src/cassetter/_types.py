@@ -13,8 +13,8 @@ class CassetteConfig(TypedDict, total=False):
     record_mode: str
     match_on: list[str]
     ignore_json_paths: list[str]
-    filtered_headers: list[str]
-    filtered_query_params: list[str]
+    filter_headers: list[str]
+    filter_query_params: list[str]
     body_scrub_patterns: list[str]
     filter_replacement: str
     cassette_dir: str

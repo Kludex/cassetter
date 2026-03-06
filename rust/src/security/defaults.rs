@@ -1,4 +1,4 @@
-pub static DEFAULT_FILTERED_HEADERS: &[&str] = &[
+pub static DEFAULT_FILTER_HEADERS: &[&str] = &[
     "authorization",
     "cookie",
     "set-cookie",
@@ -9,7 +9,7 @@ pub static DEFAULT_FILTERED_HEADERS: &[&str] = &[
     "www-authenticate",
 ];
 
-pub static DEFAULT_FILTERED_QUERY_PARAMS: &[&str] = &[
+pub static DEFAULT_FILTER_QUERY_PARAMS: &[&str] = &[
     "api_key",
     "apikey",
     "token",
