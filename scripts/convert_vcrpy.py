@@ -7,6 +7,7 @@ Usage:
 Recursively finds all .yaml files in the directory and converts them
 from vcrpy format to cassetter format in-place.
 """
+
 from __future__ import annotations
 
 import json
