@@ -4,6 +4,8 @@ from typing import Any
 
 from typing_extensions import Protocol, TypedDict
 
+from cassetter.cassette import BeforeRecordRequest
+
 
 class CassetteConfig(TypedDict, total=False):
     """Configuration for a cassette recording/playback session."""
@@ -20,6 +22,8 @@ class CassetteConfig(TypedDict, total=False):
     max_age: str
     on_expiry: str
     ignore_localhost: bool
+    ignore_hosts: list[str]
+    before_record_request: BeforeRecordRequest
 
 
 class Interceptor(Protocol):

@@ -14,17 +14,22 @@ from cassetter._core import (
     WsInteraction,
 )
 from cassetter.cassette import (
+    BeforeRecordRequest,
+    BypassCassette,
     Cassette,
     CassetteExpiredError,
     CassetteExpiredWarning,
     CassetteNotFoundError,
     NoMatchError,
+    RawRequest,
 )
 from cassetter.context import use_cassette
 from cassetter.recording import RecordMode
 
 __all__ = [
+    "BeforeRecordRequest",
     "Body",
+    "BypassCassette",
     "Cassette",
     "CassetteExpiredError",
     "CassetteExpiredWarning",
@@ -37,6 +42,7 @@ __all__ = [
     "HttpResponse",
     "MatchConfig",
     "NoMatchError",
+    "RawRequest",
     "RecordMode",
     "SecurityConfig",
     "WsFrame",

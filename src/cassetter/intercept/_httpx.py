@@ -6,8 +6,7 @@ from typing import Any
 import httpx
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
-from cassetter.intercept._base import is_localhost
+from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
 
 
 class VCRTransport(httpx.AsyncBaseTransport):
@@ -21,11 +20,18 @@ class VCRTransport(httpx.AsyncBaseTransport):
         method = request.method
         uri = str(request.url)
 
-        if self._cassette.ignore_localhost and is_localhost(uri):
+        if self._cassette.should_bypass(uri):
             return await self._real_transport.handle_async_request(request)
 
         headers = _extract_headers(request.headers)
         body = request.content
+
+        hook = self._cassette.before_record_request
+        if hook is not None:
+            try:
+                hook(RawRequest(method, uri, headers, body))
+            except BypassCassette:
+                return await self._real_transport.handle_async_request(request)
 
         try:
             response = self._cassette.play(method, uri, headers, body)
@@ -64,11 +70,18 @@ class VCRSyncTransport(httpx.BaseTransport):
         method = request.method
         uri = str(request.url)
 
-        if self._cassette.ignore_localhost and is_localhost(uri):
+        if self._cassette.should_bypass(uri):
             return self._real_transport.handle_request(request)
 
         headers = _extract_headers(request.headers)
         body = request.content
+
+        hook = self._cassette.before_record_request
+        if hook is not None:
+            try:
+                hook(RawRequest(method, uri, headers, body))
+            except BypassCassette:
+                return self._real_transport.handle_request(request)
 
         try:
             response = self._cassette.play(method, uri, headers, body)

@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter.cassette import Cassette
+from cassetter.cassette import BeforeRecordRequest, Cassette
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._httpx import HttpxInterceptor
 from cassetter.recording import RecordMode
@@ -71,6 +71,8 @@ async def use_cassette(
     max_age: str | None = None,
     on_expiry: str = "warn",
     ignore_localhost: bool = False,
+    ignore_hosts: list[str] | None = None,
+    before_record_request: BeforeRecordRequest | None = None,
 ) -> AsyncIterator[Cassette]:
     """Async context manager for recording/replaying HTTP interactions.
 
@@ -109,6 +111,8 @@ async def use_cassette(
         max_age=max_age,
         on_expiry=on_expiry,
         ignore_localhost=ignore_localhost,
+        ignore_hosts=ignore_hosts,
+        before_record_request=before_record_request,
     )
     cassette.load()
 
