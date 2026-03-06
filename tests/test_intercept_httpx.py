@@ -164,6 +164,22 @@ def test_install_uninstall() -> None:
     assert httpx.Client.__init__ is original_sync_init
 
 
+@pytest.mark.anyio
+async def test_replay_streaming_request_body(preloaded_cassette: str) -> None:
+    """Streaming request bodies (e.g. file uploads) raise RequestNotRead on .content access."""
+
+    async def body_stream():
+        yield b"chunk1"
+        yield b"chunk2"
+
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
+        async with httpx.AsyncClient() as client:
+            response = await client.request("GET", "https://httpbin.org/get", content=body_stream())
+
+    assert response.status_code == 200
+    assert response.json()["origin"] == "127.0.0.1"
+
+
 def test_extract_headers_skip_encoding() -> None:
     headers = httpx.Headers({"content-type": "text/html", "content-encoding": "gzip", "x-custom": "val"})
     result = _extract_headers_skip_encoding(headers)

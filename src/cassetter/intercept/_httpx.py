@@ -28,7 +28,10 @@ class VCRTransport(httpx.AsyncBaseTransport):
             return await self._real_transport.handle_async_request(request)
 
         headers = _extract_headers(request.headers)
-        body = request.content
+        try:
+            body = request.content
+        except httpx.RequestNotRead:
+            body = await request.aread()
 
         hook = cassette.before_record_request
         if hook is not None:
