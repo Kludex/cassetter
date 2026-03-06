@@ -325,18 +325,23 @@ async def test_concurrent_tasks_with_no_match_isolation(tmp_path: object) -> Non
 
 def test_patch_refcounting() -> None:
     """Patches stay installed while any cassette is active, removed when all are done."""
+    original_handle = httpx.AsyncHTTPTransport.handle_async_request
     original_init = httpx.AsyncClient.__init__
 
     acquire_patches([HttpxInterceptor])
+    assert httpx.AsyncHTTPTransport.handle_async_request is not original_handle
     assert httpx.AsyncClient.__init__ is not original_init
 
     acquire_patches([HttpxInterceptor])
+    assert httpx.AsyncHTTPTransport.handle_async_request is not original_handle
     assert httpx.AsyncClient.__init__ is not original_init
 
     release_patches([HttpxInterceptor])
     # Still patched (refcount=1)
+    assert httpx.AsyncHTTPTransport.handle_async_request is not original_handle
     assert httpx.AsyncClient.__init__ is not original_init
 
     release_patches([HttpxInterceptor])
     # Now unpatched (refcount=0)
+    assert httpx.AsyncHTTPTransport.handle_async_request is original_handle
     assert httpx.AsyncClient.__init__ is original_init
