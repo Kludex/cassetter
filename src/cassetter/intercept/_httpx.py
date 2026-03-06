@@ -6,27 +6,31 @@ from typing import Any
 import httpx
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
+from cassetter._state import get_current_cassette
+from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
 
 
 class VCRTransport(httpx.AsyncBaseTransport):
-    """httpx async transport that records/replays via a Cassette."""
+    """httpx async transport that records/replays via the current context's Cassette."""
 
-    def __init__(self, cassette: Cassette, real_transport: httpx.AsyncBaseTransport) -> None:
-        self._cassette = cassette
+    def __init__(self, real_transport: httpx.AsyncBaseTransport) -> None:
         self._real_transport = real_transport
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        cassette = get_current_cassette()
+        if cassette is None:
+            return await self._real_transport.handle_async_request(request)
+
         method = request.method
         uri = str(request.url)
 
-        if self._cassette.should_bypass(uri):
+        if cassette.should_bypass(uri):
             return await self._real_transport.handle_async_request(request)
 
         headers = _extract_headers(request.headers)
         body = request.content
 
-        hook = self._cassette.before_record_request
+        hook = cassette.before_record_request
         if hook is not None:
             try:
                 hook(RawRequest(method, uri, headers, body))
@@ -34,10 +38,10 @@ class VCRTransport(httpx.AsyncBaseTransport):
                 return await self._real_transport.handle_async_request(request)
 
         try:
-            response = self._cassette.play(method, uri, headers, body)
+            response = cassette.play(method, uri, headers, body)
             return _build_httpx_response(response, request)
         except NoMatchError:
-            if not self._cassette.can_record:
+            if not cassette.can_record:
                 raise
 
         real_response = await self._real_transport.handle_async_request(request)
@@ -47,7 +51,7 @@ class VCRTransport(httpx.AsyncBaseTransport):
         # to prevent double-decompression in the cassette recorder
         resp_headers = _extract_headers_skip_encoding(real_response.headers)
 
-        self._cassette.record(
+        cassette.record(
             method=method,
             uri=uri,
             request_headers=headers,
@@ -60,23 +64,26 @@ class VCRTransport(httpx.AsyncBaseTransport):
 
 
 class VCRSyncTransport(httpx.BaseTransport):
-    """httpx sync transport that records/replays via a Cassette."""
+    """httpx sync transport that records/replays via the current context's Cassette."""
 
-    def __init__(self, cassette: Cassette, real_transport: httpx.BaseTransport) -> None:
-        self._cassette = cassette
+    def __init__(self, real_transport: httpx.BaseTransport) -> None:
         self._real_transport = real_transport
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
+        cassette = get_current_cassette()
+        if cassette is None:
+            return self._real_transport.handle_request(request)
+
         method = request.method
         uri = str(request.url)
 
-        if self._cassette.should_bypass(uri):
+        if cassette.should_bypass(uri):
             return self._real_transport.handle_request(request)
 
         headers = _extract_headers(request.headers)
         body = request.content
 
-        hook = self._cassette.before_record_request
+        hook = cassette.before_record_request
         if hook is not None:
             try:
                 hook(RawRequest(method, uri, headers, body))
@@ -84,10 +91,10 @@ class VCRSyncTransport(httpx.BaseTransport):
                 return self._real_transport.handle_request(request)
 
         try:
-            response = self._cassette.play(method, uri, headers, body)
+            response = cassette.play(method, uri, headers, body)
             return _build_httpx_response(response, request)
         except NoMatchError:
-            if not self._cassette.can_record:
+            if not cassette.can_record:
                 raise
 
         real_response = self._real_transport.handle_request(request)
@@ -96,7 +103,7 @@ class VCRSyncTransport(httpx.BaseTransport):
         # httpx already decompresses the body, so strip content-encoding
         resp_headers = _extract_headers_skip_encoding(real_response.headers)
 
-        self._cassette.record(
+        cassette.record(
             method=method,
             uri=uri,
             request_headers=headers,
@@ -114,24 +121,18 @@ class HttpxInterceptor:
     def __init__(self) -> None:
         self._original_async_init = httpx.AsyncClient.__init__
         self._original_sync_init = httpx.Client.__init__
-        self._cassette: Cassette | None = None
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
-        interceptor = self
-
+    def install(self) -> None:
         original_async_init = self._original_async_init
         original_sync_init = self._original_sync_init
 
         def patched_async_init(client_self: httpx.AsyncClient, **kwargs: Any) -> None:
             original_async_init(client_self, **kwargs)
-            assert interceptor._cassette is not None
-            client_self._transport = VCRTransport(interceptor._cassette, client_self._transport)
+            client_self._transport = VCRTransport(client_self._transport)
 
         def patched_sync_init(client_self: httpx.Client, **kwargs: Any) -> None:
             original_sync_init(client_self, **kwargs)
-            assert interceptor._cassette is not None
-            client_self._transport = VCRSyncTransport(interceptor._cassette, client_self._transport)
+            client_self._transport = VCRSyncTransport(client_self._transport)
 
         httpx.AsyncClient.__init__ = patched_async_init  # type: ignore[assignment,method-assign]
         httpx.Client.__init__ = patched_sync_init  # type: ignore[assignment,method-assign]
@@ -139,7 +140,6 @@ class HttpxInterceptor:
     def uninstall(self) -> None:
         httpx.AsyncClient.__init__ = self._original_async_init  # type: ignore[method-assign]
         httpx.Client.__init__ = self._original_sync_init  # type: ignore[method-assign]
-        self._cassette = None
 
 
 def _extract_headers(headers: httpx.Headers) -> dict[str, list[str]]:

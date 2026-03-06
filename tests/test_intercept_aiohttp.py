@@ -6,7 +6,8 @@ import aiohttp
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
+from cassetter.cassette import NoMatchError
+from cassetter.context import use_cassette
 from cassetter.intercept._aiohttp import (
     AiohttpInterceptor,
     _build_aiohttp_response,
@@ -14,7 +15,6 @@ from cassetter.intercept._aiohttp import (
     _extract_request_headers,
     _extract_response_headers,
 )
-from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)
 
@@ -25,7 +25,7 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-def _preload_cassette(path: str) -> Cassette:
+def _preload_cassette(path: str) -> None:
     c = RustCassette()
     c.add_interaction(
         HttpInteraction(
@@ -35,43 +35,30 @@ def _preload_cassette(path: str) -> Cassette:
         )
     )
     c.save(path)
-    cassette = Cassette(path, record_mode=RecordMode.NONE)
-    cassette.load()
-    return cassette
 
 
 @pytest.mark.anyio
 async def test_interceptor_replay(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = AiohttpInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["aiohttp"]):
         async with aiohttp.ClientSession() as session:
             response = await session.get("https://example.com/api")
             body = await response.json(content_type=None)
             assert response.status == 200
             assert body == {"data": "aiohttp"}
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
 async def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = AiohttpInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["aiohttp"]):
         async with aiohttp.ClientSession() as session:
             with pytest.raises(NoMatchError):
                 await session.get("https://example.com/unknown")
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
@@ -83,8 +70,6 @@ async def test_interceptor_record(tmp_path: object) -> None:
     from yarl import URL
 
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = Cassette(path, record_mode=RecordMode.ALL)
-    cassette.load()
 
     async def mock_request(
         session: aiohttp.ClientSession,
@@ -116,25 +101,19 @@ async def test_interceptor_record(tmp_path: object) -> None:
     # Mock _request first, then install interceptor so the interceptor's
     # saved original_request points to our mock.
     with patch.object(aiohttp.ClientSession, "_request", mock_request):
-        interceptor = AiohttpInterceptor()
-        interceptor.install(cassette)
-        try:
+        with use_cassette(path, record_mode="all", intercept=["aiohttp"]) as cassette:
             async with aiohttp.ClientSession() as session:
                 response = await session.get("https://example.com/new-endpoint")
                 await response.read()
             assert response.status == 200
             assert len(cassette.interactions) == 1
-        finally:
-            interceptor.uninstall()
 
 
 def test_interceptor_install_uninstall() -> None:
     interceptor = AiohttpInterceptor()
     original_request = aiohttp.ClientSession._request
-    cassette = Cassette("/nonexistent", record_mode=RecordMode.NONE)
-    cassette.load()
 
-    interceptor.install(cassette)
+    interceptor.install()
     assert aiohttp.ClientSession._request is not original_request
 
     interceptor.uninstall()

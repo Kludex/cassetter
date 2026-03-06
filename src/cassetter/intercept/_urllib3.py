@@ -10,21 +10,18 @@ import urllib3.connectionpool
 import urllib3.response
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
+from cassetter._state import get_current_cassette
+from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
 
 
 class Urllib3Interceptor:
     """Intercepts HTTP traffic by patching urllib3.HTTPConnectionPool.urlopen."""
 
     def __init__(self) -> None:
-        self._cassette: Cassette | None = None
         self._patcher: Any = None
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
+    def install(self) -> None:
         original_urlopen = urllib3.connectionpool.HTTPConnectionPool.urlopen
-
-        interceptor = self
 
         def patched_urlopen(
             pool: urllib3.connectionpool.HTTPConnectionPool,
@@ -34,17 +31,20 @@ class Urllib3Interceptor:
             headers: Any = None,
             **kwargs: Any,
         ) -> urllib3.response.HTTPResponse:
-            assert interceptor._cassette is not None
+            cassette = get_current_cassette()
+            if cassette is None:
+                return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
+
             full_url = _reconstruct_url(pool, url)
 
-            if interceptor._cassette.should_bypass(full_url):
+            if cassette.should_bypass(full_url):
                 return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             norm_method = method.upper()
             norm_headers = _extract_headers(headers)
             norm_body = body.encode() if isinstance(body, str) else body
 
-            hook = interceptor._cassette.before_record_request
+            hook = cassette.before_record_request
             if hook is not None:
                 try:
                     hook(RawRequest(norm_method, full_url, norm_headers, norm_body))
@@ -52,17 +52,17 @@ class Urllib3Interceptor:
                     return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             try:
-                response = interceptor._cassette.play(norm_method, full_url, norm_headers, norm_body)
+                response = cassette.play(norm_method, full_url, norm_headers, norm_body)
                 return _build_urllib3_response(response, full_url)
             except NoMatchError:
-                if not interceptor._cassette.can_record:
+                if not cassette.can_record:
                     raise
 
             real_response = original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)
             resp_body = real_response.data
             resp_headers = _extract_headers(real_response.headers)
 
-            interceptor._cassette.record(
+            cassette.record(
                 method=norm_method,
                 uri=full_url,
                 request_headers=norm_headers,
@@ -92,7 +92,6 @@ class Urllib3Interceptor:
         if self._patcher is not None:
             self._patcher.stop()
             self._patcher = None
-        self._cassette = None
 
 
 def _reconstruct_url(pool: urllib3.connectionpool.HTTPConnectionPool, path: str) -> str:

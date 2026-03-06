@@ -4,8 +4,6 @@ from urllib.parse import urlparse
 
 from typing_extensions import Protocol
 
-from cassetter.cassette import Cassette
-
 _LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
 
 
@@ -17,5 +15,5 @@ def is_localhost(uri: str) -> bool:
 class InterceptorProtocol(Protocol):
     """Protocol that all interceptors must satisfy."""
 
-    def install(self, cassette: Cassette) -> None: ...
+    def install(self) -> None: ...
     def uninstall(self) -> None: ...

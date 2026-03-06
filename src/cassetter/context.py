@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import Iterator
 from typing import Any
 
 from cassetter._core import MatchConfig, SecurityConfig
+from cassetter._state import _current_cassette, acquire_patches, release_patches
 from cassetter.cassette import BeforeRecordRequest, Cassette
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._httpx import HttpxInterceptor
@@ -56,8 +57,8 @@ _AUTO_DETECT_ORDER: list[str] = ["httpx", "urllib3", "aiohttp"]
 _SUBSUMED_BY: dict[str, str] = {"requests": "urllib3"}
 
 
-@contextlib.asynccontextmanager
-async def use_cassette(
+@contextlib.contextmanager
+def use_cassette(
     path: str,
     *,
     record_mode: RecordMode | str = RecordMode.ONCE,
@@ -73,8 +74,8 @@ async def use_cassette(
     ignore_localhost: bool = False,
     ignore_hosts: list[str] | None = None,
     before_record_request: BeforeRecordRequest | None = None,
-) -> AsyncIterator[Cassette]:
-    """Async context manager for recording/replaying HTTP interactions.
+) -> Iterator[Cassette]:
+    """Context manager for recording/replaying HTTP interactions.
 
     Args:
         path: Path to the cassette YAML file.
@@ -116,40 +117,40 @@ async def use_cassette(
     )
     cassette.load()
 
-    interceptors = resolve_interceptors(intercept)
+    interceptor_classes = resolve_interceptors(intercept)
 
-    for interceptor in interceptors:
-        interceptor.install(cassette)
+    acquire_patches(interceptor_classes)
+    token = _current_cassette.set(cassette)
 
     try:
         yield cassette
     finally:
-        for interceptor in reversed(interceptors):
-            interceptor.uninstall()
+        _current_cassette.reset(token)
+        release_patches(interceptor_classes)
         cassette.save()
 
 
-def resolve_interceptors(names: list[str] | None = None) -> list[InterceptorProtocol]:
-    """Import and instantiate interceptors by name, or auto-detect if None."""
+def resolve_interceptors(names: list[str] | None = None) -> list[type[InterceptorProtocol]]:
+    """Import and return interceptor classes by name, or auto-detect if None."""
     if names is None:
         return _auto_detect_interceptors()
-    interceptors: list[InterceptorProtocol] = []
+    interceptors: list[type[InterceptorProtocol]] = []
     for name in names:
         cls = _INTERCEPTOR_MAP.get(name)
         if cls is None:
             if name in _INTERCEPTOR_MAP:
                 raise ImportError(f"interceptor {name!r} requires installing the '{name}' extra")
             raise ValueError(f"unknown interceptor: {name!r}")
-        interceptors.append(cls())
+        interceptors.append(cls)
     return interceptors
 
 
-def _auto_detect_interceptors() -> list[InterceptorProtocol]:
-    """Detect installed HTTP libraries and return interceptors for all of them."""
+def _auto_detect_interceptors() -> list[type[InterceptorProtocol]]:
+    """Detect installed HTTP libraries and return interceptor classes for all of them."""
     available: list[str] = []
     for name in _AUTO_DETECT_ORDER:
         if _INTERCEPTOR_MAP.get(name) is not None:
             available.append(name)
     if not available:
         raise ImportError("no HTTP interceptors available - install httpx, urllib3, or aiohttp")
-    return [_INTERCEPTOR_MAP[name]() for name in available]  # type: ignore[misc]
+    return [_INTERCEPTOR_MAP[name] for name in available]  # type: ignore[misc]

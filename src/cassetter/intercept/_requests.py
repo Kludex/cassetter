@@ -8,6 +8,7 @@ import requests
 import requests.adapters
 
 from cassetter._core import HttpResponse as _HttpResponse
+from cassetter._state import get_current_cassette
 from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
 
 
@@ -61,22 +62,21 @@ class RequestsInterceptor:
     """Intercepts requests by patching Session.send."""
 
     def __init__(self) -> None:
-        self._cassette: Cassette | None = None
         self._patcher: Any = None
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
+    def install(self) -> None:
         original_send = requests.Session.send
-
-        interceptor = self
 
         def patched_send(
             session: requests.Session, request: requests.PreparedRequest, **kwargs: Any
         ) -> requests.Response:
-            assert interceptor._cassette is not None
+            cassette = get_current_cassette()
+            if cassette is None:
+                return original_send(session, request, **kwargs)
+
             uri = request.url or ""
 
-            if interceptor._cassette.should_bypass(uri):
+            if cassette.should_bypass(uri):
                 return original_send(session, request, **kwargs)
 
             method = (request.method or "GET").upper()
@@ -84,7 +84,7 @@ class RequestsInterceptor:
             raw_body = request.body
             body = raw_body if isinstance(raw_body, bytes) else (raw_body.encode() if raw_body else None)
 
-            hook = interceptor._cassette.before_record_request
+            hook = cassette.before_record_request
             if hook is not None:
                 try:
                     hook(RawRequest(method, uri, headers, body))
@@ -92,16 +92,16 @@ class RequestsInterceptor:
                     return original_send(session, request, **kwargs)
 
             try:
-                response = interceptor._cassette.play(method, uri, headers, body)
+                response = cassette.play(method, uri, headers, body)
                 return _build_requests_response(request, response)
             except NoMatchError:
-                if not interceptor._cassette.can_record:
+                if not cassette.can_record:
                     raise
 
             real_response = original_send(session, request, **kwargs)
             resp_headers = _extract_headers(real_response.headers)
 
-            interceptor._cassette.record(
+            cassette.record(
                 method=method,
                 uri=uri,
                 request_headers=headers,
@@ -119,7 +119,6 @@ class RequestsInterceptor:
         if self._patcher is not None:
             self._patcher.stop()
             self._patcher = None
-        self._cassette = None
 
 
 def _extract_headers(headers: Any) -> dict[str, list[str]]:

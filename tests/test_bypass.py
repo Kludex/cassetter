@@ -7,8 +7,7 @@ import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import BypassCassette, Cassette, RawRequest
-from cassetter.intercept._httpx import HttpxInterceptor
-from cassetter.recording import RecordMode
+from cassetter.context import use_cassette
 
 pytest_plugins = ("anyio",)
 
@@ -34,60 +33,37 @@ def preloaded_cassette(cassette_path: str) -> str:
 
 @pytest.mark.anyio
 async def test_matching_host_bypasses_cassette(cassette_path: str) -> None:
-    cassette = Cassette(cassette_path, record_mode=RecordMode.NONE, ignore_hosts=["*.googleapis.com"])
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], ignore_hosts=["*.googleapis.com"]):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "abc"}))
         async with httpx.AsyncClient(transport=mock_transport) as client:
             response = await client.get("https://oauth2.googleapis.com/token")
         assert response.status_code == 200
         assert response.json() == {"token": "abc"}
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
 async def test_non_matching_host_uses_cassette(preloaded_cassette: str) -> None:
-    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE, ignore_hosts=["*.googleapis.com"])
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], ignore_hosts=["*.googleapis.com"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://api.example.com/data")
         assert response.status_code == 200
         assert response.json() == {"ok": True}
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
 async def test_multiple_ignore_patterns(cassette_path: str) -> None:
-    cassette = Cassette(
+    with use_cassette(
         cassette_path,
-        record_mode=RecordMode.NONE,
+        record_mode="none",
+        intercept=["httpx"],
         ignore_hosts=["*.googleapis.com", "accounts.google.com"],
-    )
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    ):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(204))
         async with httpx.AsyncClient(transport=mock_transport) as client:
             r1 = await client.get("https://oauth2.googleapis.com/token")
             r2 = await client.get("https://accounts.google.com/o/oauth2/auth")
         assert r1.status_code == 204
         assert r2.status_code == 204
-    finally:
-        interceptor.uninstall()
 
 
 def test_should_bypass_with_ignore_hosts() -> None:
@@ -110,20 +86,12 @@ async def test_bypass_cassette_exception_passes_through(cassette_path: str) -> N
         if "googleapis.com" in request.uri:
             raise BypassCassette
 
-    cassette = Cassette(cassette_path, record_mode=RecordMode.NONE, before_record_request=hook)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
         async with httpx.AsyncClient(transport=mock_transport) as client:
             response = await client.get("https://oauth2.googleapis.com/token")
         assert response.status_code == 200
         assert response.json() == {"token": "xyz"}
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
@@ -133,20 +101,12 @@ async def test_hook_without_exception_uses_cassette(preloaded_cassette: str) -> 
     def hook(request: RawRequest) -> None:
         calls.append(request.uri)
 
-    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE, before_record_request=hook)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://api.example.com/data")
         assert response.status_code == 200
         assert response.json() == {"ok": True}
         assert calls == ["https://api.example.com/data"]
-    finally:
-        interceptor.uninstall()
 
 
 def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> None:
@@ -154,20 +114,12 @@ def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> No
         if "googleapis.com" in request.uri:
             raise BypassCassette
 
-    cassette = Cassette(cassette_path, record_mode=RecordMode.NONE, before_record_request=hook)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
         with httpx.Client(transport=mock_transport) as client:
             response = client.get("https://oauth2.googleapis.com/token")
         assert response.status_code == 200
         assert response.json() == {"token": "xyz"}
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
@@ -177,17 +129,9 @@ async def test_hook_receives_correct_arguments(preloaded_cassette: str) -> None:
     def hook(request: RawRequest) -> None:
         captured.append(request)
 
-    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE, before_record_request=hook)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
         async with httpx.AsyncClient() as client:
             await client.get("https://api.example.com/data")
         assert len(captured) == 1
         assert captured[0].method == "GET"
         assert captured[0].uri == "https://api.example.com/data"
-    finally:
-        interceptor.uninstall()

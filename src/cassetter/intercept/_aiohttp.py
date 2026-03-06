@@ -11,21 +11,18 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
+from cassetter._state import get_current_cassette
+from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
 
 
 class AiohttpInterceptor:
     """Intercepts aiohttp requests by patching ClientSession._request."""
 
     def __init__(self) -> None:
-        self._cassette: Cassette | None = None
         self._patcher: Any = None
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
+    def install(self) -> None:
         original_request = aiohttp.ClientSession._request
-
-        interceptor = self
 
         async def patched_request(
             session: aiohttp.ClientSession,
@@ -33,16 +30,19 @@ class AiohttpInterceptor:
             str_or_url: str | URL,
             **kwargs: Any,
         ) -> aiohttp.ClientResponse:
-            assert interceptor._cassette is not None
+            cassette = get_current_cassette()
+            if cassette is None:
+                return await original_request(session, method, str_or_url, **kwargs)
+
             uri = str(URL(str_or_url))
 
-            if interceptor._cassette.should_bypass(uri):
+            if cassette.should_bypass(uri):
                 return await original_request(session, method, str_or_url, **kwargs)
 
             headers = _extract_request_headers(kwargs.get("headers"))
             body = _extract_request_body(kwargs)
 
-            hook = interceptor._cassette.before_record_request
+            hook = cassette.before_record_request
             if hook is not None:
                 try:
                     hook(RawRequest(method.upper(), uri, headers, body))
@@ -50,17 +50,17 @@ class AiohttpInterceptor:
                     return await original_request(session, method, str_or_url, **kwargs)
 
             try:
-                response = interceptor._cassette.play(method.upper(), uri, headers, body)
+                response = cassette.play(method.upper(), uri, headers, body)
                 return _build_aiohttp_response(method, uri, response)
             except NoMatchError:
-                if not interceptor._cassette.can_record:
+                if not cassette.can_record:
                     raise
 
             real_response = await original_request(session, method, str_or_url, **kwargs)
             resp_body = await real_response.read()
             resp_headers = _extract_response_headers(real_response.headers)
 
-            interceptor._cassette.record(
+            cassette.record(
                 method=method.upper(),
                 uri=uri,
                 request_headers=headers,
@@ -78,7 +78,6 @@ class AiohttpInterceptor:
         if self._patcher is not None:
             self._patcher.stop()
             self._patcher = None
-        self._cassette = None
 
 
 def _extract_request_headers(headers: Any) -> dict[str, list[str]]:

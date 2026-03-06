@@ -104,7 +104,7 @@ def test_resolve_cassette_default_config(tmp_path: object) -> None:
     os.makedirs(cassette_dir, exist_ok=True)
     RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
 
-    cassette, interceptors = _resolve_cassette(
+    cassette, interceptor_classes = _resolve_cassette(
         node_name="test_func",
         marker_args=(),
         marker_kwargs={},
@@ -115,7 +115,7 @@ def test_resolve_cassette_default_config(tmp_path: object) -> None:
 
     assert cassette.path.endswith("test_func.yaml")
     assert cassette.record_mode == RecordMode.NONE
-    assert len(interceptors) >= 1
+    assert len(interceptor_classes) >= 1
 
 
 def test_resolve_cassette_custom_cassette_name(tmp_path: object) -> None:

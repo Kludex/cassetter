@@ -44,7 +44,7 @@ def preloaded_cassette(cassette_path: str) -> str:
 
 @pytest.mark.anyio
 async def test_replay_from_cassette(preloaded_cassette: str) -> None:
-    async with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://httpbin.org/get")
 
@@ -55,7 +55,7 @@ async def test_replay_from_cassette(preloaded_cassette: str) -> None:
 
 @pytest.mark.anyio
 async def test_no_match_raises(preloaded_cassette: str) -> None:
-    async with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
         async with httpx.AsyncClient() as client:
             with pytest.raises(NoMatchError):
                 await client.get("https://httpbin.org/post")
@@ -80,7 +80,7 @@ async def test_record_and_replay(cassette_path: str) -> None:
     cassette.save()
 
     # Replay
-    async with use_cassette(cassette_path, record_mode="none", intercept=["httpx"]):
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api/data")
 
@@ -89,69 +89,37 @@ async def test_record_and_replay(cassette_path: str) -> None:
 
 
 def test_sync_replay(preloaded_cassette: str) -> None:
-    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
         with httpx.Client() as client:
             response = client.get("https://httpbin.org/get")
         assert response.status_code == 200
         assert response.json()["origin"] == "127.0.0.1"
-    finally:
-        interceptor.uninstall()
 
 
 def test_sync_no_match_raises(preloaded_cassette: str) -> None:
-    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
         with httpx.Client() as client:
             with pytest.raises(NoMatchError):
                 client.get("https://httpbin.org/unknown")
-    finally:
-        interceptor.uninstall()
 
 
 def test_sync_record(cassette_path: str) -> None:
-    cassette = Cassette(cassette_path, record_mode=RecordMode.ALL)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="all", intercept=["httpx"]) as cassette:
         transport = httpx.MockTransport(lambda request: httpx.Response(201, json={"created": True}))
         with httpx.Client(transport=transport) as client:
             response = client.get("https://example.com/create")
         assert response.status_code == 201
         assert len(cassette.interactions) == 1
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
 async def test_async_record(cassette_path: str) -> None:
-    cassette = Cassette(cassette_path, record_mode=RecordMode.ALL)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="all", intercept=["httpx"]) as cassette:
         transport = httpx.MockTransport(lambda request: httpx.Response(201, json={"created": True}))
         async with httpx.AsyncClient(transport=transport) as client:
             response = await client.get("https://example.com/create")
         assert response.status_code == 201
         assert len(cassette.interactions) == 1
-    finally:
-        interceptor.uninstall()
 
 
 def test_build_httpx_response_json_body() -> None:
@@ -187,10 +155,7 @@ def test_install_uninstall() -> None:
     original_async_init = httpx.AsyncClient.__init__
     original_sync_init = httpx.Client.__init__
 
-    cassette = Cassette("/nonexistent", record_mode=RecordMode.NONE)
-    cassette.load()
-
-    interceptor.install(cassette)
+    interceptor.install()
     assert httpx.AsyncClient.__init__ is not original_async_init
     assert httpx.Client.__init__ is not original_sync_init
 
