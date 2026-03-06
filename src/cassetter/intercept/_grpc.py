@@ -41,8 +41,12 @@ class VCRUnaryUnaryCallable:
         if cassette is None:
             assert self._real is not None
             return await self._real(
-                request, timeout=timeout, metadata=metadata,
-                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+                request,
+                timeout=timeout,
+                metadata=metadata,
+                credentials=credentials,
+                wait_for_ready=wait_for_ready,
+                compression=compression,
             )
 
         req_bytes: bytes = self._request_serializer(request)
@@ -110,8 +114,12 @@ class VCRUnaryStreamCallable:
         if cassette is None:
             assert self._real is not None
             return self._real(
-                request, timeout=timeout, metadata=metadata,
-                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+                request,
+                timeout=timeout,
+                metadata=metadata,
+                credentials=credentials,
+                wait_for_ready=wait_for_ready,
+                compression=compression,
             )
 
         req_bytes: bytes = self._request_serializer(request)
@@ -202,8 +210,12 @@ class VCRStreamUnaryCallable:
         if cassette is None:
             assert self._real is not None
             return await self._real(
-                request_iterator, timeout=timeout, metadata=metadata,
-                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+                request_iterator,
+                timeout=timeout,
+                metadata=metadata,
+                credentials=credentials,
+                wait_for_ready=wait_for_ready,
+                compression=compression,
             )
 
         md = _metadata_to_dict(metadata)
@@ -271,8 +283,12 @@ class VCRStreamStreamCallable:
         if cassette is None:
             assert self._real is not None
             return self._real(
-                request_iterator, timeout=timeout, metadata=metadata,
-                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+                request_iterator,
+                timeout=timeout,
+                metadata=metadata,
+                credentials=credentials,
+                wait_for_ready=wait_for_ready,
+                compression=compression,
             )
 
         md = _metadata_to_dict(metadata)

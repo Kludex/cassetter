@@ -43,9 +43,7 @@ async def test_matching_host_bypasses_cassette(cassette_path: str) -> None:
 
 @pytest.mark.anyio
 async def test_non_matching_host_uses_cassette(preloaded_cassette: str) -> None:
-    with use_cassette(
-        preloaded_cassette, record_mode="none", intercept=["httpx"], ignore_hosts=["*.googleapis.com"]
-    ):
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], ignore_hosts=["*.googleapis.com"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://api.example.com/data")
         assert response.status_code == 200
@@ -88,9 +86,7 @@ async def test_bypass_cassette_exception_passes_through(cassette_path: str) -> N
         if "googleapis.com" in request.uri:
             raise BypassCassette
 
-    with use_cassette(
-        cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook
-    ):
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
         async with httpx.AsyncClient(transport=mock_transport) as client:
             response = await client.get("https://oauth2.googleapis.com/token")
@@ -105,9 +101,7 @@ async def test_hook_without_exception_uses_cassette(preloaded_cassette: str) -> 
     def hook(request: RawRequest) -> None:
         calls.append(request.uri)
 
-    with use_cassette(
-        preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook
-    ):
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://api.example.com/data")
         assert response.status_code == 200
@@ -120,9 +114,7 @@ def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> No
         if "googleapis.com" in request.uri:
             raise BypassCassette
 
-    with use_cassette(
-        cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook
-    ):
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
         with httpx.Client(transport=mock_transport) as client:
             response = client.get("https://oauth2.googleapis.com/token")
@@ -137,9 +129,7 @@ async def test_hook_receives_correct_arguments(preloaded_cassette: str) -> None:
     def hook(request: RawRequest) -> None:
         captured.append(request)
 
-    with use_cassette(
-        preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook
-    ):
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
         async with httpx.AsyncClient() as client:
             await client.get("https://api.example.com/data")
         assert len(captured) == 1

@@ -251,9 +251,7 @@ def test_threadpool_concurrent_cassettes(tmp_path: object) -> None:
 def test_threadpool_with_context_propagation(tmp_path: object) -> None:
     """ThreadPoolExecutor with explicit context propagation via copy_context."""
     dir_path = str(tmp_path)
-    path = _make_cassette(
-        os.path.join(dir_path, "ctx.yaml"), "https://api.example.com/data", {"propagated": True}
-    )
+    path = _make_cassette(os.path.join(dir_path, "ctx.yaml"), "https://api.example.com/data", {"propagated": True})
 
     with use_cassette(path, record_mode="none", intercept=["httpx"]):
         # Copy current context (which has cassette set) and run in thread
