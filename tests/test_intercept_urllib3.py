@@ -11,7 +11,8 @@ import urllib3.connectionpool
 import urllib3.response
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
+from cassetter.cassette import NoMatchError
+from cassetter.context import use_cassette
 from cassetter.intercept._urllib3 import (
     Urllib3Interceptor,
     _build_urllib3_response,
@@ -19,10 +20,9 @@ from cassetter.intercept._urllib3 import (
     _is_default_port,
     _reconstruct_url,
 )
-from cassetter.recording import RecordMode
 
 
-def _preload_cassette(path: str) -> Cassette:
+def _preload_cassette(path: str) -> None:
     c = RustCassette()
     c.add_interaction(
         HttpInteraction(
@@ -32,40 +32,27 @@ def _preload_cassette(path: str) -> Cassette:
         )
     )
     c.save(path)
-    cassette = Cassette(path, record_mode=RecordMode.NONE)
-    cassette.load()
-    return cassette
 
 
 def test_replay_via_urllib3(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = Urllib3Interceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["urllib3"]):
         http = urllib3.PoolManager()
         response = http.request("GET", "https://example.com/api")
         assert response.status == 200
         assert response.json() == {"data": "hello"}
-    finally:
-        interceptor.uninstall()
 
 
 def test_replay_via_requests(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = Urllib3Interceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["urllib3"]):
         response = requests.get("https://example.com/api")
         assert response.status_code == 200
         assert response.json() == {"data": "hello"}
-    finally:
-        interceptor.uninstall()
 
 
 def test_replay_with_mismatched_content_length(tmp_path: object) -> None:
@@ -84,26 +71,17 @@ def test_replay_with_mismatched_content_length(tmp_path: object) -> None:
         )
     )
     c.save(path)
-    cassette = Cassette(path, record_mode=RecordMode.NONE)
-    cassette.load()
 
-    interceptor = Urllib3Interceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["urllib3"]):
         http = urllib3.PoolManager()
         response = http.request("POST", "https://api.example.com/invoke")
         assert response.status == 200
         body = response.json()
         assert body["output"]["message"]["content"][0]["text"] == "hi"
-    finally:
-        interceptor.uninstall()
 
 
 def test_record_urllib3(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = Cassette(path, record_mode=RecordMode.ALL)
-    cassette.load()
 
     fake_response = urllib3.response.HTTPResponse(
         body=io.BytesIO(b'{"recorded": true}'),
@@ -119,41 +97,30 @@ def test_record_urllib3(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> No
         lambda self, method, url, **kwargs: fake_response,
     )
 
-    interceptor = Urllib3Interceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="all", intercept=["urllib3"]) as cassette:
         http = urllib3.PoolManager()
         response = http.request("GET", "https://example.com/new-endpoint")
         assert response.status == 201
         assert len(cassette.interactions) == 1
-    finally:
-        interceptor.uninstall()
-        monkeypatch.undo()
+
+    monkeypatch.undo()
 
 
 def test_no_match_raises_error(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = Urllib3Interceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["urllib3"]):
         with pytest.raises(NoMatchError):
             http = urllib3.PoolManager()
             http.request("DELETE", "https://example.com/unknown", retries=False)
-    finally:
-        interceptor.uninstall()
 
 
 def test_install_uninstall_restores_original() -> None:
     interceptor = Urllib3Interceptor()
     original = urllib3.connectionpool.HTTPConnectionPool.urlopen
-    cassette = Cassette("/nonexistent", record_mode=RecordMode.NONE)
-    cassette.load()
 
-    interceptor.install(cassette)
+    interceptor.install()
     assert urllib3.connectionpool.HTTPConnectionPool.urlopen is not original
 
     interceptor.uninstall()

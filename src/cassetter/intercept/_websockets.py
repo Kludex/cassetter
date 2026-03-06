@@ -7,17 +7,17 @@ import websockets
 import websockets.asyncio.client
 
 from cassetter._core import Body, WsFrame, WsInteraction
-from cassetter.cassette import Cassette, NoMatchError
+from cassetter._state import get_current_cassette
+from cassetter.cassette import NoMatchError
 
 
 class VCRWebSocket:
     """Wraps a real WebSocket connection to record sent/received frames."""
 
-    def __init__(self, real_ws: Any, uri: str, headers: dict[str, list[str]], cassette: Cassette) -> None:
+    def __init__(self, real_ws: Any, uri: str, headers: dict[str, list[str]]) -> None:
         self._real = real_ws
         self._uri = uri
         self._headers = headers
-        self._cassette = cassette
         self._frames: list[WsFrame] = []
         self._start_time = time.monotonic()
 
@@ -49,8 +49,9 @@ class VCRWebSocket:
         self._flush()
 
     def _flush(self) -> None:
-        if self._frames:
-            self._cassette.record_ws(self._uri, self._headers, self._frames)
+        cassette = get_current_cassette()
+        if self._frames and cassette is not None:
+            cassette.record_ws(self._uri, self._headers, self._frames)
             self._frames = []
 
     async def __aenter__(self) -> VCRWebSocket:
@@ -113,12 +114,10 @@ class WebSocketInterceptor:
 
     def __init__(self) -> None:
         self._original_connect: Any = None
-        self._cassette: Cassette | None = None
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
+    def install(self) -> None:
         self._original_connect = websockets.asyncio.client.connect
-        interceptor = self
+        original_connect = self._original_connect
 
         class PatchedConnect:
             def __init__(self, uri: str, **kwargs: Any) -> None:
@@ -127,20 +126,23 @@ class WebSocketInterceptor:
                 self._ws: VCRWebSocket | VCRWebSocketReplay | None = None
 
             async def __aenter__(self) -> VCRWebSocket | VCRWebSocketReplay:
-                assert interceptor._cassette is not None
+                cassette = get_current_cassette()
+                if cassette is None:
+                    conn = original_connect(self._uri, **self._kwargs)  # pragma: no cover
+                    return await conn.__aenter__()  # pragma: no cover
+
                 try:
-                    interaction = interceptor._cassette.play_ws(self._uri)
+                    interaction = cassette.play_ws(self._uri)
                     self._ws = VCRWebSocketReplay(interaction)
                     return self._ws
                 except NoMatchError:
-                    if not interceptor._cassette.can_record:
+                    if not cassette.can_record:
                         raise
 
-                assert interceptor._original_connect is not None  # pragma: no cover
-                conn = interceptor._original_connect(self._uri, **self._kwargs)  # pragma: no cover
+                conn = original_connect(self._uri, **self._kwargs)  # pragma: no cover
                 real_ws = await conn.__aenter__()  # pragma: no cover
                 headers = _extract_ws_headers(self._kwargs)  # pragma: no cover
-                self._ws = VCRWebSocket(real_ws, self._uri, headers, interceptor._cassette)  # pragma: no cover
+                self._ws = VCRWebSocket(real_ws, self._uri, headers)  # pragma: no cover
                 return self._ws  # pragma: no cover
 
             async def __aexit__(self, *args: Any) -> None:
@@ -154,7 +156,6 @@ class WebSocketInterceptor:
         if self._original_connect is not None:
             websockets.asyncio.client.connect = self._original_connect  # type: ignore[misc]
             websockets.connect = self._original_connect  # type: ignore[misc]
-        self._cassette = None
 
 
 def _extract_ws_headers(kwargs: dict[str, Any]) -> dict[str, list[str]]:

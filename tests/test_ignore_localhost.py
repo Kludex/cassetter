@@ -7,9 +7,8 @@ import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import Cassette
+from cassetter.context import use_cassette
 from cassetter.intercept._base import is_localhost
-from cassetter.intercept._httpx import HttpxInterceptor
-from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)
 
@@ -73,58 +72,34 @@ def test_is_localhost_empty_string() -> None:
 @pytest.mark.anyio
 async def test_async_localhost_bypasses_cassette(cassette_path: str) -> None:
     """When ignore_localhost=True, localhost requests go to the real transport."""
-    cassette = Cassette(cassette_path, record_mode=RecordMode.NONE, ignore_localhost=True)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], ignore_localhost=True) as cassette:
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(418, json={"teapot": True}))
         async with httpx.AsyncClient(transport=mock_transport) as client:
             response = await client.get("http://localhost:8080/health")
         assert response.status_code == 418
         assert response.json() == {"teapot": True}
         assert len(cassette.interactions) == 0
-    finally:
-        interceptor.uninstall()
 
 
 def test_sync_localhost_bypasses_cassette(cassette_path: str) -> None:
     """When ignore_localhost=True, sync localhost requests go to the real transport."""
-    cassette = Cassette(cassette_path, record_mode=RecordMode.NONE, ignore_localhost=True)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], ignore_localhost=True) as cassette:
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(418, json={"teapot": True}))
         with httpx.Client(transport=mock_transport) as client:
             response = client.get("http://127.0.0.1:9000/health")
         assert response.status_code == 418
         assert response.json() == {"teapot": True}
         assert len(cassette.interactions) == 0
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
 async def test_non_localhost_still_uses_cassette(preloaded_cassette: str) -> None:
     """Non-localhost requests still go through the cassette even with ignore_localhost=True."""
-    cassette = Cassette(preloaded_cassette, record_mode=RecordMode.NONE, ignore_localhost=True)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], ignore_localhost=True):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://api.example.com/data")
         assert response.status_code == 200
         assert response.json() == {"ok": True}
-    finally:
-        interceptor.uninstall()
 
 
 @pytest.mark.anyio
@@ -140,19 +115,11 @@ async def test_localhost_without_flag_uses_cassette(cassette_path: str) -> None:
     )
     c.save(cassette_path)
 
-    cassette = Cassette(cassette_path, record_mode=RecordMode.NONE)
-    cassette.load()
-
-    interceptor = HttpxInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(cassette_path, record_mode="none", intercept=["httpx"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("http://localhost:8080/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
-    finally:
-        interceptor.uninstall()
 
 
 def test_ignore_localhost_property() -> None:

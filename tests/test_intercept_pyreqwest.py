@@ -7,7 +7,8 @@ import pyreqwest_impersonate as pri
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter.cassette import Cassette, NoMatchError
+from cassetter.cassette import NoMatchError
+from cassetter.context import use_cassette
 from cassetter.intercept._pyreqwest import (
     PyreqwestInterceptor,
     _build_replay_response,
@@ -15,10 +16,9 @@ from cassetter.intercept._pyreqwest import (
     _extract_headers,
     _ReplayResponse,
 )
-from cassetter.recording import RecordMode
 
 
-def _preload_cassette(path: str) -> Cassette:
+def _preload_cassette(path: str) -> None:
     c = RustCassette()
     c.add_interaction(
         HttpInteraction(
@@ -28,65 +28,45 @@ def _preload_cassette(path: str) -> Cassette:
         )
     )
     c.save(path)
-    cassette = Cassette(path, record_mode=RecordMode.NONE)
-    cassette.load()
-    return cassette
 
 
 def test_interceptor_replay(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = PyreqwestInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
         client = pri.Client()
         response = client.get("https://example.com/api")
         assert response.status_code == 200
         assert response.json() == {"data": "hello"}
-    finally:
-        interceptor.uninstall()
 
 
 def test_interceptor_replay_via_request_method(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = PyreqwestInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
         client = pri.Client()
         response = client.request("GET", "https://example.com/api")
         assert response.status_code == 200
         assert response.json() == {"data": "hello"}
-    finally:
-        interceptor.uninstall()
 
 
 def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = PyreqwestInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
         client = pri.Client()
         with pytest.raises(NoMatchError):
             client.delete("https://example.com/unknown")
-    finally:
-        interceptor.uninstall()
 
 
 def test_interceptor_install_uninstall() -> None:
     interceptor = PyreqwestInterceptor()
     original_get = pri.Client.get
-    cassette = Cassette("/nonexistent", record_mode=RecordMode.NONE)
-    cassette.load()
 
-    interceptor.install(cassette)
+    interceptor.install()
     assert pri.Client.get is not original_get
 
     interceptor.uninstall()

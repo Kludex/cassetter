@@ -27,7 +27,7 @@ def _make_cassette(path: str) -> str:
 @pytest.mark.anyio
 async def test_use_cassette_with_filtered_headers(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    async with use_cassette(path, record_mode="none", filtered_headers=["x-custom"]):
+    with use_cassette(path, record_mode="none", filtered_headers=["x-custom"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200
@@ -36,7 +36,7 @@ async def test_use_cassette_with_filtered_headers(tmp_path: object) -> None:
 @pytest.mark.anyio
 async def test_use_cassette_with_filtered_query_params(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    async with use_cassette(path, record_mode="none", filtered_query_params=["token"]):
+    with use_cassette(path, record_mode="none", filtered_query_params=["token"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200
@@ -45,7 +45,7 @@ async def test_use_cassette_with_filtered_query_params(tmp_path: object) -> None
 @pytest.mark.anyio
 async def test_use_cassette_with_body_scrub_patterns(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    async with use_cassette(path, record_mode="none", body_scrub_patterns=["secret"]):
+    with use_cassette(path, record_mode="none", body_scrub_patterns=["secret"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200
@@ -54,7 +54,7 @@ async def test_use_cassette_with_body_scrub_patterns(tmp_path: object) -> None:
 @pytest.mark.anyio
 async def test_use_cassette_with_filter_replacement(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    async with use_cassette(path, record_mode="none", filter_replacement="[REDACTED]"):
+    with use_cassette(path, record_mode="none", filter_replacement="[REDACTED]"):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200
@@ -63,7 +63,7 @@ async def test_use_cassette_with_filter_replacement(tmp_path: object) -> None:
 @pytest.mark.anyio
 async def test_use_cassette_string_record_mode(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    async with use_cassette(path, record_mode="none"):
+    with use_cassette(path, record_mode="none"):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200
@@ -72,7 +72,7 @@ async def test_use_cassette_string_record_mode(tmp_path: object) -> None:
 @pytest.mark.anyio
 async def test_use_cassette_enum_record_mode(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    async with use_cassette(path, record_mode=RecordMode.NONE):
+    with use_cassette(path, record_mode=RecordMode.NONE):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200
@@ -120,5 +120,5 @@ def test_resolve_interceptors_auto_detect_no_interceptors(monkeypatch: pytest.Mo
 async def test_use_cassette_expired_warns(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with pytest.warns(CassetteExpiredWarning):
-        async with use_cassette(path, record_mode="none", max_age="1h", on_expiry="warn"):
+        with use_cassette(path, record_mode="none", max_age="1h", on_expiry="warn"):
             pass

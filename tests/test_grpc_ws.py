@@ -19,6 +19,7 @@ from cassetter._core import (
     find_grpc_match,
     find_ws_match,
 )
+from cassetter._state import _current_cassette
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.recording import RecordMode
 
@@ -592,10 +593,8 @@ def test_grpc_interceptor_install_uninstall() -> None:
     original_secure = grpc.aio.secure_channel
 
     interceptor = GrpcInterceptor()
-    cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
-    cassette.load()
 
-    interceptor.install(cassette)
+    interceptor.install()
     assert grpc.aio.insecure_channel is not original_insecure
     assert grpc.aio.secure_channel is not original_secure
 
@@ -622,11 +621,14 @@ async def test_unary_unary_replay(tmp_path: object) -> None:
     callable_ = VCRUnaryUnaryCallable(
         "/pkg.Svc/Echo",
         None,
-        cassette,
         lambda x: b"\x01",
         lambda b: f"deserialized:{b.hex()}",
     )
-    result = await callable_(object())
+    token = _current_cassette.set(cassette)
+    try:
+        result = await callable_(object())
+    finally:
+        _current_cassette.reset(token)
     assert result == "deserialized:0203"
 
 
@@ -641,12 +643,15 @@ async def test_unary_unary_no_match_raises(tmp_path: object) -> None:
     callable_ = VCRUnaryUnaryCallable(
         "/pkg.Svc/Unknown",
         None,
-        cassette,
         lambda x: b"\x01",
         lambda b: b,
     )
-    with pytest.raises(NoMatchError):
-        await callable_(object())
+    token = _current_cassette.set(cassette)
+    try:
+        with pytest.raises(NoMatchError):
+            await callable_(object())
+    finally:
+        _current_cassette.reset(token)
 
 
 @pytest.mark.anyio
@@ -668,13 +673,16 @@ async def test_unary_stream_replay(tmp_path: object) -> None:
     callable_ = VCRUnaryStreamCallable(
         "/pkg.Svc/Stream",
         None,
-        cassette,
         lambda x: b"\x00",
         lambda b: f"chunk:{b.hex()}",
     )
-    results = []
-    async for item in callable_(object()):
-        results.append(item)
+    token = _current_cassette.set(cassette)
+    try:
+        results = []
+        async for item in callable_(object()):
+            results.append(item)
+    finally:
+        _current_cassette.reset(token)
     assert results == ["chunk:01", "chunk:02", "chunk:03"]
 
 
@@ -686,10 +694,14 @@ async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     cassette.load()
 
-    callable_ = VCRUnaryStreamCallable("/pkg.Svc/X", None, cassette, lambda x: b"", lambda b: b)
-    with pytest.raises(NoMatchError):
-        async for _ in callable_(object()):
-            pass
+    callable_ = VCRUnaryStreamCallable("/pkg.Svc/X", None, lambda x: b"", lambda b: b)
+    token = _current_cassette.set(cassette)
+    try:
+        with pytest.raises(NoMatchError):
+            async for _ in callable_(object()):
+                pass
+    finally:
+        _current_cassette.reset(token)
 
 
 @pytest.mark.anyio
@@ -714,11 +726,14 @@ async def test_stream_unary_replay(tmp_path: object) -> None:
     callable_ = VCRStreamUnaryCallable(
         "/pkg.Svc/ClientStream",
         None,
-        cassette,
         lambda x: x,  # identity serializer
         lambda b: f"resp:{b.hex()}",
     )
-    result = await callable_(request_iter())
+    token = _current_cassette.set(cassette)
+    try:
+        result = await callable_(request_iter())
+    finally:
+        _current_cassette.reset(token)
     assert result == "resp:ff"
 
 
@@ -733,9 +748,13 @@ async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
     async def request_iter() -> AsyncIterator[bytes]:
         yield b"\x01"  # type: ignore[misc]
 
-    callable_ = VCRStreamUnaryCallable("/pkg.Svc/X", None, cassette, lambda x: x, lambda b: b)
-    with pytest.raises(NoMatchError):
-        await callable_(request_iter())
+    callable_ = VCRStreamUnaryCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
+    token = _current_cassette.set(cassette)
+    try:
+        with pytest.raises(NoMatchError):
+            await callable_(request_iter())
+    finally:
+        _current_cassette.reset(token)
 
 
 @pytest.mark.anyio
@@ -760,13 +779,16 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
     callable_ = VCRStreamStreamCallable(
         "/pkg.Svc/Bidi",
         None,
-        cassette,
         lambda x: x,
         lambda b: f"got:{b.hex()}",
     )
-    results = []
-    async for item in callable_(request_iter()):
-        results.append(item)
+    token = _current_cassette.set(cassette)
+    try:
+        results = []
+        async for item in callable_(request_iter()):
+            results.append(item)
+    finally:
+        _current_cassette.reset(token)
     assert results == ["got:0a", "got:0b"]
 
 
@@ -781,10 +803,14 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
     async def request_iter() -> AsyncIterator[bytes]:
         yield b"\x01"  # type: ignore[misc]
 
-    callable_ = VCRStreamStreamCallable("/pkg.Svc/X", None, cassette, lambda x: x, lambda b: b)
-    with pytest.raises(NoMatchError):
-        async for _ in callable_(request_iter()):
-            pass
+    callable_ = VCRStreamStreamCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
+    token = _current_cassette.set(cassette)
+    try:
+        with pytest.raises(NoMatchError):
+            async for _ in callable_(request_iter()):
+                pass
+    finally:
+        _current_cassette.reset(token)
 
 
 # --- WebSocket interceptor helpers ---
@@ -918,11 +944,15 @@ async def test_record_ws_frames(tmp_path: object) -> None:
         async def close(self, code: int = 1000, reason: str = "") -> None:
             pass
 
-    ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {}, cassette)
-    await ws.send("hello")
-    data = await ws.recv()
-    assert data == "response"
-    await ws.close()
+    token = _current_cassette.set(cassette)
+    try:
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
+        await ws.send("hello")
+        data = await ws.recv()
+        assert data == "response"
+        await ws.close()
+    finally:
+        _current_cassette.reset(token)
 
     assert len(cassette.ws_interactions) == 1
     interaction = cassette.ws_interactions[0]
@@ -950,9 +980,13 @@ async def test_record_ws_context_manager(tmp_path: object) -> None:
             pass
 
     real_ws = FakeWs()
-    async with VCRWebSocket(real_ws, "wss://ws.example.com", {}, cassette) as ws:
-        await ws.send("x")
-        await ws.recv()
+    token = _current_cassette.set(cassette)
+    try:
+        async with VCRWebSocket(real_ws, "wss://ws.example.com", {}) as ws:
+            await ws.send("x")
+            await ws.recv()
+    finally:
+        _current_cassette.reset(token)
 
     assert len(cassette.ws_interactions) == 1
 
@@ -975,11 +1009,15 @@ async def test_record_ws_binary_frames(tmp_path: object) -> None:
         async def close(self, code: int = 1000, reason: str = "") -> None:
             pass
 
-    ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {}, cassette)
-    await ws.send(b"\xff\xfe")
-    data = await ws.recv()
-    assert data == b"\x01\x02\x03"
-    await ws.close()
+    token = _current_cassette.set(cassette)
+    try:
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
+        await ws.send(b"\xff\xfe")
+        data = await ws.recv()
+        assert data == b"\x01\x02\x03"
+        await ws.close()
+    finally:
+        _current_cassette.reset(token)
 
     interaction = cassette.ws_interactions[0]
     assert interaction.frames[0].frame_type == "binary"
@@ -1014,8 +1052,12 @@ async def test_record_ws_async_iter(tmp_path: object) -> None:
         async def close(self, code: int = 1000, reason: str = "") -> None:
             pass
 
-    ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {}, cassette)
-    results = [item async for item in ws]
+    token = _current_cassette.set(cassette)
+    try:
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
+        results = [item async for item in ws]
+    finally:
+        _current_cassette.reset(token)
     assert results == ["a", "b"]
     assert len(cassette.ws_interactions) == 1
 
@@ -1032,7 +1074,8 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
     cassette.record_ws("wss://ws.example.com/path", {}, frames)
 
     interceptor = WebSocketInterceptor()
-    interceptor.install(cassette)
+    interceptor.install()
+    token = _current_cassette.set(cassette)
     try:
         import websockets.asyncio.client
 
@@ -1040,6 +1083,7 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
             data = await ws.recv()
             assert data == "hello"
     finally:
+        _current_cassette.reset(token)
         interceptor.uninstall()
 
 
@@ -1052,7 +1096,8 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
     cassette.load()
 
     interceptor = WebSocketInterceptor()
-    interceptor.install(cassette)
+    interceptor.install()
+    token = _current_cassette.set(cassette)
     try:
         import websockets.asyncio.client
 
@@ -1060,6 +1105,7 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
             async with websockets.asyncio.client.connect("wss://ws.example.com/unknown"):
                 pass
     finally:
+        _current_cassette.reset(token)
         interceptor.uninstall()
 
 
@@ -1071,10 +1117,8 @@ def test_websocket_interceptor_install_uninstall() -> None:
     original = websockets.asyncio.client.connect
 
     interceptor = WebSocketInterceptor()
-    cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
-    cassette.load()
 
-    interceptor.install(cassette)
+    interceptor.install()
     assert websockets.asyncio.client.connect is not original
 
     interceptor.uninstall()
@@ -1102,11 +1146,14 @@ async def test_unary_unary_record(tmp_path: object) -> None:
     callable_ = VCRUnaryUnaryCallable(
         "/pkg.Svc/Echo",
         fake_call,  # type: ignore[arg-type]
-        cassette,
         lambda x: b"\x01",
         lambda b: b,
     )
-    result = await callable_(object())
+    token = _current_cassette.set(cassette)
+    try:
+        result = await callable_(object())
+    finally:
+        _current_cassette.reset(token)
     assert isinstance(result, FakeResponse)
     assert len(cassette.grpc_interactions) == 1
     assert cassette.grpc_interactions[0].request.method == "/pkg.Svc/Echo"
@@ -1134,13 +1181,16 @@ async def test_unary_stream_record(tmp_path: object) -> None:
     callable_ = VCRUnaryStreamCallable(
         "/pkg.Svc/Stream",
         fake_stream,  # type: ignore[arg-type]
-        cassette,
         lambda x: b"\x01",
         lambda b: b,
     )
-    results = []
-    async for item in callable_(object()):
-        results.append(item)
+    token = _current_cassette.set(cassette)
+    try:
+        results = []
+        async for item in callable_(object()):
+            results.append(item)
+    finally:
+        _current_cassette.reset(token)
     assert len(results) == 2
     assert len(cassette.grpc_interactions) == 1
     # Verify chunks were encoded
@@ -1172,11 +1222,14 @@ async def test_stream_unary_record(tmp_path: object) -> None:
     callable_ = VCRStreamUnaryCallable(
         "/pkg.Svc/ClientStream",
         fake_call,  # type: ignore[arg-type]
-        cassette,
         lambda x: x,
         lambda b: b,
     )
-    result = await callable_(request_iter())
+    token = _current_cassette.set(cassette)
+    try:
+        result = await callable_(request_iter())
+    finally:
+        _current_cassette.reset(token)
     assert isinstance(result, FakeResponse)
     assert len(cassette.grpc_interactions) == 1
 
@@ -1206,13 +1259,16 @@ async def test_stream_stream_record(tmp_path: object) -> None:
     callable_ = VCRStreamStreamCallable(
         "/pkg.Svc/Bidi",
         fake_bidi,  # type: ignore[arg-type]
-        cassette,
         lambda x: x,
         lambda b: b,
     )
-    results = []
-    async for item in callable_(request_iter()):
-        results.append(item)
+    token = _current_cassette.set(cassette)
+    try:
+        results = []
+        async for item in callable_(request_iter()):
+            results.append(item)
+    finally:
+        _current_cassette.reset(token)
     assert len(results) == 2
     assert len(cassette.grpc_interactions) == 1
     body = cassette.grpc_interactions[0].response.body
@@ -1252,7 +1308,7 @@ def test_vcr_channel_wraps_methods() -> None:
     cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
     cassette.load()
 
-    channel = VCRChannel(FakeChannel(), cassette)  # type: ignore[arg-type]
+    channel = VCRChannel(FakeChannel())  # type: ignore[arg-type]
     assert isinstance(channel.unary_unary("/m"), VCRUnaryUnaryCallable)
     assert isinstance(channel.unary_stream("/m"), VCRUnaryStreamCallable)
     assert isinstance(channel.stream_unary("/m"), VCRStreamUnaryCallable)
@@ -1272,7 +1328,7 @@ async def test_vcr_channel_close() -> None:
 
     fake = FakeChannel()
     cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
-    channel = VCRChannel(fake, cassette)  # type: ignore[arg-type]
+    channel = VCRChannel(fake)  # type: ignore[arg-type]
     await channel.close()
     assert fake.closed
 
@@ -1297,7 +1353,7 @@ async def test_vcr_channel_context_manager() -> None:
 
     fake = FakeChannel()
     cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
-    channel = VCRChannel(fake, cassette)  # type: ignore[arg-type]
+    channel = VCRChannel(fake)  # type: ignore[arg-type]
 
     async with channel as ch:
         assert ch is channel
@@ -1315,7 +1371,7 @@ def test_patched_channels_create_vcr_channels() -> None:
     cassette.load()
 
     interceptor = GrpcInterceptor()
-    interceptor.install(cassette)
+    interceptor.install()
     try:
         # Verify the patched function returns VCRChannel
         import grpc.aio

@@ -8,6 +8,7 @@ import requests.adapters
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
+from cassetter.context import use_cassette
 from cassetter.intercept._requests import (
     RequestsInterceptor,
     VCRAdapter,
@@ -70,30 +71,21 @@ def test_vcr_adapter_record(tmp_path: object) -> None:
 
 def test_requests_interceptor_replay(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = RequestsInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["requests"]):
         response = requests.get("https://example.com/api")
         assert response.status_code == 200
         assert response.json() == {"data": "hello"}
-    finally:
-        interceptor.uninstall()
 
 
 def test_requests_interceptor_record(tmp_path: object, monkeypatch: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = Cassette(path, record_mode=RecordMode.ALL)
-    cassette.load()
 
     fake_response = requests.Response()
     fake_response.status_code = 200
     fake_response._content = b'{"recorded": true}'  # type: ignore[attr-defined]
     fake_response.headers["content-type"] = "application/json"
-
-    import pytest
 
     mp = pytest.MonkeyPatch()
     mp.setattr(
@@ -102,25 +94,19 @@ def test_requests_interceptor_record(tmp_path: object, monkeypatch: object) -> N
         lambda self, request, **kwargs: fake_response,
     )
 
-    interceptor = RequestsInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="all", intercept=["requests"]) as cassette:
         response = requests.get("https://example.com/new-endpoint")
         assert response.status_code == 200
         assert len(cassette.interactions) == 1
-    finally:
-        interceptor.uninstall()
-        mp.undo()
+
+    mp.undo()
 
 
 def test_requests_interceptor_install_uninstall() -> None:
     interceptor = RequestsInterceptor()
     original_send = requests.Session.send
-    cassette = Cassette("/nonexistent", record_mode=RecordMode.NONE)
-    cassette.load()
 
-    interceptor.install(cassette)
+    interceptor.install()
     assert requests.Session.send is not original_send
 
     interceptor.uninstall()
@@ -151,16 +137,11 @@ def test_vcr_adapter_no_match(tmp_path: object) -> None:
 
 def test_requests_interceptor_no_match(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
+    _preload_cassette(path)
 
-    interceptor = RequestsInterceptor()
-    interceptor.install(cassette)
-
-    try:
+    with use_cassette(path, record_mode="none", intercept=["requests"]):
         with pytest.raises(NoMatchError):
             requests.delete("https://example.com/unknown")
-    finally:
-        interceptor.uninstall()
 
 
 def test_build_requests_response_json_body() -> None:

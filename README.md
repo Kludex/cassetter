@@ -55,7 +55,7 @@ async def test_with_cassette(vcr_cassette: Cassette):
 ```python
 from cassetter import use_cassette
 
-async with use_cassette("tests/cassettes/my_test.yaml", record_mode="once"):
+with use_cassette("tests/cassettes/my_test.yaml", record_mode="once"):
     async with httpx.AsyncClient() as client:
         response = await client.get("https://api.example.com/users")
 ```
@@ -86,7 +86,7 @@ Customize filtering:
 ```python
 from cassetter import use_cassette
 
-async with use_cassette(
+with use_cassette(
     "cassette.yaml",
     filtered_headers=["x-custom-secret"],
     body_scrub_patterns=["my_secret_field"],
@@ -138,7 +138,7 @@ Default: match on method + URI. Configurable:
 ```python
 from cassetter import use_cassette
 
-async with use_cassette(
+with use_cassette(
     "cassette.yaml",
     match_on=["method", "uri", "json_body"],
     ignore_json_paths=["request_id", "timestamp"],
@@ -162,9 +162,49 @@ Available matchers: `method`, `uri`, `headers`, `body`, `json_body`.
 By default, interceptors are auto-detected based on which libraries are installed. To limit interception to specific libraries:
 
 ```python
-async with use_cassette("cassette.yaml", intercept=["httpx", "aiohttp"]):
+with use_cassette("cassette.yaml", intercept=["httpx", "aiohttp"]):
     ...
 ```
+
+## Concurrency
+
+Multiple cassettes can run concurrently in the same process - each `use_cassette` context gets its own isolated cassette via `contextvars.ContextVar`. This works out of the box with `asyncio.gather`, `anyio.create_task_group`, and any framework that creates async tasks (e.g. Pydantic Evals with `max_concurrency > 1`).
+
+```python
+async def task_a():
+    with use_cassette("cassettes/a.yaml", record_mode="none"):
+        async with httpx.AsyncClient() as client:
+            return await client.get("https://api.example.com/data")
+
+async def task_b():
+    with use_cassette("cassettes/b.yaml", record_mode="none"):
+        async with httpx.AsyncClient() as client:
+            return await client.get("https://api.example.com/data")
+
+# Each task uses its own cassette - no cross-contamination
+results = await asyncio.gather(task_a(), task_b())
+```
+
+Nested cassettes work too - the inner cassette overrides the outer, and the outer is restored when the inner exits.
+
+### Threads
+
+For `ThreadPoolExecutor`, each thread has its own context by default (no cassette). To propagate the current cassette into a thread, use `contextvars.copy_context()`:
+
+```python
+with use_cassette("cassette.yaml", record_mode="none"):
+    ctx = contextvars.copy_context()
+
+    def work():
+        with httpx.Client() as client:
+            return client.get("https://api.example.com/data")
+
+    with ThreadPoolExecutor() as pool:
+        future = pool.submit(ctx.run, work)
+        result = future.result()
+```
+
+Without `copy_context()`, threads see no active cassette and requests pass through to the real server.
 
 ## gRPC support
 
@@ -177,7 +217,7 @@ uv add "cassetter[grpc]"
 Record and replay gRPC calls by adding `"grpc"` to the interceptor list:
 
 ```python
-async with use_cassette("cassette.yaml", intercept=["grpc"]):
+with use_cassette("cassette.yaml", intercept=["grpc"]):
     channel = grpc.aio.insecure_channel("localhost:50051")
     stub = my_service_pb2_grpc.MyServiceStub(channel)
     response = await stub.Echo(my_service_pb2.EchoRequest(message="hello"))
@@ -220,7 +260,7 @@ uv add "cassetter[websockets]"
 Record and replay WebSocket connections:
 
 ```python
-async with use_cassette("cassette.yaml", intercept=["websockets"]):
+with use_cassette("cassette.yaml", intercept=["websockets"]):
     async with websockets.connect("wss://ws.example.com/stream") as ws:
         await ws.send('{"subscribe": "ticker"}')
         data = await ws.recv()
@@ -279,7 +319,7 @@ On replay, the buffered body is returned to the client SDK, which parses SSE eve
 Bypass the cassette entirely for requests to specific hosts. Matched requests pass through to the real server - no recording, no replay:
 
 ```python
-async with use_cassette(
+with use_cassette(
     "cassette.yaml",
     ignore_hosts=["*.googleapis.com", "accounts.google.com"],
 ):
@@ -289,7 +329,7 @@ async with use_cassette(
 Patterns use `fnmatch` syntax (`*` matches any sequence of characters). Combine with `ignore_localhost` for full control:
 
 ```python
-async with use_cassette(
+with use_cassette(
     "cassette.yaml",
     ignore_localhost=True,
     ignore_hosts=["*.googleapis.com"],
@@ -308,7 +348,7 @@ def my_hook(request: RawRequest) -> None:
     if not request.uri.startswith("https://api.mycompany.com"):
         raise BypassCassette
 
-async with use_cassette("cassette.yaml", before_record_request=my_hook):
+with use_cassette("cassette.yaml", before_record_request=my_hook):
     ...
 ```
 
@@ -327,7 +367,7 @@ def vcr_config():
 Force re-recording when cassettes get stale:
 
 ```python
-async with use_cassette("cassette.yaml", max_age="30d", on_expiry="rerecord"):
+with use_cassette("cassette.yaml", max_age="30d", on_expiry="rerecord"):
     ...
 ```
 

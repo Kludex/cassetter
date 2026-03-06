@@ -8,7 +8,8 @@ import grpc
 import grpc.aio
 
 from cassetter._core import Body, GrpcResponse
-from cassetter.cassette import Cassette, NoMatchError
+from cassetter._state import get_current_cassette
+from cassetter.cassette import NoMatchError
 
 
 class VCRUnaryUnaryCallable:
@@ -18,13 +19,11 @@ class VCRUnaryUnaryCallable:
         self,
         method: str,
         real_callable: grpc.aio.UnaryUnaryMultiCallable[Any, Any] | None,
-        cassette: Cassette,
         request_serializer: Any,
         response_deserializer: Any,
     ) -> None:
         self._method = method
         self._real = real_callable
-        self._cassette = cassette
         self._request_serializer = request_serializer
         self._response_deserializer = response_deserializer
 
@@ -38,16 +37,24 @@ class VCRUnaryUnaryCallable:
         wait_for_ready: bool | None = None,
         compression: Any = None,
     ) -> Any:
+        cassette = get_current_cassette()
+        if cassette is None:
+            assert self._real is not None
+            return await self._real(
+                request, timeout=timeout, metadata=metadata,
+                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+            )
+
         req_bytes: bytes = self._request_serializer(request)
         req_body = Body("binary", req_bytes)
         md = _metadata_to_dict(metadata)
 
         try:
-            grpc_resp = self._cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method)
             content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
             return self._response_deserializer(content)
         except NoMatchError:
-            if not self._cassette.can_record:
+            if not cassette.can_record:
                 raise
 
         assert self._real is not None
@@ -64,7 +71,7 @@ class VCRUnaryUnaryCallable:
 
         json_debug = _build_json_debug(request, response)
 
-        self._cassette.record_grpc(
+        cassette.record_grpc(
             method=self._method,
             metadata=md,
             request_body=req_body,
@@ -81,13 +88,11 @@ class VCRUnaryStreamCallable:
         self,
         method: str,
         real_callable: grpc.aio.UnaryStreamMultiCallable[Any, Any] | None,
-        cassette: Cassette,
         request_serializer: Any,
         response_deserializer: Any,
     ) -> None:
         self._method = method
         self._real = real_callable
-        self._cassette = cassette
         self._request_serializer = request_serializer
         self._response_deserializer = response_deserializer
 
@@ -101,15 +106,23 @@ class VCRUnaryStreamCallable:
         wait_for_ready: bool | None = None,
         compression: Any = None,
     ) -> AsyncIterator[Any]:
+        cassette = get_current_cassette()
+        if cassette is None:
+            assert self._real is not None
+            return self._real(
+                request, timeout=timeout, metadata=metadata,
+                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+            )
+
         req_bytes: bytes = self._request_serializer(request)
         req_body = Body("binary", req_bytes)
         md = _metadata_to_dict(metadata)
 
         try:
-            grpc_resp = self._cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method)
             return _replay_stream(grpc_resp, self._response_deserializer)
         except NoMatchError:
-            if not self._cassette.can_record:
+            if not cassette.can_record:
                 raise
 
         assert self._real is not None
@@ -135,6 +148,7 @@ class VCRUnaryStreamCallable:
         wait_for_ready: bool | None,
         compression: Any,
     ) -> AsyncIterator[Any]:
+        cassette = get_current_cassette()
         assert self._real is not None
         call = self._real(
             request,
@@ -150,12 +164,13 @@ class VCRUnaryStreamCallable:
             chunks.append(resp_bytes)
             yield response
         resp_body = Body("binary", _encode_chunks(chunks))
-        self._cassette.record_grpc(
-            method=self._method,
-            metadata=md,
-            request_body=req_body,
-            response_body=resp_body,
-        )
+        if cassette is not None:
+            cassette.record_grpc(
+                method=self._method,
+                metadata=md,
+                request_body=req_body,
+                response_body=resp_body,
+            )
 
 
 class VCRStreamUnaryCallable:
@@ -165,13 +180,11 @@ class VCRStreamUnaryCallable:
         self,
         method: str,
         real_callable: grpc.aio.StreamUnaryMultiCallable[Any, Any] | None,
-        cassette: Cassette,
         request_serializer: Any,
         response_deserializer: Any,
     ) -> None:
         self._method = method
         self._real = real_callable
-        self._cassette = cassette
         self._request_serializer = request_serializer
         self._response_deserializer = response_deserializer
 
@@ -185,6 +198,14 @@ class VCRStreamUnaryCallable:
         wait_for_ready: bool | None = None,
         compression: Any = None,
     ) -> Any:
+        cassette = get_current_cassette()
+        if cassette is None:
+            assert self._real is not None
+            return await self._real(
+                request_iterator, timeout=timeout, metadata=metadata,
+                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+            )
+
         md = _metadata_to_dict(metadata)
         req_chunks: list[bytes] = []
         async for req in request_iterator:
@@ -192,11 +213,11 @@ class VCRStreamUnaryCallable:
         req_body = Body("binary", _encode_chunks(req_chunks))
 
         try:
-            grpc_resp = self._cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method)
             content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
             return self._response_deserializer(content)
         except NoMatchError:
-            if not self._cassette.can_record:
+            if not cassette.can_record:
                 raise
 
         assert self._real is not None
@@ -211,7 +232,7 @@ class VCRStreamUnaryCallable:
         resp_bytes: bytes = response.SerializeToString()
         resp_body = Body("binary", resp_bytes)
 
-        self._cassette.record_grpc(
+        cassette.record_grpc(
             method=self._method,
             metadata=md,
             request_body=req_body,
@@ -228,13 +249,11 @@ class VCRStreamStreamCallable:
         self,
         method: str,
         real_callable: grpc.aio.StreamStreamMultiCallable[Any, Any] | None,
-        cassette: Cassette,
         request_serializer: Any,
         response_deserializer: Any,
     ) -> None:
         self._method = method
         self._real = real_callable
-        self._cassette = cassette
         self._request_serializer = request_serializer
         self._response_deserializer = response_deserializer
 
@@ -248,13 +267,21 @@ class VCRStreamStreamCallable:
         wait_for_ready: bool | None = None,
         compression: Any = None,
     ) -> AsyncIterator[Any]:
+        cassette = get_current_cassette()
+        if cassette is None:
+            assert self._real is not None
+            return self._real(
+                request_iterator, timeout=timeout, metadata=metadata,
+                credentials=credentials, wait_for_ready=wait_for_ready, compression=compression,
+            )
+
         md = _metadata_to_dict(metadata)
 
         try:
-            grpc_resp = self._cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method)
             return _replay_stream(grpc_resp, self._response_deserializer)
         except NoMatchError:
-            if not self._cassette.can_record:
+            if not cassette.can_record:
                 raise
 
         assert self._real is not None
@@ -270,6 +297,7 @@ class VCRStreamStreamCallable:
         wait_for_ready: bool | None,
         compression: Any,
     ) -> AsyncIterator[Any]:
+        cassette = get_current_cassette()
         # Collect all request chunks for recording
         req_chunks: list[bytes] = []
         async for req in request_iterator:
@@ -291,20 +319,20 @@ class VCRStreamStreamCallable:
             resp_chunks.append(resp_bytes)
             yield response
         resp_body = Body("binary", _encode_chunks(resp_chunks))
-        self._cassette.record_grpc(
-            method=self._method,
-            metadata=md,
-            request_body=req_body,
-            response_body=resp_body,
-        )
+        if cassette is not None:
+            cassette.record_grpc(
+                method=self._method,
+                metadata=md,
+                request_body=req_body,
+                response_body=resp_body,
+            )
 
 
 class VCRChannel:
     """Wraps a real grpc.aio.Channel to intercept stub method calls."""
 
-    def __init__(self, real_channel: grpc.aio.Channel, cassette: Cassette) -> None:
+    def __init__(self, real_channel: grpc.aio.Channel) -> None:
         self._real = real_channel
-        self._cassette = cassette
 
     def unary_unary(
         self,
@@ -313,7 +341,7 @@ class VCRChannel:
         response_deserializer: Any = None,
     ) -> VCRUnaryUnaryCallable:
         real_callable = self._real.unary_unary(method, request_serializer, response_deserializer)
-        return VCRUnaryUnaryCallable(method, real_callable, self._cassette, request_serializer, response_deserializer)
+        return VCRUnaryUnaryCallable(method, real_callable, request_serializer, response_deserializer)
 
     def unary_stream(
         self,
@@ -322,7 +350,7 @@ class VCRChannel:
         response_deserializer: Any = None,
     ) -> VCRUnaryStreamCallable:
         real_callable = self._real.unary_stream(method, request_serializer, response_deserializer)
-        return VCRUnaryStreamCallable(method, real_callable, self._cassette, request_serializer, response_deserializer)
+        return VCRUnaryStreamCallable(method, real_callable, request_serializer, response_deserializer)
 
     def stream_unary(
         self,
@@ -331,7 +359,7 @@ class VCRChannel:
         response_deserializer: Any = None,
     ) -> VCRStreamUnaryCallable:
         real_callable = self._real.stream_unary(method, request_serializer, response_deserializer)
-        return VCRStreamUnaryCallable(method, real_callable, self._cassette, request_serializer, response_deserializer)
+        return VCRStreamUnaryCallable(method, real_callable, request_serializer, response_deserializer)
 
     def stream_stream(
         self,
@@ -340,7 +368,7 @@ class VCRChannel:
         response_deserializer: Any = None,
     ) -> VCRStreamStreamCallable:
         real_callable = self._real.stream_stream(method, request_serializer, response_deserializer)
-        return VCRStreamStreamCallable(method, real_callable, self._cassette, request_serializer, response_deserializer)
+        return VCRStreamStreamCallable(method, real_callable, request_serializer, response_deserializer)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._real, name)
@@ -362,25 +390,21 @@ class GrpcInterceptor:
     def __init__(self) -> None:
         self._original_insecure: Any = None
         self._original_secure: Any = None
-        self._cassette: Cassette | None = None
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
+    def install(self) -> None:
         self._original_insecure = grpc.aio.insecure_channel
         self._original_secure = grpc.aio.secure_channel
-        interceptor = self
+
+        original_insecure = self._original_insecure
+        original_secure = self._original_secure
 
         def patched_insecure(target: str, **kwargs: Any) -> VCRChannel:  # pragma: no cover
-            assert interceptor._original_insecure is not None
-            assert interceptor._cassette is not None
-            real = interceptor._original_insecure(target, **kwargs)
-            return VCRChannel(real, interceptor._cassette)
+            real = original_insecure(target, **kwargs)
+            return VCRChannel(real)
 
         def patched_secure(target: str, credentials: Any, **kwargs: Any) -> VCRChannel:  # pragma: no cover
-            assert interceptor._original_secure is not None
-            assert interceptor._cassette is not None
-            real = interceptor._original_secure(target, credentials, **kwargs)
-            return VCRChannel(real, interceptor._cassette)
+            real = original_secure(target, credentials, **kwargs)
+            return VCRChannel(real)
 
         grpc.aio.insecure_channel = patched_insecure
         grpc.aio.secure_channel = patched_secure
@@ -390,7 +414,6 @@ class GrpcInterceptor:
             grpc.aio.insecure_channel = self._original_insecure
         if self._original_secure is not None:
             grpc.aio.secure_channel = self._original_secure
-        self._cassette = None
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,8 @@ from unittest.mock import patch
 import pyreqwest_impersonate as pri
 
 from cassetter._core import HttpResponse as _HttpResponse
-from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
+from cassetter._state import get_current_cassette
+from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
 
 _METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
 _ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
@@ -49,18 +50,15 @@ class PyreqwestInterceptor:
     """Intercepts pyreqwest_impersonate by patching every Client HTTP method."""
 
     def __init__(self) -> None:
-        self._cassette: Cassette | None = None
         self._patchers: list[Any] = []
 
-    def install(self, cassette: Cassette) -> None:
-        self._cassette = cassette
-
+    def install(self) -> None:
         for method_name in _ALL_METHODS:
             original = getattr(pri.Client, method_name)
             patcher = patch.object(
                 pri.Client,
                 method_name,
-                _make_wrapper(self, method_name, original),
+                _make_wrapper(method_name, original),
             )
             patcher.start()
             self._patchers.append(patcher)
@@ -69,31 +67,28 @@ class PyreqwestInterceptor:
         for patcher in reversed(self._patchers):
             patcher.stop()
         self._patchers.clear()
-        self._cassette = None
 
 
 def _make_wrapper(
-    interceptor: PyreqwestInterceptor,
     method_name: str,
     original: Any,
 ) -> Any:
     if method_name == "request":
 
         def request_wrapper(client: Any, method: str, url: str, **kwargs: Any) -> Any:
-            return _intercept(interceptor, original, client, method.upper(), url, (method, url), kwargs)
+            return _intercept(original, client, method.upper(), url, (method, url), kwargs)
 
         return request_wrapper
 
     http_method = method_name.upper()
 
     def method_wrapper(client: Any, url: str, **kwargs: Any) -> Any:
-        return _intercept(interceptor, original, client, http_method, url, (url,), kwargs)
+        return _intercept(original, client, http_method, url, (url,), kwargs)
 
     return method_wrapper
 
 
 def _intercept(
-    interceptor: PyreqwestInterceptor,
     original: Any,
     client: Any,
     method: str,
@@ -101,9 +96,11 @@ def _intercept(
     original_args: tuple[Any, ...],
     kwargs: dict[str, Any],
 ) -> Any:
-    assert interceptor._cassette is not None
+    cassette = get_current_cassette()
+    if cassette is None:
+        return original(client, *original_args, **kwargs)
 
-    if interceptor._cassette.should_bypass(url):
+    if cassette.should_bypass(url):
         return original(client, *original_args, **kwargs)
 
     norm_headers = _extract_headers(kwargs.get("headers"))
@@ -113,7 +110,7 @@ def _intercept(
         json_payload=kwargs.get("json"),
     )
 
-    hook = interceptor._cassette.before_record_request
+    hook = cassette.before_record_request
     if hook is not None:
         try:
             hook(RawRequest(method, url, norm_headers, body))
@@ -121,16 +118,16 @@ def _intercept(
             return original(client, *original_args, **kwargs)
 
     try:
-        response = interceptor._cassette.play(method, url, norm_headers, body)
+        response = cassette.play(method, url, norm_headers, body)
         return _build_replay_response(url, response)
     except NoMatchError:
-        if not interceptor._cassette.can_record:
+        if not cassette.can_record:
             raise
 
     real_response = original(client, *original_args, **kwargs)
     resp_headers = _extract_headers(real_response.headers)
 
-    interceptor._cassette.record(
+    cassette.record(
         method=method,
         uri=real_response.url,
         request_headers=norm_headers,

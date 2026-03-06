@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from cassetter._core import MatchConfig, SecurityConfig
+from cassetter._state import _current_cassette, acquire_patches, release_patches
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
 from cassetter.context import resolve_interceptors
@@ -28,7 +29,7 @@ def _resolve_cassette(
     vcr_config: CassetteConfig,
     cli_record_mode: str | None,
     test_fspath: str,
-) -> tuple[Cassette, list[InterceptorProtocol]]:
+) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
     cassette_name = node_name + ".yaml"
     cassette_dir = vcr_config.get("cassette_dir", "cassettes")
@@ -91,8 +92,8 @@ def _resolve_cassette(
     cassette.load()
 
     intercept_names = vcr_config.get("intercept")
-    interceptors = resolve_interceptors(intercept_names)
-    return cassette, interceptors
+    interceptor_classes = resolve_interceptors(intercept_names)
+    return cassette, interceptor_classes
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +106,7 @@ def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> 
 
     cli_record_mode = request.config.getoption("--record-mode", default=None)
 
-    cassette, interceptors = _resolve_cassette(
+    cassette, interceptor_classes = _resolve_cassette(
         node_name=request.node.name,
         marker_args=marker.args,
         marker_kwargs=dict(marker.kwargs),
@@ -119,12 +120,12 @@ def vcr_cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> 
     if _loaded_cassettes is not None:
         _loaded_cassettes.add(os.path.abspath(cassette.path))
 
-    for interceptor in interceptors:
-        interceptor.install(cassette)
+    acquire_patches(interceptor_classes)
+    token = _current_cassette.set(cassette)
 
     yield cassette
 
-    # Uninstall interceptors and save
-    for interceptor in reversed(interceptors):
-        interceptor.uninstall()
+    # Reset context and release patches
+    _current_cassette.reset(token)
+    release_patches(interceptor_classes)
     cassette.save()
