@@ -17,11 +17,11 @@ from cassetter.cassette import (
     BeforeRecordRequest as BeforeRecordRequest,
     BypassCassette as BypassCassette,
     Cassette as Cassette,
-    RawRequest as RawRequest,
     CassetteExpiredError as CassetteExpiredError,
     CassetteExpiredWarning as CassetteExpiredWarning,
     CassetteNotFoundError as CassetteNotFoundError,
     NoMatchError as NoMatchError,
+    RawRequest as RawRequest,
 )
 from cassetter.context import use_cassette as use_cassette
 from cassetter.recording import RecordMode as RecordMode
