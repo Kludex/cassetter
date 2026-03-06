@@ -88,7 +88,7 @@ from cassetter import use_cassette
 
 with use_cassette(
     "cassette.yaml",
-    filtered_headers=["x-custom-secret"],
+    filter_headers=["x-custom-secret"],
     body_scrub_patterns=["my_secret_field"],
     filter_replacement="***REDACTED***",
 ):

@@ -61,10 +61,10 @@ def _resolve_cassette(
     )
 
     security_kwargs: dict[str, Any] = {}
-    if "filtered_headers" in vcr_config:
-        security_kwargs["filtered_headers"] = vcr_config["filtered_headers"]
-    if "filtered_query_params" in vcr_config:
-        security_kwargs["filtered_query_params"] = vcr_config["filtered_query_params"]
+    if "filter_headers" in vcr_config:
+        security_kwargs["filter_headers"] = vcr_config["filter_headers"]
+    if "filter_query_params" in vcr_config:
+        security_kwargs["filter_query_params"] = vcr_config["filter_query_params"]
     if "body_scrub_patterns" in vcr_config:
         security_kwargs["body_scrub_patterns"] = vcr_config["body_scrub_patterns"]
     if "filter_replacement" in vcr_config:

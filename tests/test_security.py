@@ -10,17 +10,17 @@ from cassetter._core import (
 )
 
 
-def test_security_default_filtered_headers() -> None:
+def test_security_default_filter_headers() -> None:
     config = SecurityConfig()
-    assert "authorization" in config.filtered_headers
-    assert "cookie" in config.filtered_headers
-    assert "x-api-key" in config.filtered_headers
+    assert "authorization" in config.filter_headers
+    assert "cookie" in config.filter_headers
+    assert "x-api-key" in config.filter_headers
 
 
-def test_security_default_filtered_query_params() -> None:
+def test_security_default_filter_query_params() -> None:
     config = SecurityConfig()
-    assert "api_key" in config.filtered_query_params
-    assert "access_token" in config.filtered_query_params
+    assert "api_key" in config.filter_query_params
+    assert "access_token" in config.filter_query_params
 
 
 def test_security_default_body_scrub_patterns() -> None:
@@ -117,8 +117,8 @@ def test_scrub_custom_filter_list() -> None:
         recorded_at="2026-01-01T00:00:00Z",
     )
     config = SecurityConfig(
-        filtered_headers=["x-custom-secret"],
-        filtered_query_params=[],
+        filter_headers=["x-custom-secret"],
+        filter_query_params=[],
         body_scrub_patterns=[],
     )
     scrubbed = scrub_interaction(interaction, config)

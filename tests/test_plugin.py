@@ -185,8 +185,8 @@ def test_resolve_cassette_security_config_from_vcr_config(tmp_path: object) -> N
         vcr_config=CassetteConfig(
             record_mode="none",
             cassette_dir="cassettes",
-            filtered_headers=["x-api-key"],
-            filtered_query_params=["token"],
+            filter_headers=["x-api-key"],
+            filter_query_params=["token"],
             body_scrub_patterns=["secret"],
             filter_replacement="[HIDDEN]",
         ),

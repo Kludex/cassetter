@@ -10,9 +10,9 @@ use crate::protocol::http::HttpInteraction;
 #[derive(Clone, Debug)]
 pub struct SecurityConfig {
     #[pyo3(get, set)]
-    pub filtered_headers: Vec<String>,
+    pub filter_headers: Vec<String>,
     #[pyo3(get, set)]
-    pub filtered_query_params: Vec<String>,
+    pub filter_query_params: Vec<String>,
     #[pyo3(get, set)]
     pub body_scrub_patterns: Vec<String>,
     #[pyo3(get, set)]
@@ -23,22 +23,22 @@ pub struct SecurityConfig {
 impl SecurityConfig {
     #[new]
     #[pyo3(signature = (
-        filtered_headers=None,
-        filtered_query_params=None,
+        filter_headers=None,
+        filter_query_params=None,
         body_scrub_patterns=None,
         replacement=None,
     ))]
     fn new(
-        filtered_headers: Option<Vec<String>>,
-        filtered_query_params: Option<Vec<String>>,
+        filter_headers: Option<Vec<String>>,
+        filter_query_params: Option<Vec<String>>,
         body_scrub_patterns: Option<Vec<String>>,
         replacement: Option<String>,
     ) -> Self {
         SecurityConfig {
-            filtered_headers: filtered_headers
-                .unwrap_or_else(|| defaults::DEFAULT_FILTERED_HEADERS.iter().map(|s| s.to_string()).collect()),
-            filtered_query_params: filtered_query_params
-                .unwrap_or_else(|| defaults::DEFAULT_FILTERED_QUERY_PARAMS.iter().map(|s| s.to_string()).collect()),
+            filter_headers: filter_headers
+                .unwrap_or_else(|| defaults::DEFAULT_FILTER_HEADERS.iter().map(|s| s.to_string()).collect()),
+            filter_query_params: filter_query_params
+                .unwrap_or_else(|| defaults::DEFAULT_FILTER_QUERY_PARAMS.iter().map(|s| s.to_string()).collect()),
             body_scrub_patterns: body_scrub_patterns
                 .unwrap_or_else(|| defaults::DEFAULT_BODY_SCRUB_PATTERNS.iter().map(|s| s.to_string()).collect()),
             replacement: replacement.unwrap_or_else(|| "[FILTERED]".to_string()),
@@ -55,14 +55,14 @@ pub fn scrub_interaction(
     let mut scrubbed = interaction.clone();
 
     // Scrub request headers
-    headers::filter_headers(&mut scrubbed.request.headers, &config.filtered_headers);
+    headers::filter_headers(&mut scrubbed.request.headers, &config.filter_headers);
 
     // Scrub response headers
-    headers::filter_headers(&mut scrubbed.response.headers, &config.filtered_headers);
+    headers::filter_headers(&mut scrubbed.response.headers, &config.filter_headers);
 
     // Scrub query params from URI
     if let Some(new_uri) =
-        headers::filter_query_params(&scrubbed.request.uri, &config.filtered_query_params, &config.replacement)
+        headers::filter_query_params(&scrubbed.request.uri, &config.filter_query_params, &config.replacement)
     {
         scrubbed.request.uri = new_uri;
     }
