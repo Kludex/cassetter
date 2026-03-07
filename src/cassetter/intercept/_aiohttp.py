@@ -39,8 +39,8 @@ class AiohttpInterceptor:
             if cassette.should_bypass(uri):
                 return await original_request(session, method, str_or_url, **kwargs)
 
-            headers = _extract_request_headers(kwargs.get("headers"))
-            body = _extract_request_body(kwargs)
+            headers = extract_request_headers(kwargs.get("headers"))
+            body = extract_request_body(kwargs)
 
             hook = cassette.before_record_request
             if hook is not None:
@@ -51,14 +51,14 @@ class AiohttpInterceptor:
 
             try:
                 response = cassette.play(method.upper(), uri, headers, body)
-                return _build_aiohttp_response(method, uri, response)
+                return build_aiohttp_response(method, uri, response)
             except NoMatchError:
                 if not cassette.can_record:
                     raise
 
             real_response = await original_request(session, method, str_or_url, **kwargs)
             resp_body = await real_response.read()
-            resp_headers = _extract_response_headers(real_response.headers)
+            resp_headers = extract_response_headers(real_response.headers)
 
             cassette.record(
                 method=method.upper(),
@@ -80,7 +80,7 @@ class AiohttpInterceptor:
             self._patcher = None
 
 
-def _extract_request_headers(headers: Any) -> dict[str, list[str]]:
+def extract_request_headers(headers: Any) -> dict[str, list[str]]:
     if headers is None:
         return {}
     result: dict[str, list[str]] = {}
@@ -89,7 +89,7 @@ def _extract_request_headers(headers: Any) -> dict[str, list[str]]:
     return result
 
 
-def _extract_request_body(kwargs: dict[str, Any]) -> bytes | None:
+def extract_request_body(kwargs: dict[str, Any]) -> bytes | None:
     if "data" in kwargs and kwargs["data"] is not None:
         data = kwargs["data"]
         if isinstance(data, bytes):
@@ -101,14 +101,14 @@ def _extract_request_body(kwargs: dict[str, Any]) -> bytes | None:
     return None
 
 
-def _extract_response_headers(headers: CIMultiDictProxy[str]) -> dict[str, list[str]]:
+def extract_response_headers(headers: CIMultiDictProxy[str]) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for key, value in headers.items():
         result.setdefault(key.lower(), []).append(value)
     return result
 
 
-def _build_aiohttp_response(method: str, uri: str, response: _HttpResponse) -> aiohttp.ClientResponse:
+def build_aiohttp_response(method: str, uri: str, response: _HttpResponse) -> aiohttp.ClientResponse:
 
     body = response.body
     if body.body_type == "json":

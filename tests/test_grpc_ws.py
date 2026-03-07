@@ -19,7 +19,7 @@ from cassetter._core import (
     find_grpc_match,
     find_ws_match,
 )
-from cassetter._state import _current_cassette
+from cassetter._state import current_cassette
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.recording import RecordMode
 
@@ -479,107 +479,107 @@ def test_record_ws_before_load() -> None:
 
 
 def test_grpc_chunk_encode_decode_roundtrip() -> None:
-    from cassetter.intercept._grpc import _decode_chunks, _encode_chunks
+    from cassetter.intercept._grpc import decode_chunks, encode_chunks
 
     chunks = [b"hello", b"world", b"\x00\x01\x02"]
-    encoded = _encode_chunks(chunks)
-    assert _decode_chunks(encoded) == chunks
+    encoded = encode_chunks(chunks)
+    assert decode_chunks(encoded) == chunks
 
 
 def test_grpc_chunk_encode_empty() -> None:
-    from cassetter.intercept._grpc import _decode_chunks, _encode_chunks
+    from cassetter.intercept._grpc import decode_chunks, encode_chunks
 
-    assert _encode_chunks([]) == b""
-    assert _decode_chunks(b"") == []
+    assert encode_chunks([]) == b""
+    assert decode_chunks(b"") == []
 
 
 def test_grpc_chunk_encode_single() -> None:
-    from cassetter.intercept._grpc import _decode_chunks, _encode_chunks
+    from cassetter.intercept._grpc import decode_chunks, encode_chunks
 
     chunks = [b"\x0a\x0b"]
-    encoded = _encode_chunks(chunks)
-    assert _decode_chunks(encoded) == chunks
+    encoded = encode_chunks(chunks)
+    assert decode_chunks(encoded) == chunks
 
 
 def test_grpc_chunk_decode_truncated() -> None:
-    from cassetter.intercept._grpc import _decode_chunks
+    from cassetter.intercept._grpc import decode_chunks
 
     # Less than 4 bytes - can't read length
-    assert _decode_chunks(b"\x00\x01") == []
+    assert decode_chunks(b"\x00\x01") == []
 
 
 # --- gRPC interceptor helpers ---
 
 
-def test_metadata_to_dict_none() -> None:
-    from cassetter.intercept._grpc import _metadata_to_dict
+def testmetadata_to_dict_none() -> None:
+    from cassetter.intercept._grpc import metadata_to_dict
 
-    assert _metadata_to_dict(None) == {}
+    assert metadata_to_dict(None) == {}
 
 
-def test_metadata_to_dict_str_values() -> None:
-    from cassetter.intercept._grpc import _metadata_to_dict
+def testmetadata_to_dict_str_values() -> None:
+    from cassetter.intercept._grpc import metadata_to_dict
 
     md = [("key1", "val1"), ("key2", "val2"), ("key1", "val1b")]
-    result = _metadata_to_dict(md)
+    result = metadata_to_dict(md)
     assert result == {"key1": ["val1", "val1b"], "key2": ["val2"]}
 
 
-def test_metadata_to_dict_bytes_values() -> None:
-    from cassetter.intercept._grpc import _metadata_to_dict
+def testmetadata_to_dict_bytes_values() -> None:
+    from cassetter.intercept._grpc import metadata_to_dict
 
     md = [("key", b"binary-val")]
-    result = _metadata_to_dict(md)
+    result = metadata_to_dict(md)
     assert result == {"key": ["binary-val"]}
 
 
-def test_build_json_debug_no_protobuf() -> None:
-    from cassetter.intercept._grpc import _build_json_debug
+def testbuild_json_debug_no_protobuf() -> None:
+    from cassetter.intercept._grpc import build_json_debug
 
     # Objects without MessageToDict support return None
-    result = _build_json_debug("req", "resp")
+    result = build_json_debug("req", "resp")
     assert result is None
 
 
-def test_build_json_debug_none_request() -> None:
-    from cassetter.intercept._grpc import _build_json_debug
+def testbuild_json_debug_none_request() -> None:
+    from cassetter.intercept._grpc import build_json_debug
 
-    result = _build_json_debug(None, "resp")
+    result = build_json_debug(None, "resp")
     assert result is None
 
 
 @pytest.mark.anyio
-async def test_replay_stream_chunked() -> None:
-    from cassetter.intercept._grpc import _encode_chunks, _replay_stream
+async def testreplay_stream_chunked() -> None:
+    from cassetter.intercept._grpc import encode_chunks, replay_stream
 
     chunks = [b"\x01", b"\x02\x03"]
-    encoded = _encode_chunks(chunks)
+    encoded = encode_chunks(chunks)
     resp = GrpcResponse(0, "OK", {}, Body("binary", encoded))
     results = []
-    async for item in _replay_stream(resp, lambda b: f"got:{b.hex()}"):
+    async for item in replay_stream(resp, lambda b: f"got:{b.hex()}"):
         results.append(item)
     assert results == ["got:01", "got:0203"]
 
 
 @pytest.mark.anyio
-async def test_replay_stream_single_fallback() -> None:
-    from cassetter.intercept._grpc import _replay_stream
+async def testreplay_stream_single_fallback() -> None:
+    from cassetter.intercept._grpc import replay_stream
 
     # Non-chunked data: falls back to treating entire body as single message
     resp = GrpcResponse(0, "OK", {}, Body("binary", b"\x01\x02"))
     results = []
-    async for item in _replay_stream(resp, lambda b: f"got:{len(b)}"):
+    async for item in replay_stream(resp, lambda b: f"got:{len(b)}"):
         results.append(item)
     assert results == ["got:2"]
 
 
 @pytest.mark.anyio
-async def test_replay_stream_empty_body() -> None:
-    from cassetter.intercept._grpc import _replay_stream
+async def testreplay_stream_empty_body() -> None:
+    from cassetter.intercept._grpc import replay_stream
 
     resp = GrpcResponse(0, "OK", {}, Body("none", b""))
     results = []
-    async for item in _replay_stream(resp, lambda b: f"got:{len(b)}"):
+    async for item in replay_stream(resp, lambda b: f"got:{len(b)}"):
         results.append(item)
     assert results == ["got:0"]
 
@@ -624,11 +624,11 @@ async def test_unary_unary_replay(tmp_path: object) -> None:
         lambda x: b"\x01",
         lambda b: f"deserialized:{b.hex()}",
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         result = await callable_(object())
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert result == "deserialized:0203"
 
 
@@ -646,17 +646,17 @@ async def test_unary_unary_no_match_raises(tmp_path: object) -> None:
         lambda x: b"\x01",
         lambda b: b,
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         with pytest.raises(NoMatchError):
             await callable_(object())
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
 
 @pytest.mark.anyio
 async def test_unary_stream_replay(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryStreamCallable, _encode_chunks
+    from cassetter.intercept._grpc import VCRUnaryStreamCallable, encode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_stream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -667,7 +667,7 @@ async def test_unary_stream_replay(tmp_path: object) -> None:
         method="/pkg.Svc/Stream",
         metadata={},
         request_body=Body("binary", b"\x00"),
-        response_body=Body("binary", _encode_chunks(chunks)),
+        response_body=Body("binary", encode_chunks(chunks)),
     )
 
     callable_ = VCRUnaryStreamCallable(
@@ -676,13 +676,13 @@ async def test_unary_stream_replay(tmp_path: object) -> None:
         lambda x: b"\x00",
         lambda b: f"chunk:{b.hex()}",
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         results = []
         async for item in callable_(object()):
             results.append(item)
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert results == ["chunk:01", "chunk:02", "chunk:03"]
 
 
@@ -695,13 +695,13 @@ async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
     cassette.load()
 
     callable_ = VCRUnaryStreamCallable("/pkg.Svc/X", None, lambda x: b"", lambda b: b)
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         with pytest.raises(NoMatchError):
             async for _ in callable_(object()):
                 pass
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
 
 @pytest.mark.anyio
@@ -729,11 +729,11 @@ async def test_stream_unary_replay(tmp_path: object) -> None:
         lambda x: x,  # identity serializer
         lambda b: f"resp:{b.hex()}",
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         result = await callable_(request_iter())
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert result == "resp:ff"
 
 
@@ -749,17 +749,17 @@ async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
         yield b"\x01"  # type: ignore[misc]
 
     callable_ = VCRStreamUnaryCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         with pytest.raises(NoMatchError):
             await callable_(request_iter())
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
 
 @pytest.mark.anyio
 async def test_stream_stream_replay(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamStreamCallable, _encode_chunks
+    from cassetter.intercept._grpc import VCRStreamStreamCallable, encode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_bidi.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -770,7 +770,7 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
         method="/pkg.Svc/Bidi",
         metadata={},
         request_body=Body("binary", b"\x00"),
-        response_body=Body("binary", _encode_chunks(resp_chunks)),
+        response_body=Body("binary", encode_chunks(resp_chunks)),
     )
 
     async def request_iter() -> AsyncIterator[bytes]:
@@ -782,13 +782,13 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
         lambda x: x,
         lambda b: f"got:{b.hex()}",
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         results = []
         async for item in callable_(request_iter()):
             results.append(item)
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert results == ["got:0a", "got:0b"]
 
 
@@ -804,56 +804,56 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
         yield b"\x01"  # type: ignore[misc]
 
     callable_ = VCRStreamStreamCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         with pytest.raises(NoMatchError):
             async for _ in callable_(request_iter()):
                 pass
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
 
 # --- WebSocket interceptor helpers ---
 
 
-def test_frame_to_data_text() -> None:
-    from cassetter.intercept._websockets import _frame_to_data
+def testframe_to_data_text() -> None:
+    from cassetter.intercept._websockets import frame_to_data
 
     frame = WsFrame("recv", "text", Body("text", "hello"), 0)
-    assert _frame_to_data(frame) == "hello"
+    assert frame_to_data(frame) == "hello"
 
 
-def test_frame_to_data_binary() -> None:
-    from cassetter.intercept._websockets import _frame_to_data
+def testframe_to_data_binary() -> None:
+    from cassetter.intercept._websockets import frame_to_data
 
     frame = WsFrame("recv", "binary", Body("binary", b"\x01\x02"), 0)
-    assert _frame_to_data(frame) == b"\x01\x02"
+    assert frame_to_data(frame) == b"\x01\x02"
 
 
-def test_frame_to_data_none_body() -> None:
-    from cassetter.intercept._websockets import _frame_to_data
+def testframe_to_data_none_body() -> None:
+    from cassetter.intercept._websockets import frame_to_data
 
     frame = WsFrame("recv", "text", Body("none", b""), 0)
-    assert _frame_to_data(frame) == ""
+    assert frame_to_data(frame) == ""
 
 
-def test_extract_ws_headers_empty() -> None:
-    from cassetter.intercept._websockets import _extract_ws_headers
+def testextract_ws_headers_empty() -> None:
+    from cassetter.intercept._websockets import extract_ws_headers
 
-    assert _extract_ws_headers({}) == {}
+    assert extract_ws_headers({}) == {}
 
 
-def test_extract_ws_headers_additional() -> None:
-    from cassetter.intercept._websockets import _extract_ws_headers
+def testextract_ws_headers_additional() -> None:
+    from cassetter.intercept._websockets import extract_ws_headers
 
-    result = _extract_ws_headers({"additional_headers": {"Authorization": "Bearer tok"}})
+    result = extract_ws_headers({"additional_headers": {"Authorization": "Bearer tok"}})
     assert result == {"authorization": ["Bearer tok"]}
 
 
-def test_extract_ws_headers_extra() -> None:
-    from cassetter.intercept._websockets import _extract_ws_headers
+def testextract_ws_headers_extra() -> None:
+    from cassetter.intercept._websockets import extract_ws_headers
 
-    result = _extract_ws_headers({"extra_headers": {"X-Key": "val"}})
+    result = extract_ws_headers({"extra_headers": {"X-Key": "val"}})
     assert result == {"x-key": ["val"]}
 
 
@@ -910,7 +910,7 @@ async def test_replay_ws_context_manager() -> None:
 
 
 @pytest.mark.anyio
-async def test_replay_ws_async_iter() -> None:
+async def test_replay_wsasync_iter() -> None:
     from cassetter.intercept._websockets import VCRWebSocketReplay
 
     interaction = WsInteraction(
@@ -944,7 +944,7 @@ async def test_record_ws_frames(tmp_path: object) -> None:
         async def close(self, code: int = 1000, reason: str = "") -> None:
             pass
 
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
         await ws.send("hello")
@@ -952,7 +952,7 @@ async def test_record_ws_frames(tmp_path: object) -> None:
         assert data == "response"
         await ws.close()
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
     assert len(cassette.ws_interactions) == 1
     interaction = cassette.ws_interactions[0]
@@ -980,13 +980,13 @@ async def test_record_ws_context_manager(tmp_path: object) -> None:
             pass
 
     real_ws = FakeWs()
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         async with VCRWebSocket(real_ws, "wss://ws.example.com", {}) as ws:
             await ws.send("x")
             await ws.recv()
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
     assert len(cassette.ws_interactions) == 1
 
@@ -1009,7 +1009,7 @@ async def test_record_ws_binary_frames(tmp_path: object) -> None:
         async def close(self, code: int = 1000, reason: str = "") -> None:
             pass
 
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
         await ws.send(b"\xff\xfe")
@@ -1017,7 +1017,7 @@ async def test_record_ws_binary_frames(tmp_path: object) -> None:
         assert data == b"\x01\x02\x03"
         await ws.close()
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
 
     interaction = cassette.ws_interactions[0]
     assert interaction.frames[0].frame_type == "binary"
@@ -1025,7 +1025,7 @@ async def test_record_ws_binary_frames(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_record_ws_async_iter(tmp_path: object) -> None:
+async def test_record_wsasync_iter(tmp_path: object) -> None:
     from cassetter.intercept._websockets import VCRWebSocket
 
     path = os.path.join(str(tmp_path), "ws_iter.yaml")
@@ -1052,12 +1052,12 @@ async def test_record_ws_async_iter(tmp_path: object) -> None:
         async def close(self, code: int = 1000, reason: str = "") -> None:
             pass
 
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
         results = [item async for item in ws]
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert results == ["a", "b"]
     assert len(cassette.ws_interactions) == 1
 
@@ -1075,7 +1075,7 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
 
     interceptor = WebSocketInterceptor()
     interceptor.install()
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         import websockets.asyncio.client
 
@@ -1083,7 +1083,7 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
             data = await ws.recv()
             assert data == "hello"
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
         interceptor.uninstall()
 
 
@@ -1097,7 +1097,7 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
 
     interceptor = WebSocketInterceptor()
     interceptor.install()
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         import websockets.asyncio.client
 
@@ -1105,7 +1105,7 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
             async with websockets.asyncio.client.connect("wss://ws.example.com/unknown"):
                 pass
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
         interceptor.uninstall()
 
 
@@ -1149,11 +1149,11 @@ async def test_unary_unary_record(tmp_path: object) -> None:
         lambda x: b"\x01",
         lambda b: b,
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         result = await callable_(object())
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert isinstance(result, FakeResponse)
     assert len(cassette.grpc_interactions) == 1
     assert cassette.grpc_interactions[0].request.method == "/pkg.Svc/Echo"
@@ -1161,7 +1161,7 @@ async def test_unary_unary_record(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_unary_stream_record(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryStreamCallable, _decode_chunks
+    from cassetter.intercept._grpc import VCRUnaryStreamCallable, decode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_rec_stream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1184,19 +1184,19 @@ async def test_unary_stream_record(tmp_path: object) -> None:
         lambda x: b"\x01",
         lambda b: b,
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         results = []
         async for item in callable_(object()):
             results.append(item)
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert len(results) == 2
     assert len(cassette.grpc_interactions) == 1
     # Verify chunks were encoded
     body = cassette.grpc_interactions[0].response.body
     assert isinstance(body.content, bytes)
-    chunks = _decode_chunks(body.content)
+    chunks = decode_chunks(body.content)
     assert chunks == [b"\x0a", b"\x0b"]
 
 
@@ -1225,18 +1225,18 @@ async def test_stream_unary_record(tmp_path: object) -> None:
         lambda x: x,
         lambda b: b,
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         result = await callable_(request_iter())
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert isinstance(result, FakeResponse)
     assert len(cassette.grpc_interactions) == 1
 
 
 @pytest.mark.anyio
 async def test_stream_stream_record(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamStreamCallable, _decode_chunks
+    from cassetter.intercept._grpc import VCRStreamStreamCallable, decode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_rec_bidi.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1262,18 +1262,18 @@ async def test_stream_stream_record(tmp_path: object) -> None:
         lambda x: x,
         lambda b: b,
     )
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
     try:
         results = []
         async for item in callable_(request_iter()):
             results.append(item)
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
     assert len(results) == 2
     assert len(cassette.grpc_interactions) == 1
     body = cassette.grpc_interactions[0].response.body
     assert isinstance(body.content, bytes)
-    chunks = _decode_chunks(body.content)
+    chunks = decode_chunks(body.content)
     assert chunks == [b"\x0a", b"\x0b"]
 
 
@@ -1384,15 +1384,15 @@ def test_patched_channels_create_vcr_channels() -> None:
 
 
 @pytest.mark.anyio
-async def test_grpc_async_iter() -> None:
-    from cassetter.intercept._grpc import _async_iter
+async def test_grpcasync_iter() -> None:
+    from cassetter.intercept._grpc import async_iter
 
-    results = [item async for item in _async_iter([b"\x01", b"\x02"])]
+    results = [item async for item in async_iter([b"\x01", b"\x02"])]
     assert results == [b"\x01", b"\x02"]
 
 
-def test_grpc_iter_bytes() -> None:
-    from cassetter.intercept._grpc import _iter_bytes
+def test_grpciter_bytes() -> None:
+    from cassetter.intercept._grpc import iter_bytes
 
-    result = _iter_bytes([b"\x01"], lambda b: b)
+    result = iter_bytes([b"\x01"], lambda b: b)
     assert result is not None

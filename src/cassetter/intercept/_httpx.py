@@ -10,28 +10,28 @@ from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
 from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
-_AsyncPassthrough = Callable[[httpx.Request], Awaitable[httpx.Response]]
-_SyncPassthrough = Callable[[httpx.Request], httpx.Response]
+AsyncPassthrough = Callable[[httpx.Request], Awaitable[httpx.Response]]
+SyncPassthrough = Callable[[httpx.Request], httpx.Response]
 
 
-class _VCRAsyncTransport(httpx.AsyncBaseTransport):
+class VCRAsyncTransport(httpx.AsyncBaseTransport):
     """Wraps a custom (non-standard) async transport for cassette interception."""
 
     def __init__(self, real_transport: httpx.AsyncBaseTransport) -> None:
         self._real = real_transport
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        return await _async_intercept(request, lambda r: self._real.handle_async_request(r))
+        return await async_intercept(request, lambda r: self._real.handle_async_request(r))
 
 
-class _VCRSyncTransport(httpx.BaseTransport):
+class VCRSyncTransport(httpx.BaseTransport):
     """Wraps a custom (non-standard) sync transport for cassette interception."""
 
     def __init__(self, real_transport: httpx.BaseTransport) -> None:
         self._real = real_transport
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
-        return _sync_intercept(request, lambda r: self._real.handle_request(r))
+        return sync_intercept(request, lambda r: self._real.handle_request(r))
 
 
 class HttpxInterceptor:
@@ -53,10 +53,10 @@ class HttpxInterceptor:
         async def patched_async_handle(
             transport_self: httpx.AsyncHTTPTransport, request: httpx.Request
         ) -> httpx.Response:
-            return await _async_intercept(request, lambda r: original_async_handle(transport_self, r))
+            return await async_intercept(request, lambda r: original_async_handle(transport_self, r))
 
         def patched_sync_handle(transport_self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
-            return _sync_intercept(request, lambda r: original_sync_handle(transport_self, r))
+            return sync_intercept(request, lambda r: original_sync_handle(transport_self, r))
 
         httpx.AsyncHTTPTransport.handle_async_request = patched_async_handle  # type: ignore[assignment,method-assign]
         httpx.HTTPTransport.handle_request = patched_sync_handle  # type: ignore[assignment,method-assign]
@@ -65,12 +65,12 @@ class HttpxInterceptor:
         def patched_async_init(client_self: httpx.AsyncClient, **kwargs: Any) -> None:
             original_async_init(client_self, **kwargs)
             if not isinstance(client_self._transport, httpx.AsyncHTTPTransport):
-                client_self._transport = _VCRAsyncTransport(client_self._transport)
+                client_self._transport = VCRAsyncTransport(client_self._transport)
 
         def patched_sync_init(client_self: httpx.Client, **kwargs: Any) -> None:
             original_sync_init(client_self, **kwargs)
             if not isinstance(client_self._transport, httpx.HTTPTransport):
-                client_self._transport = _VCRSyncTransport(client_self._transport)
+                client_self._transport = VCRSyncTransport(client_self._transport)
 
         httpx.AsyncClient.__init__ = patched_async_init  # type: ignore[assignment,method-assign]
         httpx.Client.__init__ = patched_sync_init  # type: ignore[assignment,method-assign]
@@ -82,9 +82,9 @@ class HttpxInterceptor:
         httpx.Client.__init__ = self._original_sync_init  # type: ignore[method-assign]
 
 
-async def _async_intercept(
+async def async_intercept(
     request: httpx.Request,
-    passthrough: _AsyncPassthrough,
+    passthrough: AsyncPassthrough,
 ) -> httpx.Response:
     cassette = get_current_cassette()
     if cassette is None:
@@ -96,7 +96,7 @@ async def _async_intercept(
     if cassette.should_bypass(uri):
         return await passthrough(request)
 
-    headers = _extract_headers(request.headers)
+    headers = extract_headers(request.headers)
     try:
         body = request.content
     except httpx.RequestNotRead:
@@ -111,7 +111,7 @@ async def _async_intercept(
 
     try:
         response = cassette.play(method, uri, headers, body)
-        return _build_httpx_response(response, request)
+        return build_httpx_response(response, request)
     except NoMatchError:
         if not cassette.can_record:
             raise
@@ -121,7 +121,7 @@ async def _async_intercept(
     resp_body = real_response.content
     # httpx already decompresses the body, so strip content-encoding
     # to prevent double-decompression in the cassette recorder
-    resp_headers = _extract_headers_skip_encoding(real_response.headers)
+    resp_headers = extract_headers_skip_encoding(real_response.headers)
 
     cassette.record(
         method=method,
@@ -135,9 +135,9 @@ async def _async_intercept(
     return real_response
 
 
-def _sync_intercept(
+def sync_intercept(
     request: httpx.Request,
-    passthrough: _SyncPassthrough,
+    passthrough: SyncPassthrough,
 ) -> httpx.Response:
     cassette = get_current_cassette()
     if cassette is None:
@@ -149,7 +149,7 @@ def _sync_intercept(
     if cassette.should_bypass(uri):
         return passthrough(request)
 
-    headers = _extract_headers(request.headers)
+    headers = extract_headers(request.headers)
     body = request.content
 
     hook = cassette.before_record_request
@@ -161,7 +161,7 @@ def _sync_intercept(
 
     try:
         response = cassette.play(method, uri, headers, body)
-        return _build_httpx_response(response, request)
+        return build_httpx_response(response, request)
     except NoMatchError:
         if not cassette.can_record:
             raise
@@ -170,7 +170,7 @@ def _sync_intercept(
     real_response.read()
     resp_body = real_response.content
     # httpx already decompresses the body, so strip content-encoding
-    resp_headers = _extract_headers_skip_encoding(real_response.headers)
+    resp_headers = extract_headers_skip_encoding(real_response.headers)
 
     cassette.record(
         method=method,
@@ -184,14 +184,14 @@ def _sync_intercept(
     return real_response
 
 
-def _extract_headers(headers: httpx.Headers) -> dict[str, list[str]]:
+def extract_headers(headers: httpx.Headers) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for key, value in headers.multi_items():
         result.setdefault(key.lower(), []).append(value)
     return result
 
 
-def _extract_headers_skip_encoding(headers: httpx.Headers) -> dict[str, list[str]]:
+def extract_headers_skip_encoding(headers: httpx.Headers) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for key, value in headers.multi_items():
         lower = key.lower()
@@ -201,7 +201,7 @@ def _extract_headers_skip_encoding(headers: httpx.Headers) -> dict[str, list[str
     return result
 
 
-def _build_httpx_response(response: _HttpResponse, request: httpx.Request | None = None) -> httpx.Response:
+def build_httpx_response(response: _HttpResponse, request: httpx.Request | None = None) -> httpx.Response:
     headers_list: list[tuple[str, str]] = []
     for key, values in response.headers.items():
         for v in values:

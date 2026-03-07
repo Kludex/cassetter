@@ -11,10 +11,10 @@ from cassetter.cassette import NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._pyreqwest import (
     PyreqwestInterceptor,
-    _build_replay_response,
-    _extract_body,
-    _extract_headers,
-    _ReplayResponse,
+    build_replay_response,
+    extract_body,
+    extract_headers,
+    ReplayResponse,
 )
 
 
@@ -73,47 +73,47 @@ def test_interceptor_install_uninstall() -> None:
     assert pri.Client.get is original_get
 
 
-def test_extract_headers_none() -> None:
-    assert _extract_headers(None) == {}
+def testextract_headers_none() -> None:
+    assert extract_headers(None) == {}
 
 
-def test_extract_headers_dict() -> None:
+def testextract_headers_dict() -> None:
     headers = {"Content-Type": "application/json", "Accept": "text/html"}
-    result = _extract_headers(headers)
+    result = extract_headers(headers)
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def test_extract_body_content_bytes() -> None:
-    assert _extract_body(content=b"raw", data=None, json_payload=None) == b"raw"
+def testextract_body_content_bytes() -> None:
+    assert extract_body(content=b"raw", data=None, json_payload=None) == b"raw"
 
 
-def test_extract_body_data_string() -> None:
-    assert _extract_body(content=None, data="form=data", json_payload=None) == b"form=data"
+def testextract_body_data_string() -> None:
+    assert extract_body(content=None, data="form=data", json_payload=None) == b"form=data"
 
 
-def test_extract_body_json_payload() -> None:
-    result = _extract_body(content=None, data=None, json_payload={"key": "val"})
+def testextract_body_json_payload() -> None:
+    result = extract_body(content=None, data=None, json_payload={"key": "val"})
     assert json.loads(result) == {"key": "val"}  # type: ignore[arg-type]
 
 
-def test_extract_body_none() -> None:
-    assert _extract_body(content=None, data=None, json_payload=None) is None
+def testextract_body_none() -> None:
+    assert extract_body(content=None, data=None, json_payload=None) is None
 
 
 def test_replay_response_text() -> None:
-    r = _ReplayResponse(status_code=200, headers={}, content=b"hello", url="https://x.com")
+    r = ReplayResponse(status_code=200, headers={}, content=b"hello", url="https://x.com")
     assert r.text == "hello"
     assert r.text_plain == "hello"
     assert r.text_markdown == "hello"
 
 
 def test_replay_response_json() -> None:
-    r = _ReplayResponse(status_code=200, headers={}, content=b'{"a": 1}', url="https://x.com")
+    r = ReplayResponse(status_code=200, headers={}, content=b'{"a": 1}', url="https://x.com")
     assert r.json() == {"a": 1}
 
 
-def test_build_replay_response_json_body() -> None:
-    resp = _build_replay_response(
+def testbuild_replay_response_json_body() -> None:
+    resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
     )
@@ -121,24 +121,24 @@ def test_build_replay_response_json_body() -> None:
     assert resp.status_code == 200
 
 
-def test_build_replay_response_text_body() -> None:
-    resp = _build_replay_response(
+def testbuild_replay_response_text_body() -> None:
+    resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, body=Body("text", "hello world")),
     )
     assert resp.text == "hello world"
 
 
-def test_build_replay_response_binary_body() -> None:
-    resp = _build_replay_response(
+def testbuild_replay_response_binary_body() -> None:
+    resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
     )
     assert resp.content == b"\x00\x01\x02"
 
 
-def test_build_replay_response_none_body() -> None:
-    resp = _build_replay_response(
+def testbuild_replay_response_none_body() -> None:
+    resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, body=Body("none")),
     )

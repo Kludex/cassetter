@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import _current_cassette, acquire_patches, release_patches
+from cassetter._state import current_cassette, acquire_patches, release_patches
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
 from cassetter.context import resolve_interceptors
@@ -151,12 +151,12 @@ def cassette(
         _loaded_cassettes.add(os.path.abspath(cassette.path))
 
     acquire_patches(interceptor_classes)
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
 
     yield cassette
 
     # Reset context and release patches
-    _current_cassette.reset(token)
+    current_cassette.reset(token)
     release_patches(interceptor_classes)
     cassette.save()
 

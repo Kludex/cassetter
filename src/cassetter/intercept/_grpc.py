@@ -51,7 +51,7 @@ class VCRUnaryUnaryCallable:
 
         req_bytes: bytes = self._request_serializer(request)
         req_body = Body("binary", req_bytes)
-        md = _metadata_to_dict(metadata)
+        md = metadata_to_dict(metadata)
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
@@ -73,7 +73,7 @@ class VCRUnaryUnaryCallable:
         resp_bytes: bytes = response.SerializeToString()
         resp_body = Body("binary", resp_bytes)
 
-        json_debug = _build_json_debug(request, response)
+        json_debug = build_json_debug(request, response)
 
         cassette.record_grpc(
             method=self._method,
@@ -124,11 +124,11 @@ class VCRUnaryStreamCallable:
 
         req_bytes: bytes = self._request_serializer(request)
         req_body = Body("binary", req_bytes)
-        md = _metadata_to_dict(metadata)
+        md = metadata_to_dict(metadata)
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
-            return _replay_stream(grpc_resp, self._response_deserializer)
+            return replay_stream(grpc_resp, self._response_deserializer)
         except NoMatchError:
             if not cassette.can_record:
                 raise
@@ -171,7 +171,7 @@ class VCRUnaryStreamCallable:
             resp_bytes = response.SerializeToString()
             chunks.append(resp_bytes)
             yield response
-        resp_body = Body("binary", _encode_chunks(chunks))
+        resp_body = Body("binary", encode_chunks(chunks))
         if cassette is not None:
             cassette.record_grpc(
                 method=self._method,
@@ -218,11 +218,11 @@ class VCRStreamUnaryCallable:
                 compression=compression,
             )
 
-        md = _metadata_to_dict(metadata)
+        md = metadata_to_dict(metadata)
         req_chunks: list[bytes] = []
         async for req in request_iterator:
             req_chunks.append(self._request_serializer(req))
-        req_body = Body("binary", _encode_chunks(req_chunks))
+        req_body = Body("binary", encode_chunks(req_chunks))
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
@@ -234,7 +234,7 @@ class VCRStreamUnaryCallable:
 
         assert self._real is not None
         response = await self._real(
-            _iter_bytes(req_chunks, self._response_deserializer),
+            iter_bytes(req_chunks, self._response_deserializer),
             timeout=timeout,
             metadata=metadata,
             credentials=credentials,
@@ -249,7 +249,7 @@ class VCRStreamUnaryCallable:
             metadata=md,
             request_body=req_body,
             response_body=resp_body,
-            json_debug=_build_json_debug(None, response),
+            json_debug=build_json_debug(None, response),
         )
         return response
 
@@ -291,11 +291,11 @@ class VCRStreamStreamCallable:
                 compression=compression,
             )
 
-        md = _metadata_to_dict(metadata)
+        md = metadata_to_dict(metadata)
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
-            return _replay_stream(grpc_resp, self._response_deserializer)
+            return replay_stream(grpc_resp, self._response_deserializer)
         except NoMatchError:
             if not cassette.can_record:
                 raise
@@ -318,11 +318,11 @@ class VCRStreamStreamCallable:
         req_chunks: list[bytes] = []
         async for req in request_iterator:
             req_chunks.append(self._request_serializer(req))
-        req_body = Body("binary", _encode_chunks(req_chunks))
+        req_body = Body("binary", encode_chunks(req_chunks))
 
         assert self._real is not None
         call = self._real(
-            _async_iter(req_chunks),
+            async_iter(req_chunks),
             timeout=timeout,
             metadata=metadata,
             credentials=credentials,
@@ -334,7 +334,7 @@ class VCRStreamStreamCallable:
             resp_bytes = response.SerializeToString()
             resp_chunks.append(resp_bytes)
             yield response
-        resp_body = Body("binary", _encode_chunks(resp_chunks))
+        resp_body = Body("binary", encode_chunks(resp_chunks))
         if cassette is not None:
             cassette.record_grpc(
                 method=self._method,
@@ -437,7 +437,7 @@ class GrpcInterceptor:
 # ---------------------------------------------------------------------------
 
 
-def _encode_chunks(chunks: list[bytes]) -> bytes:
+def encode_chunks(chunks: list[bytes]) -> bytes:
     """Concatenate chunks with 4-byte big-endian length prefixes."""
     parts: list[bytes] = []
     for chunk in chunks:
@@ -446,7 +446,7 @@ def _encode_chunks(chunks: list[bytes]) -> bytes:
     return b"".join(parts)
 
 
-def _decode_chunks(data: bytes) -> list[bytes]:
+def decode_chunks(data: bytes) -> list[bytes]:
     """Decode length-prefixed chunks back to a list."""
     chunks: list[bytes] = []
     offset = 0
@@ -465,7 +465,7 @@ def _decode_chunks(data: bytes) -> list[bytes]:
 # ---------------------------------------------------------------------------
 
 
-def _metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
+def metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
     if metadata is None:
         return {}
     result: dict[str, list[str]] = {}
@@ -475,10 +475,10 @@ def _metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
     return result
 
 
-async def _replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIterator[Any]:
+async def replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIterator[Any]:
     body = grpc_resp.body
     data = body.content if isinstance(body.content, bytes) else b""
-    chunks = _decode_chunks(data)
+    chunks = decode_chunks(data)
     if chunks:
         for chunk in chunks:
             yield deserializer(chunk)
@@ -487,17 +487,17 @@ async def _replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIte
         yield deserializer(data)
 
 
-async def _async_iter(chunks: list[bytes]) -> AsyncIterator[bytes]:
+async def async_iter(chunks: list[bytes]) -> AsyncIterator[bytes]:
     for chunk in chunks:
         yield chunk
 
 
-def _iter_bytes(chunks: list[bytes], deserializer: Any) -> AsyncIterator[Any]:
+def iter_bytes(chunks: list[bytes], deserializer: Any) -> AsyncIterator[Any]:
     """Re-create an async iterator of deserialized messages from raw bytes."""
-    return _async_iter(chunks)
+    return async_iter(chunks)
 
 
-def _build_json_debug(request: Any, response: Any) -> dict[str, Any] | None:
+def build_json_debug(request: Any, response: Any) -> dict[str, Any] | None:
     try:
         from google.protobuf.json_format import MessageToDict  # pragma: no cover
 

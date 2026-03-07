@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import _current_cassette, acquire_patches, release_patches
+from cassetter._state import current_cassette, acquire_patches, release_patches
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._httpx import HttpxInterceptor
@@ -123,12 +123,12 @@ def use_cassette(
     interceptor_classes = resolve_interceptors(intercept)
 
     acquire_patches(interceptor_classes)
-    token = _current_cassette.set(cassette)
+    token = current_cassette.set(cassette)
 
     try:
         yield cassette
     finally:
-        _current_cassette.reset(token)
+        current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()
 
