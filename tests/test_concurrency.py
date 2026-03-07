@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter._state import _current_cassette, acquire_patches, release_patches
+from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._httpx import HttpxInterceptor
@@ -229,13 +229,13 @@ def test_threadpool_concurrent_cassettes(tmp_path: object) -> None:
         def worker(index: int) -> dict[str, object]:
             cassette = Cassette(paths[index], record_mode=RecordMode.NONE)
             cassette.load()
-            token = _current_cassette.set(cassette)
+            token = current_cassette.set(cassette)
             try:
                 with httpx.Client() as client:
                     resp = client.get("https://api.example.com/data")
                     return resp.json()  # type: ignore[no-any-return]
             finally:
-                _current_cassette.reset(token)
+                current_cassette.reset(token)
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = [pool.submit(worker, i) for i in range(n)]

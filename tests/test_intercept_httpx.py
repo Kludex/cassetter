@@ -8,7 +8,7 @@ import pytest
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.context import use_cassette
-from cassetter.intercept._httpx import HttpxInterceptor, _build_httpx_response, _extract_headers_skip_encoding
+from cassetter.intercept._httpx import HttpxInterceptor, build_httpx_response, extract_headers_skip_encoding
 from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)
@@ -122,29 +122,29 @@ async def test_async_record(cassette_path: str) -> None:
         assert len(cassette.interactions) == 1
 
 
-def test_build_httpx_response_json_body() -> None:
-    response = _build_httpx_response(
+def testbuild_httpx_response_json_body() -> None:
+    response = build_httpx_response(
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
     )
     assert response.json() == {"key": "value"}
 
 
-def test_build_httpx_response_text_body() -> None:
-    response = _build_httpx_response(
+def testbuild_httpx_response_text_body() -> None:
+    response = build_httpx_response(
         HttpResponse(200, body=Body("text", "hello world")),
     )
     assert response.text == "hello world"
 
 
-def test_build_httpx_response_binary_body() -> None:
-    response = _build_httpx_response(
+def testbuild_httpx_response_binary_body() -> None:
+    response = build_httpx_response(
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
     )
     assert response.content == b"\x00\x01\x02"
 
 
-def test_build_httpx_response_none_body() -> None:
-    response = _build_httpx_response(
+def testbuild_httpx_response_none_body() -> None:
+    response = build_httpx_response(
         HttpResponse(200, body=Body("none")),
     )
     assert response.content == b""
@@ -180,9 +180,9 @@ async def test_replay_streaming_request_body(preloaded_cassette: str) -> None:
     assert response.json()["origin"] == "127.0.0.1"
 
 
-def test_extract_headers_skip_encoding() -> None:
+def testextract_headers_skip_encoding() -> None:
     headers = httpx.Headers({"content-type": "text/html", "content-encoding": "gzip", "x-custom": "val"})
-    result = _extract_headers_skip_encoding(headers)
+    result = extract_headers_skip_encoding(headers)
     assert "content-encoding" not in result
     assert result["content-type"] == ["text/html"]
     assert result["x-custom"] == ["val"]

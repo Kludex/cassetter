@@ -35,13 +35,13 @@ class Urllib3Interceptor:
             if cassette is None:
                 return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
-            full_url = _reconstruct_url(pool, url)
+            full_url = reconstruct_url(pool, url)
 
             if cassette.should_bypass(full_url):
                 return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             norm_method = method.upper()
-            norm_headers = _extract_headers(headers)
+            norm_headers = extract_headers(headers)
             norm_body = body.encode() if isinstance(body, str) else body
 
             hook = cassette.before_record_request
@@ -53,14 +53,14 @@ class Urllib3Interceptor:
 
             try:
                 response = cassette.play(norm_method, full_url, norm_headers, norm_body)
-                return _build_urllib3_response(response, full_url)
+                return build_urllib3_response(response, full_url)
             except NoMatchError:
                 if not cassette.can_record:
                     raise
 
             real_response = original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)
             resp_body = real_response.data
-            resp_headers = _extract_headers(real_response.headers)
+            resp_headers = extract_headers(real_response.headers)
 
             cassette.record(
                 method=norm_method,
@@ -94,22 +94,22 @@ class Urllib3Interceptor:
             self._patcher = None
 
 
-def _reconstruct_url(pool: urllib3.connectionpool.HTTPConnectionPool, path: str) -> str:
+def reconstruct_url(pool: urllib3.connectionpool.HTTPConnectionPool, path: str) -> str:
     scheme = pool.scheme
     host = pool.host
     port = pool.port
-    if port and not _is_default_port(scheme, port):
+    if port and not is_default_port(scheme, port):
         host_part = f"{host}:{port}"
     else:
         host_part = host
     return f"{scheme}://{host_part}{path}"
 
 
-def _is_default_port(scheme: str, port: int) -> bool:
+def is_default_port(scheme: str, port: int) -> bool:
     return (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
 
 
-def _extract_headers(headers: Any) -> dict[str, list[str]]:
+def extract_headers(headers: Any) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     if headers is None:
         return result
@@ -118,7 +118,7 @@ def _extract_headers(headers: Any) -> dict[str, list[str]]:
     return result
 
 
-def _build_urllib3_response(response: _HttpResponse, request_url: str) -> urllib3.response.HTTPResponse:
+def build_urllib3_response(response: _HttpResponse, request_url: str) -> urllib3.response.HTTPResponse:
     body = response.body
     if body.body_type == "json":
         content = json.dumps(body.content).encode()

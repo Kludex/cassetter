@@ -88,7 +88,7 @@ class VCRWebSocketReplay:
             raise StopAsyncIteration
         frame = self._recv_frames[self._recv_index]
         self._recv_index += 1
-        return _frame_to_data(frame)
+        return frame_to_data(frame)
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
         pass
@@ -141,7 +141,7 @@ class WebSocketInterceptor:
 
                 conn = original_connect(self._uri, **self._kwargs)  # pragma: no cover
                 real_ws = await conn.__aenter__()  # pragma: no cover
-                headers = _extract_ws_headers(self._kwargs)  # pragma: no cover
+                headers = extract_ws_headers(self._kwargs)  # pragma: no cover
                 self._ws = VCRWebSocket(real_ws, self._uri, headers)  # pragma: no cover
                 return self._ws  # pragma: no cover
 
@@ -158,7 +158,7 @@ class WebSocketInterceptor:
             websockets.connect = self._original_connect  # type: ignore[misc]
 
 
-def _extract_ws_headers(kwargs: dict[str, Any]) -> dict[str, list[str]]:
+def extract_ws_headers(kwargs: dict[str, Any]) -> dict[str, list[str]]:
     extra = kwargs.get("additional_headers") or kwargs.get("extra_headers")
     if extra is None:
         return {}
@@ -169,7 +169,7 @@ def _extract_ws_headers(kwargs: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
-def _frame_to_data(frame: WsFrame) -> str | bytes:
+def frame_to_data(frame: WsFrame) -> str | bytes:
     body = frame.body
     if body.body_type == "binary":
         return body.content if isinstance(body.content, bytes) else b""

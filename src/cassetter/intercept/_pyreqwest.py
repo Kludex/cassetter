@@ -11,12 +11,12 @@ from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
 from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
-_METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
-_ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
+METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
+ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
 
 
 @dataclass
-class _ReplayResponse:
+class ReplayResponse:
     """Lightweight stand-in for pyreqwest_impersonate's native Response.
 
     The native ``Response`` cannot be constructed from Python, so we mimic its
@@ -53,12 +53,12 @@ class PyreqwestInterceptor:
         self._patchers: list[Any] = []
 
     def install(self) -> None:
-        for method_name in _ALL_METHODS:
+        for method_name in ALL_METHODS:
             original = getattr(pri.Client, method_name)
             patcher = patch.object(
                 pri.Client,
                 method_name,
-                _make_wrapper(method_name, original),
+                make_wrapper(method_name, original),
             )
             patcher.start()
             self._patchers.append(patcher)
@@ -69,26 +69,26 @@ class PyreqwestInterceptor:
         self._patchers.clear()
 
 
-def _make_wrapper(
+def make_wrapper(
     method_name: str,
     original: Any,
 ) -> Any:
     if method_name == "request":
 
         def request_wrapper(client: Any, method: str, url: str, **kwargs: Any) -> Any:
-            return _intercept(original, client, method.upper(), url, (method, url), kwargs)
+            return intercept(original, client, method.upper(), url, (method, url), kwargs)
 
         return request_wrapper
 
     http_method = method_name.upper()
 
     def method_wrapper(client: Any, url: str, **kwargs: Any) -> Any:
-        return _intercept(original, client, http_method, url, (url,), kwargs)
+        return intercept(original, client, http_method, url, (url,), kwargs)
 
     return method_wrapper
 
 
-def _intercept(
+def intercept(
     original: Any,
     client: Any,
     method: str,
@@ -103,8 +103,8 @@ def _intercept(
     if cassette.should_bypass(url):
         return original(client, *original_args, **kwargs)
 
-    norm_headers = _extract_headers(kwargs.get("headers"))
-    body = _extract_body(
+    norm_headers = extract_headers(kwargs.get("headers"))
+    body = extract_body(
         content=kwargs.get("content"),
         data=kwargs.get("data"),
         json_payload=kwargs.get("json"),
@@ -119,13 +119,13 @@ def _intercept(
 
     try:
         response = cassette.play(method, url, norm_headers, body)
-        return _build_replay_response(url, response)
+        return build_replay_response(url, response)
     except NoMatchError:
         if not cassette.can_record:
             raise
 
     real_response = original(client, *original_args, **kwargs)
-    resp_headers = _extract_headers(real_response.headers)
+    resp_headers = extract_headers(real_response.headers)
 
     cassette.record(
         method=method,
@@ -139,13 +139,13 @@ def _intercept(
     return real_response
 
 
-def _extract_headers(headers: dict[str, str] | None) -> dict[str, list[str]]:
+def extract_headers(headers: dict[str, str] | None) -> dict[str, list[str]]:
     if headers is None:
         return {}
     return {k.lower(): [v] for k, v in headers.items()}
 
 
-def _extract_body(
+def extract_body(
     *,
     content: bytes | None,
     data: dict[str, str] | str | None,
@@ -163,7 +163,7 @@ def _extract_body(
     return None
 
 
-def _build_replay_response(url: str, response: _HttpResponse) -> _ReplayResponse:
+def build_replay_response(url: str, response: _HttpResponse) -> ReplayResponse:
     body = response.body
     if body.body_type == "json":
         content = json.dumps(body.content).encode()
@@ -178,7 +178,7 @@ def _build_replay_response(url: str, response: _HttpResponse) -> _ReplayResponse
     for key, values in response.headers.items():
         flat_headers[key] = values[-1] if values else ""
 
-    return _ReplayResponse(
+    return ReplayResponse(
         status_code=response.status,
         headers=flat_headers,
         content=content,

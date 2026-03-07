@@ -10,10 +10,10 @@ from cassetter.cassette import NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._aiohttp import (
     AiohttpInterceptor,
-    _build_aiohttp_response,
-    _extract_request_body,
-    _extract_request_headers,
-    _extract_response_headers,
+    build_aiohttp_response,
+    extract_request_body,
+    extract_request_headers,
+    extract_response_headers,
 )
 
 pytest_plugins = ("anyio",)
@@ -120,48 +120,48 @@ def test_interceptor_install_uninstall() -> None:
     assert aiohttp.ClientSession._request is original_request
 
 
-def test_extract_request_headers_from_dict() -> None:
-    headers = _extract_request_headers({"Content-Type": "application/json", "Accept": "text/html"})
+def testextract_request_headers_from_dict() -> None:
+    headers = extract_request_headers({"Content-Type": "application/json", "Accept": "text/html"})
     assert headers == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def test_extract_request_headers_none() -> None:
-    assert _extract_request_headers(None) == {}
+def testextract_request_headers_none() -> None:
+    assert extract_request_headers(None) == {}
 
 
-def test_extract_request_body_bytes_data() -> None:
-    assert _extract_request_body({"data": b"hello"}) == b"hello"
+def testextract_request_body_bytes_data() -> None:
+    assert extract_request_body({"data": b"hello"}) == b"hello"
 
 
-def test_extract_request_body_str_data() -> None:
-    assert _extract_request_body({"data": "hello"}) == b"hello"
+def testextract_request_body_str_data() -> None:
+    assert extract_request_body({"data": "hello"}) == b"hello"
 
 
-def test_extract_request_body_json_data() -> None:
-    result = _extract_request_body({"json": {"key": "value"}})
+def testextract_request_body_json_data() -> None:
+    result = extract_request_body({"json": {"key": "value"}})
     assert result is not None
     assert b"key" in result
 
 
-def test_extract_request_body_no_body() -> None:
-    assert _extract_request_body({}) is None
+def testextract_request_body_no_body() -> None:
+    assert extract_request_body({}) is None
 
 
-def test_extract_request_body_none_data() -> None:
-    assert _extract_request_body({"data": None}) is None
+def testextract_request_body_none_data() -> None:
+    assert extract_request_body({"data": None}) is None
 
 
-def test_extract_response_headers_multidict() -> None:
+def testextract_response_headers_multidict() -> None:
     from multidict import CIMultiDict, CIMultiDictProxy
 
     headers = CIMultiDictProxy(CIMultiDict([("Content-Type", "application/json"), ("X-Custom", "value")]))
-    result = _extract_response_headers(headers)
+    result = extract_response_headers(headers)
     assert result == {"content-type": ["application/json"], "x-custom": ["value"]}
 
 
 @pytest.mark.anyio
-async def test_build_aiohttp_response_json_body() -> None:
-    resp = _build_aiohttp_response(
+async def testbuild_aiohttp_response_json_body() -> None:
+    resp = build_aiohttp_response(
         "GET",
         "https://example.com/",
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
@@ -170,8 +170,8 @@ async def test_build_aiohttp_response_json_body() -> None:
 
 
 @pytest.mark.anyio
-async def test_build_aiohttp_response_text_body() -> None:
-    resp = _build_aiohttp_response(
+async def testbuild_aiohttp_response_text_body() -> None:
+    resp = build_aiohttp_response(
         "GET",
         "https://example.com/",
         HttpResponse(200, body=Body("text", "hello")),
@@ -180,8 +180,8 @@ async def test_build_aiohttp_response_text_body() -> None:
 
 
 @pytest.mark.anyio
-async def test_build_aiohttp_response_binary_body() -> None:
-    resp = _build_aiohttp_response(
+async def testbuild_aiohttp_response_binary_body() -> None:
+    resp = build_aiohttp_response(
         "GET",
         "https://example.com/",
         HttpResponse(200, body=Body("binary", b"\x00\x01")),
@@ -190,8 +190,8 @@ async def test_build_aiohttp_response_binary_body() -> None:
 
 
 @pytest.mark.anyio
-async def test_build_aiohttp_response_none_body() -> None:
-    resp = _build_aiohttp_response(
+async def testbuild_aiohttp_response_none_body() -> None:
+    resp = build_aiohttp_response(
         "GET",
         "https://example.com/",
         HttpResponse(200, body=Body("none")),

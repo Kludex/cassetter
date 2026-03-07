@@ -31,12 +31,12 @@ class VCRAdapter(requests.adapters.HTTPAdapter):
     ) -> requests.Response:
         method = (request.method or "GET").upper()
         uri = request.url or ""
-        headers = _extract_headers(request.headers)
+        headers = extract_headers(request.headers)
         body = request.body if isinstance(request.body, bytes) else (request.body.encode() if request.body else None)
 
         try:
             response = self._cassette.play(method, uri, headers, body)
-            return _build_requests_response(request, response)
+            return build_requests_response(request, response)
         except NoMatchError:
             if not self._cassette.can_record:
                 raise
@@ -44,7 +44,7 @@ class VCRAdapter(requests.adapters.HTTPAdapter):
         real_response = self._real_adapter.send(
             request, stream=stream, timeout=timeout, verify=verify, cert=cert, proxies=proxies
         )
-        resp_headers = _extract_headers(real_response.headers)
+        resp_headers = extract_headers(real_response.headers)
 
         self._cassette.record(
             method=method,
@@ -80,7 +80,7 @@ class RequestsInterceptor:
                 return original_send(session, request, **kwargs)
 
             method = (request.method or "GET").upper()
-            headers = _extract_headers(request.headers)
+            headers = extract_headers(request.headers)
             raw_body = request.body
             body = raw_body if isinstance(raw_body, bytes) else (raw_body.encode() if raw_body else None)
 
@@ -93,13 +93,13 @@ class RequestsInterceptor:
 
             try:
                 response = cassette.play(method, uri, headers, body)
-                return _build_requests_response(request, response)
+                return build_requests_response(request, response)
             except NoMatchError:
                 if not cassette.can_record:
                     raise
 
             real_response = original_send(session, request, **kwargs)
-            resp_headers = _extract_headers(real_response.headers)
+            resp_headers = extract_headers(real_response.headers)
 
             cassette.record(
                 method=method,
@@ -121,7 +121,7 @@ class RequestsInterceptor:
             self._patcher = None
 
 
-def _extract_headers(headers: Any) -> dict[str, list[str]]:
+def extract_headers(headers: Any) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     if headers is None:
         return result
@@ -130,7 +130,7 @@ def _extract_headers(headers: Any) -> dict[str, list[str]]:
     return result
 
 
-def _build_requests_response(request: requests.PreparedRequest, response: _HttpResponse) -> requests.Response:
+def build_requests_response(request: requests.PreparedRequest, response: _HttpResponse) -> requests.Response:
 
     body = response.body
     if body.body_type == "json":
