@@ -453,7 +453,7 @@ Existing VCR cassettes work as-is - cassetter reads both VCR format and its own 
 
 cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--record-mode` CLI flag. Key differences:
 
-| pytest-recording | cassetter | Notes |
+| pytest-recording / VCR.py | cassetter | Notes |
 |---|---|---|
 | `vcr` fixture | `cassette` fixture | `vcr` is available as an alias |
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
@@ -461,6 +461,11 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 | `decode_compressed_response` | _(automatic)_ | Always decompresses - no config needed |
 | `before_record_response` | `before_record_response` | Same name, same behavior |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Regex-based instead of parameter-name-based |
+| `before_record_request` (transform) | `before_record_request` (skip only) | VCR allows modifying the request; cassetter only supports `SkipRecording` |
+| `before_playback_response` | _(not supported)_ | VCR hook to modify/filter responses during playback |
+| `allow_playback_repeats` | _(not supported)_ | VCR can replay the same interaction multiple times |
+| `record_on_exception` | _(not supported)_ | VCR can skip saving when the test raises |
+| Custom matchers | _(not supported)_ | VCR supports `register_matcher` for user-defined matching |
 | `@pytest.mark.block_network` | _(not supported)_ | |
 | `--disable-recording` | _(not supported)_ | |
 
