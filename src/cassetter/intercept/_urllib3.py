@@ -11,7 +11,7 @@ import urllib3.response
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
+from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
 
 class Urllib3Interceptor:
@@ -48,7 +48,7 @@ class Urllib3Interceptor:
             if hook is not None:
                 try:
                     hook(RawRequest(norm_method, full_url, norm_headers, norm_body))
-                except BypassCassette:
+                except SkipRecording:
                     return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             try:

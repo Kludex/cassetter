@@ -98,6 +98,7 @@ def _resolve_cassette(
     ignore_localhost = vcr_config.get("ignore_localhost", False)
     ignore_hosts = vcr_config.get("ignore_hosts")
     before_record_request = vcr_config.get("before_record_request")
+    before_record_response = vcr_config.get("before_record_response")
 
     cassette = Cassette(
         cassette_path,
@@ -109,6 +110,7 @@ def _resolve_cassette(
         ignore_localhost=ignore_localhost,
         ignore_hosts=ignore_hosts,
         before_record_request=before_record_request,
+        before_record_response=before_record_response,
     )
     cassette.load()
 

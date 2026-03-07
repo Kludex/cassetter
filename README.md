@@ -339,20 +339,38 @@ with use_cassette(
 
 ### Before record request hook
 
-For advanced filtering, use a callback that runs before each request is recorded or replayed. Raise `BypassCassette` to let the request pass through live:
+For advanced filtering, use a callback that runs before each request is recorded or replayed. Raise `SkipRecording` to let the request pass through live:
 
 ```python
-from cassetter import BypassCassette, RawRequest, use_cassette
+from cassetter import RawRequest, SkipRecording, use_cassette
 
 def my_hook(request: RawRequest) -> None:
     if not request.uri.startswith("https://api.mycompany.com"):
-        raise BypassCassette
+        raise SkipRecording
 
 with use_cassette("cassette.yaml", before_record_request=my_hook):
     ...
 ```
 
-Both options work with the pytest plugin via `vcr_config`:
+### Before record response hook
+
+Modify or discard responses before they are recorded. Return the (possibly modified) `RawResponse`. Raise `SkipRecording` to skip recording the interaction:
+
+```python
+from cassetter import RawResponse, SkipRecording, use_cassette
+
+def my_hook(response: RawResponse) -> RawResponse:
+    if response.status >= 500:
+        raise SkipRecording  # don't record server errors
+    # Strip a volatile header
+    response.headers.pop("x-request-id", None)
+    return response
+
+with use_cassette("cassette.yaml", before_record_response=my_hook):
+    ...
+```
+
+Both hooks work with the pytest plugin via `vcr_config`:
 
 ```python
 @pytest.fixture(scope="module")
@@ -441,7 +459,7 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `decode_compressed_response` | _(automatic)_ | Always decompresses - no config needed |
-| `before_record_response` | _(not supported)_ | Use `before_record_request` or `body_scrub_patterns` |
+| `before_record_response` | `before_record_response` | Same name, same behavior |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Regex-based instead of parameter-name-based |
 | `@pytest.mark.block_network` | _(not supported)_ | |
 | `--disable-recording` | _(not supported)_ | |

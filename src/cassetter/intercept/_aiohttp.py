@@ -12,7 +12,7 @@ from yarl import URL
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
+from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
 
 class AiohttpInterceptor:
@@ -46,7 +46,7 @@ class AiohttpInterceptor:
             if hook is not None:
                 try:
                     hook(RawRequest(method.upper(), uri, headers, body))
-                except BypassCassette:
+                except SkipRecording:
                     return await original_request(session, method, str_or_url, **kwargs)
 
             try:

@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter.cassette import BypassCassette, Cassette, RawRequest
+from cassetter.cassette import Cassette, RawRequest, SkipRecording
 from cassetter.context import use_cassette
 
 pytest_plugins = ("anyio",)
@@ -84,7 +84,7 @@ def test_should_bypass_combines_localhost_and_ignore_hosts() -> None:
 async def test_bypass_cassette_exception_passes_through(cassette_path: str) -> None:
     def hook(request: RawRequest) -> None:
         if "googleapis.com" in request.uri:
-            raise BypassCassette
+            raise SkipRecording
 
     with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
@@ -112,7 +112,7 @@ async def test_hook_without_exception_uses_cassette(preloaded_cassette: str) -> 
 def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> None:
     def hook(request: RawRequest) -> None:
         if "googleapis.com" in request.uri:
-            raise BypassCassette
+            raise SkipRecording
 
     with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))

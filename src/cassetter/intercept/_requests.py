@@ -9,7 +9,7 @@ import requests.adapters
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import BypassCassette, Cassette, NoMatchError, RawRequest
+from cassetter.cassette import Cassette, NoMatchError, RawRequest, SkipRecording
 
 
 class VCRAdapter(requests.adapters.HTTPAdapter):
@@ -88,7 +88,7 @@ class RequestsInterceptor:
             if hook is not None:
                 try:
                     hook(RawRequest(method, uri, headers, body))
-                except BypassCassette:
+                except SkipRecording:
                     return original_send(session, request, **kwargs)
 
             try:
