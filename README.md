@@ -429,7 +429,7 @@ cassetter is designed as a drop-in replacement. Most projects can migrate with m
 
 ### Cassette files
 
-Existing VCR cassettes work as-is - cassetter reads both VCR format (`status: {code: 200, message: OK}`, `body: {string: "..."}`) and its own format. On the next re-record, cassettes are written in cassetter's format with structured JSON bodies instead of escaped strings.
+Existing VCR cassettes work as-is - cassetter reads both VCR format and its own format. On the next re-record, cassettes are written in cassetter's format with structured JSON bodies instead of escaped strings.
 
 ### pytest plugin
 
