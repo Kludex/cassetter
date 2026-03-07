@@ -4,7 +4,7 @@ from typing import Any
 
 from typing_extensions import Protocol, TypedDict
 
-from cassetter.cassette import BeforeRecordRequest
+from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse
 
 
 class CassetteConfig(TypedDict, total=False):
@@ -24,6 +24,7 @@ class CassetteConfig(TypedDict, total=False):
     ignore_localhost: bool
     ignore_hosts: list[str]
     before_record_request: BeforeRecordRequest
+    before_record_response: BeforeRecordResponse
 
 
 class Interceptor(Protocol):

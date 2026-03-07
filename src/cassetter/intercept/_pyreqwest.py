@@ -9,7 +9,7 @@ import pyreqwest_impersonate as pri
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
+from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
 _METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
 _ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
@@ -114,7 +114,7 @@ def _intercept(
     if hook is not None:
         try:
             hook(RawRequest(method, url, norm_headers, body))
-        except BypassCassette:
+        except SkipRecording:
             return original(client, *original_args, **kwargs)
 
     try:

@@ -7,7 +7,7 @@ from typing import Any
 
 from cassetter._core import MatchConfig, SecurityConfig
 from cassetter._state import _current_cassette, acquire_patches, release_patches
-from cassetter.cassette import BeforeRecordRequest, Cassette
+from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._httpx import HttpxInterceptor
 from cassetter.recording import RecordMode
@@ -75,6 +75,7 @@ def use_cassette(
     ignore_localhost: bool = False,
     ignore_hosts: list[str] | None = None,
     before_record_request: BeforeRecordRequest | None = None,
+    before_record_response: BeforeRecordResponse | None = None,
 ) -> Iterator[Cassette]:
     """Context manager for recording/replaying HTTP interactions.
 
@@ -115,6 +116,7 @@ def use_cassette(
         ignore_localhost=ignore_localhost,
         ignore_hosts=ignore_hosts,
         before_record_request=before_record_request,
+        before_record_response=before_record_response,
     )
     cassette.load()
 

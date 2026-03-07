@@ -47,8 +47,8 @@ class NoMatchError(Exception):
     """Raised when no matching interaction is found in the cassette."""
 
 
-class BypassCassette(Exception):
-    """Raised from a before_record_request hook to let the request pass through without recording."""
+class SkipRecording(Exception):
+    """Raised from a before_record_request or before_record_response hook to skip recording."""
 
 
 @dataclass(slots=True)
@@ -61,7 +61,17 @@ class RawRequest:
     body: bytes | None
 
 
+@dataclass(slots=True)
+class RawResponse:
+    """Raw HTTP response data passed to the before_record_response hook."""
+
+    status: int
+    headers: dict[str, list[str]]
+    body: bytes | None
+
+
 BeforeRecordRequest = Callable[[RawRequest], None]
+BeforeRecordResponse = Callable[[RawResponse], RawResponse]
 
 
 _DURATION_RE = re.compile(r"^(\d+)([dhw])$")
@@ -92,6 +102,7 @@ class Cassette:
         ignore_localhost: bool = False,
         ignore_hosts: list[str] | None = None,
         before_record_request: BeforeRecordRequest | None = None,
+        before_record_response: BeforeRecordResponse | None = None,
     ) -> None:
         self._path = os.fspath(path)
         self._record_mode = record_mode
@@ -102,6 +113,7 @@ class Cassette:
         self._ignore_localhost = ignore_localhost
         self._ignore_hosts = ignore_hosts or []
         self._before_record_request = before_record_request
+        self._before_record_response = before_record_response
         self._inner: _RustCassette | None = None
         self._dirty = False
 
@@ -120,6 +132,10 @@ class Cassette:
     @property
     def before_record_request(self) -> BeforeRecordRequest | None:
         return self._before_record_request
+
+    @property
+    def before_record_response(self) -> BeforeRecordResponse | None:
+        return self._before_record_response
 
     def should_bypass(self, uri: str) -> bool:
         """Check if a request URI should bypass the cassette entirely."""
@@ -247,6 +263,20 @@ class Cassette:
         response_body: bytes | None,
     ) -> HttpResponse:
         """Record an interaction and return the response."""
+        # Apply before_record_response hook
+        if self._before_record_response is not None:
+            try:
+                result = self._before_record_response(RawResponse(status, response_headers, response_body))
+            except SkipRecording:
+                resp_ct = _get_header(response_headers, "content-type")
+                resp_ce = _get_header(response_headers, "content-encoding")
+                resp_body = process_body(response_body or b"", resp_ct, resp_ce)
+                clean_resp_headers = {k: v for k, v in response_headers.items() if k.lower() != "content-encoding"}
+                return HttpResponse(status, clean_resp_headers, resp_body)
+            status = result.status
+            response_headers = result.headers
+            response_body = result.body
+
         req_ct = _get_header(request_headers, "content-type")
         req_ce = _get_header(request_headers, "content-encoding")
         req_body = process_body(request_body or b"", req_ct, req_ce)

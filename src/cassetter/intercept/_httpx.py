@@ -8,7 +8,7 @@ import httpx
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import BypassCassette, NoMatchError, RawRequest
+from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
 _AsyncPassthrough = Callable[[httpx.Request], Awaitable[httpx.Response]]
 _SyncPassthrough = Callable[[httpx.Request], httpx.Response]
@@ -106,7 +106,7 @@ async def _async_intercept(
     if hook is not None:
         try:
             hook(RawRequest(method, uri, headers, body))
-        except BypassCassette:
+        except SkipRecording:
             return await passthrough(request)
 
     try:
@@ -156,7 +156,7 @@ def _sync_intercept(
     if hook is not None:
         try:
             hook(RawRequest(method, uri, headers, body))
-        except BypassCassette:
+        except SkipRecording:
             return passthrough(request)
 
     try:
