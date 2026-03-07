@@ -424,19 +424,24 @@ def _write_vcr_cassette(path: str, interactions: list[dict[str, object]]) -> Non
 
 def test_vcr_format_json_response(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
-    _write_vcr_cassette(path, [{
-        "request": {
-            "method": "GET",
-            "uri": "https://api.example.com/data",
-            "body": None,
-            "headers": {"Accept": ["application/json"]},
-        },
-        "response": {
-            "body": {"string": '{"key": "value", "num": 42}'},
-            "headers": {"Content-Type": ["application/json"]},
-            "status": {"code": 200, "message": "OK"},
-        },
-    }])
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "GET",
+                    "uri": "https://api.example.com/data",
+                    "body": None,
+                    "headers": {"Accept": ["application/json"]},
+                },
+                "response": {
+                    "body": {"string": '{"key": "value", "num": 42}'},
+                    "headers": {"Content-Type": ["application/json"]},
+                    "status": {"code": 200, "message": "OK"},
+                },
+            }
+        ],
+    )
     c = RustCassette.load(path)
     assert len(c) == 1
     i = c.interactions[0]
@@ -450,19 +455,24 @@ def test_vcr_format_json_response(tmp_path: object) -> None:
 
 def test_vcr_format_text_response(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
-    _write_vcr_cassette(path, [{
-        "request": {
-            "method": "GET",
-            "uri": "https://example.com/page",
-            "body": None,
-            "headers": {},
-        },
-        "response": {
-            "body": {"string": "<html>hello</html>"},
-            "headers": {"Content-Type": ["text/html"]},
-            "status": {"code": 200, "message": "OK"},
-        },
-    }])
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "GET",
+                    "uri": "https://example.com/page",
+                    "body": None,
+                    "headers": {},
+                },
+                "response": {
+                    "body": {"string": "<html>hello</html>"},
+                    "headers": {"Content-Type": ["text/html"]},
+                    "status": {"code": 200, "message": "OK"},
+                },
+            }
+        ],
+    )
     c = RustCassette.load(path)
     i = c.interactions[0]
     assert i.response.body.body_type == "text"
@@ -471,19 +481,24 @@ def test_vcr_format_text_response(tmp_path: object) -> None:
 
 def test_vcr_format_null_response_body(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
-    _write_vcr_cassette(path, [{
-        "request": {
-            "method": "DELETE",
-            "uri": "https://example.com/resource/1",
-            "body": None,
-            "headers": {},
-        },
-        "response": {
-            "body": {"string": None},
-            "headers": {},
-            "status": {"code": 204, "message": "No Content"},
-        },
-    }])
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "DELETE",
+                    "uri": "https://example.com/resource/1",
+                    "body": None,
+                    "headers": {},
+                },
+                "response": {
+                    "body": {"string": None},
+                    "headers": {},
+                    "status": {"code": 204, "message": "No Content"},
+                },
+            }
+        ],
+    )
     c = RustCassette.load(path)
     assert c.interactions[0].response.status == 204
     assert c.interactions[0].response.body.body_type == "none"
@@ -491,38 +506,48 @@ def test_vcr_format_null_response_body(tmp_path: object) -> None:
 
 def test_vcr_format_empty_string_request_body(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
-    _write_vcr_cassette(path, [{
-        "request": {
-            "method": "GET",
-            "uri": "https://example.com/",
-            "body": "",
-            "headers": {},
-        },
-        "response": {
-            "body": {"string": "ok"},
-            "headers": {},
-            "status": {"code": 200, "message": "OK"},
-        },
-    }])
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "GET",
+                    "uri": "https://example.com/",
+                    "body": "",
+                    "headers": {},
+                },
+                "response": {
+                    "body": {"string": "ok"},
+                    "headers": {},
+                    "status": {"code": 200, "message": "OK"},
+                },
+            }
+        ],
+    )
     c = RustCassette.load(path)
     assert c.interactions[0].request.body.body_type == "none"
 
 
 def test_vcr_format_string_request_body(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
-    _write_vcr_cassette(path, [{
-        "request": {
-            "method": "POST",
-            "uri": "https://example.com/api",
-            "body": '{"prompt": "hello"}',
-            "headers": {"Content-Type": ["application/json"]},
-        },
-        "response": {
-            "body": {"string": '{"reply": "hi"}'},
-            "headers": {},
-            "status": {"code": 200, "message": "OK"},
-        },
-    }])
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "POST",
+                    "uri": "https://example.com/api",
+                    "body": '{"prompt": "hello"}',
+                    "headers": {"Content-Type": ["application/json"]},
+                },
+                "response": {
+                    "body": {"string": '{"reply": "hi"}'},
+                    "headers": {},
+                    "status": {"code": 200, "message": "OK"},
+                },
+            }
+        ],
+    )
     c = RustCassette.load(path)
     i = c.interactions[0]
     assert i.request.body.body_type == "json"
@@ -534,19 +559,24 @@ def test_vcr_format_string_request_body(tmp_path: object) -> None:
 def test_vcr_format_saves_as_cassetter(tmp_path: object) -> None:
     vcr_path = os.path.join(str(tmp_path), "vcr.yaml")
     out_path = os.path.join(str(tmp_path), "out.yaml")
-    _write_vcr_cassette(vcr_path, [{
-        "request": {
-            "method": "GET",
-            "uri": "https://example.com/",
-            "body": None,
-            "headers": {},
-        },
-        "response": {
-            "body": {"string": '{"ok": true}'},
-            "headers": {},
-            "status": {"code": 200, "message": "OK"},
-        },
-    }])
+    _write_vcr_cassette(
+        vcr_path,
+        [
+            {
+                "request": {
+                    "method": "GET",
+                    "uri": "https://example.com/",
+                    "body": None,
+                    "headers": {},
+                },
+                "response": {
+                    "body": {"string": '{"ok": true}'},
+                    "headers": {},
+                    "status": {"code": 200, "message": "OK"},
+                },
+            }
+        ],
+    )
     c = RustCassette.load(vcr_path)
     c.save(out_path)
 
@@ -562,19 +592,24 @@ def test_vcr_format_saves_as_cassetter(tmp_path: object) -> None:
 
 def test_vcr_format_playback(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
-    _write_vcr_cassette(path, [{
-        "request": {
-            "method": "GET",
-            "uri": "https://api.example.com/users",
-            "body": None,
-            "headers": {"Accept": ["application/json"]},
-        },
-        "response": {
-            "body": {"string": '{"users": []}'},
-            "headers": {"Content-Type": ["application/json"]},
-            "status": {"code": 200, "message": "OK"},
-        },
-    }])
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "GET",
+                    "uri": "https://api.example.com/users",
+                    "body": None,
+                    "headers": {"Accept": ["application/json"]},
+                },
+                "response": {
+                    "body": {"string": '{"users": []}'},
+                    "headers": {"Content-Type": ["application/json"]},
+                    "status": {"code": 200, "message": "OK"},
+                },
+            }
+        ],
+    )
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     cassette.load()
     response = cassette.play("GET", "https://api.example.com/users", {}, None)
