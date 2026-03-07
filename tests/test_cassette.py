@@ -4,6 +4,7 @@ import os
 from datetime import timedelta
 
 import pytest
+import yaml
 
 from cassetter._core import (
     Body,
@@ -410,3 +411,172 @@ def test_expiry_uses_newest_across_interaction_types(tmp_path: object) -> None:
     with pytest.warns(CassetteExpiredWarning):
         cassette = Cassette(path, record_mode=RecordMode.NONE, max_age="1d", on_expiry="warn")
         cassette.load()
+
+
+# --- VCR format compatibility ---
+
+
+def _write_vcr_cassette(path: str, interactions: list[dict[str, object]]) -> None:
+    data = {"version": 1, "interactions": interactions}
+    with open(path, "w") as f:
+        yaml.dump(data, f)
+
+
+def test_vcr_format_json_response(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "vcr.yaml")
+    _write_vcr_cassette(path, [{
+        "request": {
+            "method": "GET",
+            "uri": "https://api.example.com/data",
+            "body": None,
+            "headers": {"Accept": ["application/json"]},
+        },
+        "response": {
+            "body": {"string": '{"key": "value", "num": 42}'},
+            "headers": {"Content-Type": ["application/json"]},
+            "status": {"code": 200, "message": "OK"},
+        },
+    }])
+    c = RustCassette.load(path)
+    assert len(c) == 1
+    i = c.interactions[0]
+    assert i.request.method == "GET"
+    assert i.request.uri == "https://api.example.com/data"
+    assert i.request.body.body_type == "none"
+    assert i.response.status == 200
+    assert i.response.body.body_type == "json"
+    assert i.response.body.content == {"key": "value", "num": 42}
+
+
+def test_vcr_format_text_response(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "vcr.yaml")
+    _write_vcr_cassette(path, [{
+        "request": {
+            "method": "GET",
+            "uri": "https://example.com/page",
+            "body": None,
+            "headers": {},
+        },
+        "response": {
+            "body": {"string": "<html>hello</html>"},
+            "headers": {"Content-Type": ["text/html"]},
+            "status": {"code": 200, "message": "OK"},
+        },
+    }])
+    c = RustCassette.load(path)
+    i = c.interactions[0]
+    assert i.response.body.body_type == "text"
+    assert i.response.body.content == "<html>hello</html>"
+
+
+def test_vcr_format_null_response_body(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "vcr.yaml")
+    _write_vcr_cassette(path, [{
+        "request": {
+            "method": "DELETE",
+            "uri": "https://example.com/resource/1",
+            "body": None,
+            "headers": {},
+        },
+        "response": {
+            "body": {"string": None},
+            "headers": {},
+            "status": {"code": 204, "message": "No Content"},
+        },
+    }])
+    c = RustCassette.load(path)
+    assert c.interactions[0].response.status == 204
+    assert c.interactions[0].response.body.body_type == "none"
+
+
+def test_vcr_format_empty_string_request_body(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "vcr.yaml")
+    _write_vcr_cassette(path, [{
+        "request": {
+            "method": "GET",
+            "uri": "https://example.com/",
+            "body": "",
+            "headers": {},
+        },
+        "response": {
+            "body": {"string": "ok"},
+            "headers": {},
+            "status": {"code": 200, "message": "OK"},
+        },
+    }])
+    c = RustCassette.load(path)
+    assert c.interactions[0].request.body.body_type == "none"
+
+
+def test_vcr_format_string_request_body(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "vcr.yaml")
+    _write_vcr_cassette(path, [{
+        "request": {
+            "method": "POST",
+            "uri": "https://example.com/api",
+            "body": '{"prompt": "hello"}',
+            "headers": {"Content-Type": ["application/json"]},
+        },
+        "response": {
+            "body": {"string": '{"reply": "hi"}'},
+            "headers": {},
+            "status": {"code": 200, "message": "OK"},
+        },
+    }])
+    c = RustCassette.load(path)
+    i = c.interactions[0]
+    assert i.request.body.body_type == "json"
+    assert i.request.body.content == {"prompt": "hello"}
+    assert i.response.body.body_type == "json"
+    assert i.response.body.content == {"reply": "hi"}
+
+
+def test_vcr_format_saves_as_cassetter(tmp_path: object) -> None:
+    vcr_path = os.path.join(str(tmp_path), "vcr.yaml")
+    out_path = os.path.join(str(tmp_path), "out.yaml")
+    _write_vcr_cassette(vcr_path, [{
+        "request": {
+            "method": "GET",
+            "uri": "https://example.com/",
+            "body": None,
+            "headers": {},
+        },
+        "response": {
+            "body": {"string": '{"ok": true}'},
+            "headers": {},
+            "status": {"code": 200, "message": "OK"},
+        },
+    }])
+    c = RustCassette.load(vcr_path)
+    c.save(out_path)
+
+    with open(out_path) as f:
+        saved = yaml.safe_load(f)
+
+    # Verify saved format is cassetter, not VCR
+    resp = saved["interactions"][0]["response"]
+    assert resp["status"] == 200
+    assert resp["body"]["type"] == "json"
+    assert resp["body"]["content"] == {"ok": True}
+
+
+def test_vcr_format_playback(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "vcr.yaml")
+    _write_vcr_cassette(path, [{
+        "request": {
+            "method": "GET",
+            "uri": "https://api.example.com/users",
+            "body": None,
+            "headers": {"Accept": ["application/json"]},
+        },
+        "response": {
+            "body": {"string": '{"users": []}'},
+            "headers": {"Content-Type": ["application/json"]},
+            "status": {"code": 200, "message": "OK"},
+        },
+    }])
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
+    response = cassette.play("GET", "https://api.example.com/users", {}, None)
+    assert response.status == 200
+    assert response.body.content == {"users": []}
