@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter._state import current_cassette, acquire_patches, release_patches
+from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._httpx import HttpxInterceptor

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import current_cassette, acquire_patches, release_patches
+from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
 from cassetter.context import resolve_interceptors

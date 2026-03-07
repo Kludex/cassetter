@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import current_cassette, acquire_patches, release_patches
+from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._httpx import HttpxInterceptor

@@ -11,10 +11,10 @@ from cassetter.cassette import NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._pyreqwest import (
     PyreqwestInterceptor,
+    ReplayResponse,
     build_replay_response,
     extract_body,
     extract_headers,
-    ReplayResponse,
 )
 
 
