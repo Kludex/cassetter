@@ -29,7 +29,7 @@ def vcr_cassette_dir(request: pytest.FixtureRequest) -> str:
     Defaults to ``{test_dir}/cassettes/{test_file_stem}``.
     Override this fixture to customize the cassette storage location.
     """
-    test_file = Path(str(request.fspath))
+    test_file = Path(str(request.path))
     return str(test_file.parent / "cassettes" / test_file.stem)
 
 
