@@ -143,14 +143,14 @@ class MatchConfig:
 
 class SecurityConfig:
     filter_headers: list[str]
-    filter_query_params: list[str]
+    filter_query_parameters: list[str]
     body_scrub_patterns: list[str]
     replacement: str
 
     def __init__(
         self,
         filter_headers: list[str] | None = None,
-        filter_query_params: list[str] | None = None,
+        filter_query_parameters: list[str] | None = None,
         body_scrub_patterns: list[str] | None = None,
         replacement: str | None = None,
     ) -> None: ...
