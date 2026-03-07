@@ -18,3 +18,12 @@ def test_with_marker(cassette: Cassette) -> None:
         response = client.get("https://example.com/marker-test")
     assert response.status_code == 200
     assert response.json() == {"marker": True}
+
+
+@pytest.mark.vcr
+def test_vcr_fixture_alias(vcr: Cassette) -> None:
+    """The `vcr` fixture is an alias for `cassette`, for pytest-recording compat."""
+    assert vcr is not None
+    with httpx.Client() as client:
+        response = client.get("https://example.com/marker-test")
+    assert response.status_code == 200

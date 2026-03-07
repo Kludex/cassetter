@@ -22,6 +22,17 @@ def vcr_config() -> CassetteConfig:
     return CassetteConfig()
 
 
+@pytest.fixture(scope="module")
+def vcr_cassette_dir(request: pytest.FixtureRequest) -> str:
+    """Per-module cassette directory, matching pytest-recording's convention.
+
+    Defaults to ``{test_dir}/cassettes/{test_file_stem}``.
+    Override this fixture to customize the cassette storage location.
+    """
+    test_file = Path(str(request.path))
+    return str(test_file.parent / "cassettes" / test_file.stem)
+
+
 def _resolve_cassette(
     node_name: str,
     marker_args: tuple[Any, ...],
@@ -29,10 +40,10 @@ def _resolve_cassette(
     vcr_config: CassetteConfig,
     cli_record_mode: str | None,
     test_fspath: str,
+    vcr_cassette_dir: str | None = None,
 ) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
     cassette_name = node_name + ".yaml"
-    cassette_dir = vcr_config.get("cassette_dir", "cassettes")
     record_mode_str = vcr_config.get("record_mode", "none")
 
     # Marker can override
@@ -40,8 +51,6 @@ def _resolve_cassette(
         cassette_name = marker_args[0]
     if "record_mode" in marker_kwargs:
         record_mode_str = marker_kwargs["record_mode"]
-    if "cassette_dir" in marker_kwargs:
-        cassette_dir = marker_kwargs["cassette_dir"]
 
     # CLI override
     if cli_record_mode is not None:
@@ -49,11 +58,23 @@ def _resolve_cassette(
 
     record_mode = RecordMode.from_str(record_mode_str)
 
-    # Resolve cassette path: {test_dir}/cassettes/{test_file_stem}/{cassette_name}
-    test_file = Path(test_fspath)
-    test_dir = str(test_file.parent)
-    test_file_stem = test_file.stem
-    cassette_path = os.path.join(test_dir, cassette_dir, test_file_stem, cassette_name)
+    # Resolve cassette directory: vcr_cassette_dir fixture > marker > vcr_config > default
+    if "cassette_dir" in marker_kwargs:
+        test_file = Path(test_fspath)
+        test_dir = str(test_file.parent)
+        cassette_dir = os.path.join(test_dir, marker_kwargs["cassette_dir"], test_file.stem)
+    elif vcr_cassette_dir is not None:
+        cassette_dir = vcr_cassette_dir
+    elif "cassette_dir" in vcr_config:
+        test_file = Path(test_fspath)
+        test_dir = str(test_file.parent)
+        cassette_dir = os.path.join(test_dir, vcr_config["cassette_dir"], test_file.stem)
+    else:
+        test_file = Path(test_fspath)
+        test_dir = str(test_file.parent)
+        cassette_dir = os.path.join(test_dir, "cassettes", test_file.stem)
+
+    cassette_path = os.path.join(cassette_dir, cassette_name)
 
     match_config = MatchConfig(
         match_on=vcr_config.get("match_on"),
@@ -63,8 +84,8 @@ def _resolve_cassette(
     security_kwargs: dict[str, Any] = {}
     if "filter_headers" in vcr_config:
         security_kwargs["filter_headers"] = vcr_config["filter_headers"]
-    if "filter_query_params" in vcr_config:
-        security_kwargs["filter_query_params"] = vcr_config["filter_query_params"]
+    if "filter_query_parameters" in vcr_config:
+        security_kwargs["filter_query_parameters"] = vcr_config["filter_query_parameters"]
     if "body_scrub_patterns" in vcr_config:
         security_kwargs["body_scrub_patterns"] = vcr_config["body_scrub_patterns"]
     if "filter_replacement" in vcr_config:
@@ -97,7 +118,9 @@ def _resolve_cassette(
 
 
 @pytest.fixture(autouse=True)
-def cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Iterator[Cassette | None]:
+def cassette(
+    request: pytest.FixtureRequest, vcr_config: CassetteConfig, vcr_cassette_dir: str
+) -> Iterator[Cassette | None]:
     """Activates cassette recording/replay for tests marked with @pytest.mark.vcr."""
     marker = request.node.get_closest_marker("vcr")
     if marker is None:
@@ -117,6 +140,7 @@ def cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Iter
         vcr_config=vcr_config,
         cli_record_mode=cli_record_mode,
         test_fspath=str(request.path),
+        vcr_cassette_dir=vcr_cassette_dir,
     )
 
     # Track loaded cassette paths for orphan detection
@@ -133,3 +157,9 @@ def cassette(request: pytest.FixtureRequest, vcr_config: CassetteConfig) -> Iter
     _current_cassette.reset(token)
     release_patches(interceptor_classes)
     cassette.save()
+
+
+@pytest.fixture
+def vcr(cassette: Cassette | None) -> Cassette | None:
+    """Alias for the ``cassette`` fixture, for pytest-recording compatibility."""
+    return cassette

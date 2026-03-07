@@ -423,6 +423,30 @@ vcrpy uses `yaml.load()` with an unsafe loader (`CLoader`/`Loader`) that can exe
 
 cassetter parses YAML in Rust, which has no concept of Python object construction - only data types are supported.
 
+## Migrating from pytest-recording / VCR.py
+
+cassetter is designed as a drop-in replacement. Most projects can migrate with minimal changes.
+
+### Cassette files
+
+Existing VCR cassettes work as-is - cassetter reads both VCR format and its own format. On the next re-record, cassettes are written in cassetter's format with structured JSON bodies instead of escaped strings.
+
+### pytest plugin
+
+cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--record-mode` CLI flag. Key differences:
+
+| pytest-recording | cassetter | Notes |
+|---|---|---|
+| `vcr` fixture | `cassette` fixture | `vcr` is available as an alias |
+| `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
+| `filter_query_parameters` | `filter_query_parameters` | Same name |
+| `decode_compressed_response` | _(automatic)_ | Always decompresses - no config needed |
+| `before_record_response` | _(not supported)_ | Use `before_record_request` or `body_scrub_patterns` |
+| `filter_post_data_parameters` | `body_scrub_patterns` | Regex-based instead of parameter-name-based |
+| `@pytest.mark.block_network` | _(not supported)_ | |
+| `--disable-recording` | _(not supported)_ | |
+
+
 ## Development
 
 Requires Rust toolchain and Python 3.10+.
