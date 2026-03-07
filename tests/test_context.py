@@ -34,9 +34,9 @@ async def test_use_cassette_with_filter_headers(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_use_cassette_with_filter_query_params(tmp_path: object) -> None:
+async def test_use_cassette_with_filter_query_parameters(tmp_path: object) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
-    with use_cassette(path, record_mode="none", filter_query_params=["token"]):
+    with use_cassette(path, record_mode="none", filter_query_parameters=["token"]):
         async with httpx.AsyncClient() as client:
             response = await client.get("https://example.com/api")
     assert response.status_code == 200

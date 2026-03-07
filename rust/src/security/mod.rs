@@ -12,7 +12,7 @@ pub struct SecurityConfig {
     #[pyo3(get, set)]
     pub filter_headers: Vec<String>,
     #[pyo3(get, set)]
-    pub filter_query_params: Vec<String>,
+    pub filter_query_parameters: Vec<String>,
     #[pyo3(get, set)]
     pub body_scrub_patterns: Vec<String>,
     #[pyo3(get, set)]
@@ -24,20 +24,20 @@ impl SecurityConfig {
     #[new]
     #[pyo3(signature = (
         filter_headers=None,
-        filter_query_params=None,
+        filter_query_parameters=None,
         body_scrub_patterns=None,
         replacement=None,
     ))]
     fn new(
         filter_headers: Option<Vec<String>>,
-        filter_query_params: Option<Vec<String>>,
+        filter_query_parameters: Option<Vec<String>>,
         body_scrub_patterns: Option<Vec<String>>,
         replacement: Option<String>,
     ) -> Self {
         SecurityConfig {
             filter_headers: filter_headers
                 .unwrap_or_else(|| defaults::DEFAULT_FILTER_HEADERS.iter().map(|s| s.to_string()).collect()),
-            filter_query_params: filter_query_params
+            filter_query_parameters: filter_query_parameters
                 .unwrap_or_else(|| defaults::DEFAULT_FILTER_QUERY_PARAMS.iter().map(|s| s.to_string()).collect()),
             body_scrub_patterns: body_scrub_patterns
                 .unwrap_or_else(|| defaults::DEFAULT_BODY_SCRUB_PATTERNS.iter().map(|s| s.to_string()).collect()),
@@ -62,7 +62,7 @@ pub fn scrub_interaction(
 
     // Scrub query params from URI
     if let Some(new_uri) =
-        headers::filter_query_params(&scrubbed.request.uri, &config.filter_query_params, &config.replacement)
+        headers::filter_query_params(&scrubbed.request.uri, &config.filter_query_parameters, &config.replacement)
     {
         scrubbed.request.uri = new_uri;
     }

@@ -84,10 +84,8 @@ def _resolve_cassette(
     security_kwargs: dict[str, Any] = {}
     if "filter_headers" in vcr_config:
         security_kwargs["filter_headers"] = vcr_config["filter_headers"]
-    # Accept both cassetter's `filter_query_params` and VCR's `filter_query_parameters`
-    filter_qp = vcr_config.get("filter_query_params") or vcr_config.get("filter_query_parameters")
-    if filter_qp:
-        security_kwargs["filter_query_params"] = filter_qp
+    if "filter_query_parameters" in vcr_config:
+        security_kwargs["filter_query_parameters"] = vcr_config["filter_query_parameters"]
     if "body_scrub_patterns" in vcr_config:
         security_kwargs["body_scrub_patterns"] = vcr_config["body_scrub_patterns"]
     if "filter_replacement" in vcr_config:

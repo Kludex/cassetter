@@ -186,7 +186,7 @@ def test_resolve_cassette_security_config_from_vcr_config(tmp_path: object) -> N
             record_mode="none",
             cassette_dir="cassettes",
             filter_headers=["x-api-key"],
-            filter_query_params=["token"],
+            filter_query_parameters=["token"],
             body_scrub_patterns=["secret"],
             filter_replacement="[HIDDEN]",
         ),
@@ -285,8 +285,7 @@ def test_resolve_cassette_marker_cassette_dir_overrides_fixture(tmp_path: object
     assert "marker_dir" in cassette.path
 
 
-def test_resolve_cassette_filter_query_parameters_alias(tmp_path: object) -> None:
-    """VCR's `filter_query_parameters` is accepted as alias for `filter_query_params`."""
+def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)

@@ -17,10 +17,10 @@ def test_security_default_filter_headers() -> None:
     assert "x-api-key" in config.filter_headers
 
 
-def test_security_default_filter_query_params() -> None:
+def test_security_default_filter_query_parameters() -> None:
     config = SecurityConfig()
-    assert "api_key" in config.filter_query_params
-    assert "access_token" in config.filter_query_params
+    assert "api_key" in config.filter_query_parameters
+    assert "access_token" in config.filter_query_parameters
 
 
 def test_security_default_body_scrub_patterns() -> None:
@@ -118,7 +118,7 @@ def test_scrub_custom_filter_list() -> None:
     )
     config = SecurityConfig(
         filter_headers=["x-custom-secret"],
-        filter_query_params=[],
+        filter_query_parameters=[],
         body_scrub_patterns=[],
     )
     scrubbed = scrub_interaction(interaction, config)

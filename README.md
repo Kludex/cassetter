@@ -439,29 +439,13 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 |---|---|---|
 | `vcr` fixture | `cassette` fixture | `vcr` is available as an alias |
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
-| `filter_query_parameters` | `filter_query_params` | Both names accepted in `vcr_config` |
+| `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `decode_compressed_response` | _(automatic)_ | Always decompresses - no config needed |
 | `before_record_response` | _(not supported)_ | Use `before_record_request` or `body_scrub_patterns` |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Regex-based instead of parameter-name-based |
 | `@pytest.mark.block_network` | _(not supported)_ | |
 | `--disable-recording` | _(not supported)_ | |
 
-### Typical migration
-
-1. Replace `pytest-recording` and `vcrpy` with `cassetter`:
-
-```bash
-uv remove pytest-recording vcrpy
-uv add cassetter
-```
-
-2. Rename `filter_query_parameters` to `filter_query_params` in your `vcr_config` fixture (or keep the old name - both work).
-
-3. Run your tests. Existing cassettes are read as-is. To re-record in cassetter's format:
-
-```bash
-pytest --record-mode=all
-```
 
 ## Development
 

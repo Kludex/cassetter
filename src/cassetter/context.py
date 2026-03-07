@@ -66,7 +66,7 @@ def use_cassette(
     match_on: list[str] | None = None,
     ignore_json_paths: list[str] | None = None,
     filter_headers: list[str] | None = None,
-    filter_query_params: list[str] | None = None,
+    filter_query_parameters: list[str] | None = None,
     body_scrub_patterns: list[str] | None = None,
     filter_replacement: str | None = None,
     intercept: list[str] | None = None,
@@ -84,7 +84,7 @@ def use_cassette(
         match_on: Fields to match on (default: ["method", "uri"]).
         ignore_json_paths: JSON paths to ignore during matching.
         filter_headers: Headers to filter from cassettes.
-        filter_query_params: Query params to filter.
+        filter_query_parameters: Query params to filter.
         body_scrub_patterns: Body patterns to scrub.
         filter_replacement: Replacement string for filtered values.
         intercept: HTTP libraries to intercept (default: auto-detect).
@@ -97,8 +97,8 @@ def use_cassette(
     security_kwargs: dict[str, Any] = {}
     if filter_headers is not None:
         security_kwargs["filter_headers"] = filter_headers
-    if filter_query_params is not None:
-        security_kwargs["filter_query_params"] = filter_query_params
+    if filter_query_parameters is not None:
+        security_kwargs["filter_query_parameters"] = filter_query_parameters
     if body_scrub_patterns is not None:
         security_kwargs["body_scrub_patterns"] = body_scrub_patterns
     if filter_replacement is not None:
