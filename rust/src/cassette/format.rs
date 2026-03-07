@@ -9,6 +9,7 @@ use crate::protocol::ws::{WsFrame, WsInteraction};
 use super::Cassette;
 
 /// Raw YAML structure - maps directly to the cassette file format.
+/// Also accepts VCR-format cassettes on read (but never writes that format).
 #[derive(Serialize, Deserialize)]
 pub struct RawCassette {
     pub version: u32,
@@ -33,16 +34,17 @@ pub struct RawRequest {
     pub uri: String,
     #[serde(default)]
     pub headers: HashMap<String, Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct RawResponse {
+    #[serde(deserialize_with = "deserialize_status")]
     pub status: u16,
     #[serde(default)]
     pub headers: HashMap<String, Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
 }
 
@@ -56,6 +58,85 @@ pub struct RawBody {
 
 fn default_none_type() -> String {
     "none".to_string()
+}
+
+/// Deserialize status from either a plain integer (cassetter) or `{code: N, message: "..."}` (VCR).
+fn deserialize_status<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_yaml::Value::deserialize(deserializer)?;
+    match &value {
+        serde_yaml::Value::Number(n) => n
+            .as_u64()
+            .and_then(|v| u16::try_from(v).ok())
+            .ok_or_else(|| serde::de::Error::custom("invalid status number")),
+        serde_yaml::Value::Mapping(map) => {
+            // VCR format: {code: 200, message: "OK"}
+            let code_key = serde_yaml::Value::String("code".to_string());
+            map.get(&code_key)
+                .and_then(|v| v.as_u64())
+                .and_then(|v| u16::try_from(v).ok())
+                .ok_or_else(|| serde::de::Error::custom("VCR status missing 'code' field"))
+        }
+        _ => Err(serde::de::Error::custom("expected number or mapping for status")),
+    }
+}
+
+/// Deserialize body from either cassetter format `{type: ..., content: ...}` or VCR format.
+///
+/// VCR body formats:
+/// - `null` or missing -> none
+/// - `""` (empty string) -> none
+/// - `"raw string"` -> detect JSON or use text
+/// - `{string: "..."}` -> detect JSON or use text
+fn deserialize_body<'de, D>(deserializer: D) -> Result<RawBody, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_yaml::Value::deserialize(deserializer)?;
+    match &value {
+        serde_yaml::Value::Null => Ok(RawBody::default()),
+        serde_yaml::Value::String(s) => Ok(vcr_string_to_raw_body(s)),
+        serde_yaml::Value::Mapping(map) => {
+            let type_key = serde_yaml::Value::String("type".to_string());
+            let string_key = serde_yaml::Value::String("string".to_string());
+            if map.contains_key(&type_key) {
+                // Cassetter format - deserialize normally
+                serde_yaml::from_value(value).map_err(serde::de::Error::custom)
+            } else if let Some(string_val) = map.get(&string_key) {
+                // VCR format: {string: "..."}
+                match string_val {
+                    serde_yaml::Value::Null => Ok(RawBody::default()),
+                    serde_yaml::Value::String(s) => Ok(vcr_string_to_raw_body(s)),
+                    _ => Ok(RawBody::default()),
+                }
+            } else {
+                // Unknown mapping, treat as none
+                Ok(RawBody::default())
+            }
+        }
+        _ => Ok(RawBody::default()),
+    }
+}
+
+/// Convert a VCR body string into a RawBody, detecting JSON content.
+fn vcr_string_to_raw_body(s: &str) -> RawBody {
+    if s.is_empty() {
+        return RawBody::default();
+    }
+    // Try to parse as JSON
+    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(s) {
+        RawBody {
+            body_type: "json".to_string(),
+            content: Some(json_to_yaml(&json_val)),
+        }
+    } else {
+        RawBody {
+            body_type: "text".to_string(),
+            content: Some(serde_yaml::Value::String(s.to_string())),
+        }
+    }
 }
 
 // --- gRPC raw types ---
