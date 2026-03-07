@@ -15,6 +15,7 @@ class CassetteConfig(TypedDict, total=False):
     ignore_json_paths: list[str]
     filter_headers: list[str]
     filter_query_params: list[str]
+    filter_query_parameters: list[str]
     body_scrub_patterns: list[str]
     filter_replacement: str
     cassette_dir: str

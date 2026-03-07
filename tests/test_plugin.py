@@ -247,3 +247,62 @@ def test_resolve_cassette_max_age_marker_override(tmp_path: object) -> None:
             cli_record_mode=None,
             test_fspath=os.path.join(test_dir, "test_example.py"),
         )
+
+
+def test_resolve_cassette_vcr_cassette_dir_fixture(tmp_path: object) -> None:
+    cassette_dir = os.path.join(str(tmp_path), "custom_cassettes")
+    os.makedirs(cassette_dir, exist_ok=True)
+    RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+        vcr_cassette_dir=cassette_dir,
+    )
+
+    assert cassette.path == os.path.join(cassette_dir, "test_func.yaml")
+
+
+def test_resolve_cassette_marker_cassette_dir_overrides_fixture(tmp_path: object) -> None:
+    marker_dir = os.path.join(str(tmp_path), "marker_dir", "test_example")
+    os.makedirs(marker_dir, exist_ok=True)
+    RustCassette().save(os.path.join(marker_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={"cassette_dir": "marker_dir"},
+        vcr_config=CassetteConfig(record_mode="none"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+        vcr_cassette_dir=os.path.join(str(tmp_path), "fixture_dir"),
+    )
+
+    assert "marker_dir" in cassette.path
+
+
+def test_resolve_cassette_filter_query_parameters_alias(tmp_path: object) -> None:
+    """VCR's `filter_query_parameters` is accepted as alias for `filter_query_params`."""
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(
+            record_mode="none",
+            cassette_dir="cassettes",
+            filter_query_parameters=["api_key", "token"],
+        ),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert cassette is not None
