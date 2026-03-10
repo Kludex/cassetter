@@ -1,4 +1,5 @@
 pub mod format;
+pub mod format_toml;
 pub mod index;
 
 use std::path::Path;
@@ -150,6 +151,14 @@ impl Cassette {
         let content = std::fs::read_to_string(p).map_err(|e| {
             pyo3::exceptions::PyIOError::new_err(format!("read error: {e}"))
         })?;
+
+        if is_toml(path) {
+            let raw: format_toml::TomlCassette = toml::from_str(&content).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("TOML parse error: {e}"))
+            })?;
+            return Ok(format_toml::from_toml(raw));
+        }
+
         let raw: format::RawCassette = serde_yaml::from_str(&content).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("YAML parse error: {e}"))
         })?;
@@ -157,10 +166,6 @@ impl Cassette {
     }
 
     fn save(&self, path: &str) -> PyResult<()> {
-        let raw = format::to_raw(self);
-        let yaml = serde_yaml::to_string(&raw).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("YAML serialize error: {e}"))
-        })?;
         // Ensure parent directory exists
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
@@ -168,9 +173,24 @@ impl Cassette {
                 pyo3::exceptions::PyIOError::new_err(format!("mkdir error: {e}"))
             })?;
         }
-        std::fs::write(p, yaml).map_err(|e| {
-            pyo3::exceptions::PyIOError::new_err(format!("write error: {e}"))
-        })?;
+
+        if is_toml(path) {
+            let raw = format_toml::to_toml(self);
+            let out = toml::to_string_pretty(&raw).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("TOML serialize error: {e}"))
+            })?;
+            std::fs::write(p, out).map_err(|e| {
+                pyo3::exceptions::PyIOError::new_err(format!("write error: {e}"))
+            })?;
+        } else {
+            let raw = format::to_raw(self);
+            let yaml = serde_yaml::to_string(&raw).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("YAML serialize error: {e}"))
+            })?;
+            std::fs::write(p, yaml).map_err(|e| {
+                pyo3::exceptions::PyIOError::new_err(format!("write error: {e}"))
+            })?;
+        }
         Ok(())
     }
 
@@ -187,4 +207,10 @@ impl Cassette {
             self.ws_interactions.len(),
         )
     }
+}
+
+fn is_toml(path: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
 }

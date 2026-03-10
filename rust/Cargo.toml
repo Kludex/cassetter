@@ -19,3 +19,4 @@ regex = "1"
 unicode-normalization = "0.1"
 pythonize = "0.28"
 chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"

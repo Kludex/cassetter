@@ -97,6 +97,10 @@ with use_cassette(
 
 ## Cassette format
 
+Cassettes can be stored as **YAML** (default) or **TOML**. The format is detected by file extension (`.yaml` / `.yml` for YAML, `.toml` for TOML).
+
+### YAML (default)
+
 JSON bodies are stored as structured YAML - not escaped strings:
 
 ```yaml
@@ -130,6 +134,17 @@ interactions:
                 content: Hi there!
     recorded_at: '2026-02-20T10:30:01Z'
 ```
+
+### TOML
+
+Use `.toml` extension for TOML cassettes. Body content is stored as a JSON string since TOML cannot represent null values or heterogeneous arrays:
+
+```python
+with use_cassette("cassette.toml"):
+    ...
+```
+
+TOML loads ~2x faster than YAML and produces ~12% smaller files.
 
 ## Request matching
 
