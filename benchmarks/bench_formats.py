@@ -1,4 +1,5 @@
 """Benchmark cassette load/save across YAML, TOML, and VCR formats."""
+
 from __future__ import annotations
 
 import os
