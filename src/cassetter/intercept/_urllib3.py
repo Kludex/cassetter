@@ -47,9 +47,10 @@ class Urllib3Interceptor:
             hook = cassette.before_record_request
             if hook is not None:
                 try:
-                    hook(RawRequest(norm_method, full_url, norm_headers, norm_body))
+                    raw = hook(RawRequest(norm_method, full_url, norm_headers, norm_body))
                 except SkipRecording:
                     return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
+                norm_method, full_url, norm_headers, norm_body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
                 response = cassette.play(norm_method, full_url, norm_headers, norm_body)

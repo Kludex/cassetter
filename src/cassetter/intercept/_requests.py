@@ -87,9 +87,10 @@ class RequestsInterceptor:
             hook = cassette.before_record_request
             if hook is not None:
                 try:
-                    hook(RawRequest(method, uri, headers, body))
+                    raw = hook(RawRequest(method, uri, headers, body))
                 except SkipRecording:
                     return original_send(session, request, **kwargs)
+                method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
                 response = cassette.play(method, uri, headers, body)
