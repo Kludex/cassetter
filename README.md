@@ -451,7 +451,17 @@ Rust-powered YAML parsing and serialization is 3-6x faster than vcrpy (which use
   save              7.58 ms           45.64 ms      6.0x
 ```
 
-Run `uv run python benchmarks/bench.py` to reproduce.
+TOML cassettes (`.toml`) load ~2x faster than YAML and produce ~12% smaller files:
+
+```
+  1000 interactions
+                      YAML         TOML
+  save                10.59 ms     11.67 ms
+  load                18.99 ms      9.79 ms
+  size                768.0 KB     675.3 KB
+```
+
+Run `uv run python benchmarks/bench.py` and `uv run python benchmarks/bench_formats.py` to reproduce.
 
 ## YAML safety
 
