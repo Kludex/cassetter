@@ -68,6 +68,23 @@ def test_scrub_query_params() -> None:
     assert "format=json" in scrubbed.request.uri
 
 
+def test_scrub_query_params_preserves_encoding() -> None:
+    """Query params with special chars like commas must keep their original encoding."""
+    interaction = HttpInteraction(
+        request=HttpRequest(
+            "GET",
+            "https://httpbin.org/get?product=123,456&api_key=secret",
+        ),
+        response=HttpResponse(200),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+    config = SecurityConfig()
+    scrubbed = scrub_interaction(interaction, config)
+
+    assert "product=123,456" in scrubbed.request.uri
+    assert "api_key=[FILTERED]" in scrubbed.request.uri
+
+
 def test_scrub_json_body() -> None:
     interaction = HttpInteraction(
         request=HttpRequest(

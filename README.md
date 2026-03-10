@@ -339,14 +339,17 @@ with use_cassette(
 
 ### Before record request hook
 
-For advanced filtering, use a callback that runs before each request is recorded or replayed. Raise `SkipRecording` to let the request pass through live:
+Use a callback that runs before each request is recorded or replayed. Return the (possibly modified) `RawRequest`. Raise `SkipRecording` to let the request pass through live:
 
 ```python
 from cassetter import RawRequest, SkipRecording, use_cassette
 
-def my_hook(request: RawRequest) -> None:
+def my_hook(request: RawRequest) -> RawRequest:
     if not request.uri.startswith("https://api.mycompany.com"):
         raise SkipRecording
+    # Strip auth header before recording
+    request.headers.pop("authorization", None)
+    return request
 
 with use_cassette("cassette.yaml", before_record_request=my_hook):
     ...
@@ -461,7 +464,7 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 | `decode_compressed_response` | _(automatic)_ | Always decompresses - no config needed |
 | `before_record_response` | `before_record_response` | Same name, same behavior |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Regex-based instead of parameter-name-based |
-| `before_record_request` (transform) | `before_record_request` (skip only) | VCR allows modifying the request; cassetter only supports `SkipRecording` |
+| `before_record_request` | `before_record_request` | Same name, same behavior |
 | `before_playback_response` | _(not supported)_ | VCR hook to modify/filter responses during playback |
 | `allow_playback_repeats` | _(not supported)_ | VCR can replay the same interaction multiple times |
 | `record_on_exception` | _(not supported)_ | VCR can skip saving when the test raises |

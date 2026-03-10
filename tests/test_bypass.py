@@ -82,9 +82,10 @@ def test_should_bypass_combines_localhost_and_ignore_hosts() -> None:
 
 @pytest.mark.anyio
 async def test_bypass_cassette_exception_passes_through(cassette_path: str) -> None:
-    def hook(request: RawRequest) -> None:
+    def hook(request: RawRequest) -> RawRequest:
         if "googleapis.com" in request.uri:
             raise SkipRecording
+        return request
 
     with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
@@ -98,8 +99,9 @@ async def test_bypass_cassette_exception_passes_through(cassette_path: str) -> N
 async def test_hook_without_exception_uses_cassette(preloaded_cassette: str) -> None:
     calls: list[str] = []
 
-    def hook(request: RawRequest) -> None:
+    def hook(request: RawRequest) -> RawRequest:
         calls.append(request.uri)
+        return request
 
     with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
         async with httpx.AsyncClient() as client:
@@ -110,9 +112,10 @@ async def test_hook_without_exception_uses_cassette(preloaded_cassette: str) -> 
 
 
 def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> None:
-    def hook(request: RawRequest) -> None:
+    def hook(request: RawRequest) -> RawRequest:
         if "googleapis.com" in request.uri:
             raise SkipRecording
+        return request
 
     with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
@@ -126,8 +129,9 @@ def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> No
 async def test_hook_receives_correct_arguments(preloaded_cassette: str) -> None:
     captured: list[RawRequest] = []
 
-    def hook(request: RawRequest) -> None:
+    def hook(request: RawRequest) -> RawRequest:
         captured.append(request)
+        return request
 
     with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
         async with httpx.AsyncClient() as client:

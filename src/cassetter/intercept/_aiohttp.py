@@ -42,16 +42,19 @@ class AiohttpInterceptor:
             headers = extract_request_headers(kwargs.get("headers"))
             body = extract_request_body(kwargs)
 
+            norm_method = method.upper()
+
             hook = cassette.before_record_request
             if hook is not None:
                 try:
-                    hook(RawRequest(method.upper(), uri, headers, body))
+                    raw = hook(RawRequest(norm_method, uri, headers, body))
                 except SkipRecording:
                     return await original_request(session, method, str_or_url, **kwargs)
+                norm_method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
-                response = cassette.play(method.upper(), uri, headers, body)
-                return build_aiohttp_response(method, uri, response)
+                response = cassette.play(norm_method, uri, headers, body)
+                return build_aiohttp_response(norm_method, uri, response)
             except NoMatchError:
                 if not cassette.can_record:
                     raise
@@ -61,7 +64,7 @@ class AiohttpInterceptor:
             resp_headers = extract_response_headers(real_response.headers)
 
             cassette.record(
-                method=method.upper(),
+                method=norm_method,
                 uri=uri,
                 request_headers=headers,
                 request_body=body,

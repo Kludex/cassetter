@@ -18,5 +18,4 @@ zstd = "0.13"
 regex = "1"
 unicode-normalization = "0.1"
 pythonize = "0.28"
-url = "2"
 chrono = { version = "0.4", features = ["serde"] }

@@ -113,9 +113,10 @@ def intercept(
     hook = cassette.before_record_request
     if hook is not None:
         try:
-            hook(RawRequest(method, url, norm_headers, body))
+            raw = hook(RawRequest(method, url, norm_headers, body))
         except SkipRecording:
             return original(client, *original_args, **kwargs)
+        method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
         response = cassette.play(method, url, norm_headers, body)

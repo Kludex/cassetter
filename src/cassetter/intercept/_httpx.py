@@ -98,16 +98,17 @@ async def async_intercept(
 
     headers = extract_headers(request.headers)
     try:
-        body = request.content
+        body: bytes | None = request.content
     except httpx.RequestNotRead:
         body = await request.aread()
 
     hook = cassette.before_record_request
     if hook is not None:
         try:
-            hook(RawRequest(method, uri, headers, body))
+            raw = hook(RawRequest(method, uri, headers, body))
         except SkipRecording:
             return await passthrough(request)
+        method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
         response = cassette.play(method, uri, headers, body)
@@ -150,14 +151,15 @@ def sync_intercept(
         return passthrough(request)
 
     headers = extract_headers(request.headers)
-    body = request.content
+    body: bytes | None = request.content
 
     hook = cassette.before_record_request
     if hook is not None:
         try:
-            hook(RawRequest(method, uri, headers, body))
+            raw = hook(RawRequest(method, uri, headers, body))
         except SkipRecording:
             return passthrough(request)
+        method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
         response = cassette.play(method, uri, headers, body)

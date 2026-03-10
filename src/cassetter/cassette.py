@@ -70,7 +70,7 @@ class RawResponse:
     body: bytes | None
 
 
-BeforeRecordRequest = Callable[[RawRequest], None]
+BeforeRecordRequest = Callable[[RawRequest], RawRequest]
 BeforeRecordResponse = Callable[[RawResponse], RawResponse]
 
 
