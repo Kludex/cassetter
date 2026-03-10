@@ -449,6 +449,19 @@ cassetter is designed as a drop-in replacement. Most projects can migrate with m
 
 Existing VCR cassettes work as-is - cassetter reads both VCR format and its own format. On the next re-record, cassettes are written in cassetter's format with structured JSON bodies instead of escaped strings.
 
+To bulk-convert existing cassettes to a different format, use the CLI:
+
+```bash
+# Convert a single file
+cassetter convert cassette.yaml cassette.toml
+
+# Convert all cassettes in a directory (in-place, changing extension)
+cassetter convert tests/cassettes/ toml
+
+# Convert to a separate output directory
+cassetter convert tests/cassettes/ output/
+```
+
 ### pytest plugin
 
 cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--record-mode` CLI flag. Key differences:
