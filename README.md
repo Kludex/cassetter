@@ -459,7 +459,7 @@ cassetter convert cassette.yaml cassette.toml
 cassetter convert tests/cassettes/ toml
 
 # Convert to a separate output directory
-cassetter convert tests/cassettes/ output/
+cassetter convert tests/cassettes/ output/ --to toml
 ```
 
 ### pytest plugin

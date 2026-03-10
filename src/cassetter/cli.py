@@ -25,7 +25,8 @@ def convert(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     if src.is_dir():
-        convert_directory(src, dst, force=args.force)
+        to_ext = f".{args.to}" if args.to else None
+        convert_directory(src, dst, force=args.force, to_ext=to_ext)
         return
 
     if dst.exists() and not args.force:
@@ -36,19 +37,21 @@ def convert(args: argparse.Namespace) -> None:
     print(f"Converted {n} interaction(s): {src} -> {dst}")
 
 
-def convert_directory(src_dir: Path, dst: Path, *, force: bool) -> None:
+def convert_directory(src_dir: Path, dst: Path, *, force: bool, to_ext: str | None) -> None:
     """Convert all cassette files in a directory tree.
 
     *dst* is either an existing/new directory, or a bare extension like ``toml``
     that determines the output format while keeping files in-place.
+    *to_ext* overrides the target extension (e.g. ``.toml``) when writing to
+    a separate output directory.
     """
     # Interpret dst as a target extension when it looks like one (no path separators, matches a known ext)
-    target_ext = None
+    target_ext = to_ext
     if not dst.suffix and f".{dst}" in EXTENSIONS:
-        target_ext = f".{dst}"
+        target_ext = target_ext or f".{dst}"
         out_dir = src_dir
     elif dst.suffix in EXTENSIONS and len(dst.parts) == 1:
-        target_ext = dst.suffix
+        target_ext = target_ext or dst.suffix
         out_dir = src_dir
     else:
         out_dir = dst
@@ -89,6 +92,7 @@ def main(argv: list[str] | None = None) -> None:
     convert_parser.add_argument("input", help="Source cassette file or directory")
     convert_parser.add_argument("output", help="Destination file, directory, or target format (e.g. 'toml')")
     convert_parser.add_argument("--force", "-f", action="store_true", help="Overwrite existing files")
+    convert_parser.add_argument("--to", choices=["yaml", "toml"], help="Target format when output is a directory")
 
     args = parser.parse_args(argv)
 
