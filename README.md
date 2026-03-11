@@ -1,5 +1,7 @@
 # Cassetter
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge/github/Kludex/cassetter&style=flat-square)](https://codspeed.io/Kludex/cassetter?utm_source=badge)
+
 Rust-powered HTTP cassette recorder for Python tests. Safe by default.
 
 ## Why?
