@@ -63,6 +63,7 @@ dev = [
     "websockets>=12.0",
     "pyreqwest-impersonate>=0.5",
     "vcrpy>=8.1.1",
+    "pytest-codspeed>=3.2",
 ]
 
 [tool.ruff]
@@ -93,6 +94,7 @@ xfail_strict = true
 filterwarnings = ["error"]
 markers = [
     "vcr: Mark test to use VCR cassette recording/replay",
+    "benchmark: CodSpeed benchmark",
 ]
 
 [tool.coverage.run]
