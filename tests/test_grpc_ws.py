@@ -412,6 +412,19 @@ def test_record_ws_interaction(tmp_path: object) -> None:
     assert len(cassette.ws_interactions) == 1
 
 
+def test_record_ws_scrubs_headers(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "ws_scrub.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    headers = {"authorization": ["Bearer super-secret-token"], "x-custom": ["keep"]}
+    cassette.record_ws("wss://ws.example.com", headers, [])
+
+    recorded = cassette.ws_interactions[0]
+    assert "authorization" not in recorded.headers
+    assert recorded.headers["x-custom"] == ["keep"]
+
+
 def test_play_ws_interaction(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "ws_play.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)

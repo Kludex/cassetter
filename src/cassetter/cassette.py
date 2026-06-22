@@ -27,6 +27,7 @@ from cassetter._core import (
     find_ws_match,
     process_body,
     scrub_interaction,
+    scrub_ws_interaction,
 )
 from cassetter.recording import RecordMode
 
@@ -366,6 +367,9 @@ class Cassette:
         """Record a WebSocket interaction."""
         recorded_at = datetime.now(timezone.utc).isoformat()
         interaction = WsInteraction(uri, headers, frames, recorded_at)
+
+        # Apply security filtering
+        interaction = scrub_ws_interaction(interaction, self._security_config)
 
         if self._inner is None:
             self._inner = _RustCassette()

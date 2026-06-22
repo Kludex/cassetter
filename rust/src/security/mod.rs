@@ -5,6 +5,7 @@ pub mod headers;
 use pyo3::prelude::*;
 
 use crate::protocol::http::HttpInteraction;
+use crate::protocol::ws::WsInteraction;
 
 #[pyclass(from_py_object)]
 #[derive(Clone, Debug)]
@@ -75,5 +76,13 @@ pub fn scrub_interaction(
     scrubbed.response.body =
         body::scrub_body(&scrubbed.response.body, &config.body_scrub_patterns, &config.replacement);
 
+    scrubbed
+}
+
+/// Scrub a WebSocket interaction: remove sensitive headers from the handshake.
+#[pyfunction]
+pub fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig) -> WsInteraction {
+    let mut scrubbed = interaction.clone();
+    headers::filter_headers(&mut scrubbed.headers, &config.filter_headers);
     scrubbed
 }

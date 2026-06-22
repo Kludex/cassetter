@@ -6,7 +6,9 @@ from cassetter._core import (
     HttpRequest,
     HttpResponse,
     SecurityConfig,
+    WsInteraction,
     scrub_interaction,
+    scrub_ws_interaction,
 )
 
 
@@ -49,6 +51,26 @@ def test_scrub_headers() -> None:
     assert "authorization" not in scrubbed.request.headers
     assert "content-type" in scrubbed.request.headers
     assert "set-cookie" not in scrubbed.response.headers
+
+
+def test_scrub_ws_headers() -> None:
+    interaction = WsInteraction(
+        "wss://api.example.com/v1",
+        {"authorization": ["Bearer secret"], "content-type": ["application/json"]},
+    )
+    config = SecurityConfig()
+    scrubbed = scrub_ws_interaction(interaction, config)
+
+    assert "authorization" not in scrubbed.headers
+    assert "content-type" in scrubbed.headers
+
+
+def test_scrub_ws_headers_custom_filter() -> None:
+    interaction = WsInteraction("wss://api.example.com/v1", {"x-trace-id": ["abc"]})
+    config = SecurityConfig(filter_headers=["x-trace-id"])
+    scrubbed = scrub_ws_interaction(interaction, config)
+
+    assert "x-trace-id" not in scrubbed.headers
 
 
 def test_scrub_query_params() -> None:
