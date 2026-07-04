@@ -63,7 +63,11 @@ def convert(args: argparse.Namespace) -> None:
         print(f"error: {dst} already exists (use --force to overwrite)", file=sys.stderr)
         sys.exit(1)
 
-    n = convert_file(src, dst, scrub=scrub)
+    try:
+        n = convert_file(src, dst, scrub=scrub)
+    except (ValueError, OSError) as exc:
+        print(f"error: {src}: {exc}", file=sys.stderr)
+        sys.exit(1)
     print(f"Converted {n} interaction(s): {src} -> {dst}")
 
 
@@ -92,6 +96,7 @@ def convert_directory(src_dir: Path, dst: Path, *, force: bool, to_ext: str | No
         sys.exit(1)
 
     converted = 0
+    failed = 0
     for src_file in sources:
         rel = src_file.relative_to(src_dir)
         if target_ext is not None:
@@ -108,10 +113,18 @@ def convert_directory(src_dir: Path, dst: Path, *, force: bool, to_ext: str | No
             continue
 
         dst_file.parent.mkdir(parents=True, exist_ok=True)
-        n = convert_file(src_file, dst_file, scrub=scrub)
+        try:
+            n = convert_file(src_file, dst_file, scrub=scrub)
+        except (ValueError, OSError) as exc:
+            print(f"error: {src_file}: {exc}", file=sys.stderr)
+            failed += 1
+            continue
         print(f"  {rel} -> {dst_file.relative_to(out_dir)} ({n} interaction(s))")
         converted += 1
 
+    if failed:
+        print(f"Converted {converted} file(s), failed {failed}")
+        sys.exit(1)
     print(f"Converted {converted} file(s)")
 
 

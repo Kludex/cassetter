@@ -12,6 +12,7 @@ use super::Cassette;
 /// Also accepts VCR-format cassettes on read (but never writes that format).
 #[derive(Serialize, Deserialize)]
 pub struct RawCassette {
+    #[serde(default = "default_version")]
     pub version: u32,
     pub interactions: Vec<RawInteraction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -36,6 +37,10 @@ pub struct RawRequest {
     pub headers: HashMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
+    /// Structured JSON body used by pydantic-ai style VCR serializers in
+    /// place of `body`. Read-only compatibility - never written back out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_body: Option<serde_yaml::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -46,6 +51,9 @@ pub struct RawResponse {
     pub headers: HashMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
+    /// See `RawRequest::parsed_body`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_body: Option<serde_yaml::Value>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -54,6 +62,10 @@ pub struct RawBody {
     pub body_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<serde_yaml::Value>,
+}
+
+fn default_version() -> u32 {
+    1
 }
 
 fn default_none_type() -> String {
@@ -208,12 +220,18 @@ pub fn from_raw(raw: RawCassette) -> pyo3::PyResult<Cassette> {
                 method: ri.request.method,
                 uri: ri.request.uri,
                 headers: ri.request.headers,
-                body: body_from_raw(ri.request.body),
+                body: match ri.request.parsed_body {
+                    Some(v) => Body::json(yaml_to_json(v)),
+                    None => body_from_raw(ri.request.body),
+                },
             };
             let response = HttpResponse {
                 status: ri.response.status,
                 headers: ri.response.headers,
-                body: body_from_raw(ri.response.body),
+                body: match ri.response.parsed_body {
+                    Some(v) => Body::json(yaml_to_json(v)),
+                    None => body_from_raw(ri.response.body),
+                },
             };
             HttpInteraction {
                 request,
@@ -261,11 +279,13 @@ pub fn to_raw(cassette: &Cassette) -> RawCassette {
                 uri: i.request.uri.clone(),
                 headers: i.request.headers.clone(),
                 body: body_to_raw(&i.request.body),
+                parsed_body: None,
             },
             response: RawResponse {
                 status: i.response.status,
                 headers: i.response.headers.clone(),
                 body: body_to_raw(&i.response.body),
+                parsed_body: None,
             },
             recorded_at: if i.recorded_at.is_empty() {
                 None

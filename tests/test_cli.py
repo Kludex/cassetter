@@ -239,6 +239,36 @@ def test_convert_directory_in_place_with_force(tmp_path: Path) -> None:
     assert not list(src_dir.rglob("*.tmp.*"))
 
 
+def test_convert_unreadable_file_errors_cleanly(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("interactions:\n- not_a_request: {}\n")
+    with pytest.raises(SystemExit, match="1"):
+        main(["convert", str(bad), str(tmp_path / "out.toml")])
+
+
+def test_convert_directory_continues_after_bad_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    src_dir = tmp_path / "cassettes"
+    src_dir.mkdir()
+    (src_dir / "bad.yaml").write_text("interactions:\n- not_a_request: {}\n")
+    c = Cassette()
+    c.add_interaction(
+        HttpInteraction(
+            HttpRequest("GET", "https://example.com"),
+            HttpResponse(200),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(str(src_dir / "good.yaml"))
+
+    with pytest.raises(SystemExit, match="1"):
+        main(["convert", str(src_dir), "toml"])
+
+    captured = capsys.readouterr()
+    assert "bad.yaml" in captured.err
+    assert "Converted 1 file(s), failed 1" in captured.out
+    assert (src_dir / "good.toml").exists()
+
+
 def test_convert_no_command() -> None:
     with pytest.raises(SystemExit, match="1"):
         main([])
