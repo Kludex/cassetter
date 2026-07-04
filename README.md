@@ -81,6 +81,8 @@ Query params like `api_key`, `access_token`, `token`, `client_secret` are replac
 
 JSON body fields like `password`, `access_token`, `refresh_token`, `client_secret` are scrubbed.
 
+Filtering applies to every protocol: HTTP headers, query params, and bodies; gRPC request/response metadata and the `json_debug` payload; WebSocket handshake headers and text/JSON frame bodies. Binary protobuf bodies are stored as-is - they cannot be pattern-scrubbed.
+
 Customize filtering:
 
 ```python

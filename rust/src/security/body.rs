@@ -16,7 +16,7 @@ pub fn scrub_body(body: &Body, patterns: &[String], replacement: &str) -> Body {
 }
 
 /// Scrub JSON values: replace values of keys that match sensitive patterns.
-fn scrub_json_value(
+pub fn scrub_json_value(
     value: &serde_json::Value,
     patterns: &[String],
     replacement: &str,
