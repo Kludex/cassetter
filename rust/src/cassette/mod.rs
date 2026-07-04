@@ -159,6 +159,7 @@ impl Cassette {
             return Ok(format_toml::from_toml(raw));
         }
 
+        let content = format::tag_binary_scalars(&content);
         let raw: format::RawCassette = serde_yaml::from_str(&content).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("YAML parse error: {e}"))
         })?;

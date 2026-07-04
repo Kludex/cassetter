@@ -8,7 +8,7 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["extension-module"] }
+pyo3 = { version = "0.28" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
@@ -20,3 +20,4 @@ unicode-normalization = "0.1"
 pythonize = "0.28"
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
+base64 = "0.22"
