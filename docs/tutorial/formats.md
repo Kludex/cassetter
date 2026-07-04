@@ -71,6 +71,24 @@ Or convert into a separate output directory:
 $ cassetter convert tests/cassettes/ output/ --to toml
 ```
 
+Rewrite cassettes in place, keeping the same format. This requires `--force` because it overwrites the source files:
+
+```console
+$ cassetter convert tests/cassettes/ yaml --force
+```
+
+This is the command you want when migrating a VCR.py cassette corpus: every file is re-read (Cassetter understands the VCR format) and re-written in Cassetter's format. Writes go through a temp file, so an interrupted run never leaves a truncated cassette.
+
+## Conversion scrubs by default
+
+`cassetter convert` applies the default security filtering to every interaction it writes: sensitive headers, query parameters, and body fields are removed or replaced, exactly as at record time. Cassettes recorded by VCR.py usually contain real `authorization` headers, so this matters.
+
+If you need a byte-faithful conversion instead, opt out:
+
+```console
+$ cassetter convert cassette.yaml cassette.toml --no-scrub
+```
+
 ## Body types
 
 Bodies are stored with an explicit type, so replay is always faithful:

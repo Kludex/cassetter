@@ -489,9 +489,14 @@ cassetter convert cassette.yaml cassette.toml
 # Convert all cassettes in a directory (in-place, changing extension)
 cassetter convert tests/cassettes/ toml
 
+# Rewrite in-place keeping the same format (VCR -> cassetter migration)
+cassetter convert tests/cassettes/ yaml --force
+
 # Convert to a separate output directory
 cassetter convert tests/cassettes/ output/ --to toml
 ```
+
+Conversion applies the default security filtering (headers, query params, body fields), so secrets recorded by VCR.py are removed on the way through. Pass `--no-scrub` to skip it.
 
 ### pytest plugin
 

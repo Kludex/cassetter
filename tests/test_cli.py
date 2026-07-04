@@ -128,6 +128,117 @@ def test_convert_directory_skips_existing(tmp_path: Path) -> None:
     main(["convert", str(src_dir), "toml"])
 
 
+@pytest.fixture()
+def secret_cassette(tmp_path: Path) -> str:
+    """A VCR-era cassette carrying secrets in headers, query params, and bodies."""
+    path = str(tmp_path / "secrets.yaml")
+    c = Cassette()
+    c.add_interaction(
+        HttpInteraction(
+            HttpRequest(
+                "POST",
+                "https://example.com/login?api_key=hunter2&page=1",
+                {"authorization": ["Bearer tok123"], "accept": ["application/json"]},
+                Body("json", {"password": "hunter2", "user": "alice"}),
+            ),
+            HttpResponse(
+                200,
+                {"set-cookie": ["session=abc"]},
+                Body("json", {"access_token": "tok456", "ok": True}),
+            ),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(path)
+    return path
+
+
+def test_convert_scrubs_by_default(secret_cassette: str, tmp_path: Path) -> None:
+    dst = str(tmp_path / "clean.yaml")
+    main(["convert", secret_cassette, dst])
+
+    loaded = Cassette.load(dst)
+    request = loaded.interactions[0].request
+    response = loaded.interactions[0].response
+    assert "authorization" not in request.headers
+    assert request.headers["accept"] == ["application/json"]
+    assert "hunter2" not in request.uri
+    assert "page=1" in request.uri
+    assert request.body.content["password"] == "[FILTERED]"
+    assert request.body.content["user"] == "alice"
+    assert "set-cookie" not in response.headers
+    assert response.body.content["access_token"] == "[FILTERED]"
+    assert response.body.content["ok"] is True
+
+
+def test_convert_no_scrub_preserves_data(secret_cassette: str, tmp_path: Path) -> None:
+    dst = str(tmp_path / "raw.yaml")
+    main(["convert", secret_cassette, dst, "--no-scrub"])
+
+    loaded = Cassette.load(dst)
+    request = loaded.interactions[0].request
+    assert request.headers["authorization"] == ["Bearer tok123"]
+    assert "api_key=hunter2" in request.uri
+    assert request.body.content["password"] == "hunter2"
+
+
+def test_convert_in_place_requires_force(yaml_cassette: str) -> None:
+    with pytest.raises(SystemExit, match="1"):
+        main(["convert", yaml_cassette, yaml_cassette])
+
+
+def test_convert_in_place_with_force(secret_cassette: str) -> None:
+    main(["convert", secret_cassette, secret_cassette, "--force"])
+
+    loaded = Cassette.load(secret_cassette)
+    assert len(loaded) == 1
+    assert "authorization" not in loaded.interactions[0].request.headers
+    # No temp file left behind
+    assert not Path(secret_cassette).with_suffix(".tmp.yaml").exists()
+
+
+def test_convert_directory_in_place_requires_force(tmp_path: Path) -> None:
+    src_dir = tmp_path / "cassettes"
+    src_dir.mkdir()
+    c = Cassette()
+    c.add_interaction(
+        HttpInteraction(
+            HttpRequest("GET", "https://example.com", {"authorization": ["Bearer x"]}),
+            HttpResponse(200),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(str(src_dir / "test.yaml"))
+
+    # Without --force, same-path files are skipped and left untouched
+    main(["convert", str(src_dir), "yaml"])
+    loaded = Cassette.load(str(src_dir / "test.yaml"))
+    assert loaded.interactions[0].request.headers["authorization"] == ["Bearer x"]
+
+
+def test_convert_directory_in_place_with_force(tmp_path: Path) -> None:
+    src_dir = tmp_path / "cassettes"
+    (src_dir / "nested").mkdir(parents=True)
+    for name in ("a.yaml", "nested/b.yml"):
+        c = Cassette()
+        c.add_interaction(
+            HttpInteraction(
+                HttpRequest("GET", f"https://example.com/{name}", {"authorization": ["Bearer x"]}),
+                HttpResponse(200),
+                "2026-01-01T00:00:00Z",
+            )
+        )
+        c.save(str(src_dir / name))
+
+    main(["convert", str(src_dir), "yaml", "--force"])
+
+    loaded = Cassette.load(str(src_dir / "a.yaml"))
+    assert "authorization" not in loaded.interactions[0].request.headers
+    # .yml files are rewritten to the target .yaml extension
+    assert (src_dir / "nested" / "b.yaml").exists()
+    assert not list(src_dir.rglob("*.tmp.*"))
+
+
 def test_convert_no_command() -> None:
     with pytest.raises(SystemExit, match="1"):
         main([])
