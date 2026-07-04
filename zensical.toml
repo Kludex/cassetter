@@ -1,0 +1,84 @@
+[project]
+site_name = "Cassetter"
+site_description = "Rust powered HTTP cassette recorder for Python tests. Safe by default."
+site_author = "Marcelo Trylesinski"
+site_url = "https://kludex.github.io/cassetter/"
+repo_url = "https://github.com/Kludex/cassetter"
+repo_name = "Kludex/cassetter"
+copyright = """
+Copyright &copy; 2026 Marcelo Trylesinski
+"""
+
+nav = [
+    { "Cassetter" = "index.md" },
+    { "Tutorial" = [
+        { "Use it with pytest" = "tutorial/pytest.md" },
+        { "Use the context manager" = "tutorial/context-manager.md" },
+        { "Record modes" = "tutorial/record-modes.md" },
+        { "Request matching" = "tutorial/matching.md" },
+        { "Safe by default" = "tutorial/security.md" },
+        { "Filter and skip requests" = "tutorial/filtering.md" },
+        { "Cassette formats" = "tutorial/formats.md" },
+        { "Cassette expiry" = "tutorial/expiry.md" },
+        { "Concurrency" = "tutorial/concurrency.md" },
+    ] },
+    { "Protocols" = [
+        { "gRPC" = "protocols/grpc.md" },
+        { "WebSockets" = "protocols/websockets.md" },
+        { "Streaming and SSE" = "protocols/streaming.md" },
+    ] },
+    { "Migrate from VCR.py" = "migration.md" },
+    { "Performance" = "performance.md" },
+]
+
+[project.theme]
+features = [
+    "content.code.annotate",
+    "content.code.copy",
+    "content.tabs.link",
+    "content.tooltips",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.sections",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+    "toc.follow",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/Kludex/cassetter"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.betterem]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.magiclink]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
