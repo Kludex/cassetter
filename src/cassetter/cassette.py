@@ -26,6 +26,7 @@ from cassetter._core import (
     find_match,
     find_ws_match,
     process_body,
+    scrub_grpc_interaction,
     scrub_interaction,
     scrub_ws_interaction,
 )
@@ -335,6 +336,9 @@ class Cassette:
         response = GrpcResponse(status_code, status_message, response_metadata, response_body)
         recorded_at = datetime.now(timezone.utc).isoformat()
         interaction = GrpcInteraction(request, response, recorded_at, json_debug)
+
+        # Apply security filtering
+        interaction = scrub_grpc_interaction(interaction, self._security_config)
 
         if self._inner is None:
             self._inner = _RustCassette()

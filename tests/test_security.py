@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from cassetter._core import (
     Body,
+    GrpcInteraction,
+    GrpcRequest,
+    GrpcResponse,
     HttpInteraction,
     HttpRequest,
     HttpResponse,
     SecurityConfig,
+    WsFrame,
     WsInteraction,
+    scrub_grpc_interaction,
     scrub_interaction,
     scrub_ws_interaction,
 )
@@ -63,6 +68,72 @@ def test_scrub_ws_headers() -> None:
 
     assert "authorization" not in scrubbed.headers
     assert "content-type" in scrubbed.headers
+
+
+def test_scrub_ws_frame_bodies() -> None:
+    frames = [
+        WsFrame("send", "text", Body("json", {"access_token": "tok_abc", "channel": "ticker"}), 0),
+        WsFrame("recv", "text", Body("text", '{"password": "secret", "ok": true}'), 10),
+        WsFrame("recv", "binary", Body("binary", b"\x01\x02"), 20),
+    ]
+    interaction = WsInteraction("wss://api.example.com/v1", {}, frames)
+    config = SecurityConfig()
+    scrubbed = scrub_ws_interaction(interaction, config)
+
+    assert scrubbed.frames[0].body.content["access_token"] == "[FILTERED]"
+    assert scrubbed.frames[0].body.content["channel"] == "ticker"
+    assert '"password": "[FILTERED]"' in scrubbed.frames[1].body.content
+    assert '"ok": true' in scrubbed.frames[1].body.content
+    assert scrubbed.frames[2].body.content == b"\x01\x02"
+
+
+def test_scrub_grpc_metadata() -> None:
+    interaction = GrpcInteraction(
+        request=GrpcRequest(
+            "/pkg.Svc/M",
+            {"authorization": ["Bearer secret"], "x-request-id": ["abc"]},
+            Body("binary", b"\x0a\x0b"),
+        ),
+        response=GrpcResponse(0, "OK", {"set-cookie": ["session=abc"]}, Body("binary", b"\x12\x03")),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+    config = SecurityConfig()
+    scrubbed = scrub_grpc_interaction(interaction, config)
+
+    assert "authorization" not in scrubbed.request.metadata
+    assert scrubbed.request.metadata["x-request-id"] == ["abc"]
+    assert "set-cookie" not in scrubbed.response.metadata
+    assert scrubbed.request.body.content == b"\x0a\x0b"
+
+
+def test_scrub_grpc_json_debug() -> None:
+    interaction = GrpcInteraction(
+        request=GrpcRequest("/pkg.Svc/M", {}, Body("binary", b"\x0a")),
+        response=GrpcResponse(0, "OK", {}, Body("binary", b"\x12")),
+        recorded_at="2026-01-01T00:00:00Z",
+        json_debug={
+            "request": {"password": "hunter2", "user": "alice"},
+            "response": {"access_token": "tok_abc"},
+        },
+    )
+    config = SecurityConfig()
+    scrubbed = scrub_grpc_interaction(interaction, config)
+
+    assert scrubbed.json_debug["request"]["password"] == "[FILTERED]"
+    assert scrubbed.json_debug["request"]["user"] == "alice"
+    assert scrubbed.json_debug["response"]["access_token"] == "[FILTERED]"
+
+
+def test_scrub_grpc_no_json_debug() -> None:
+    interaction = GrpcInteraction(
+        request=GrpcRequest("/pkg.Svc/M", {}, Body("binary", b"\x0a")),
+        response=GrpcResponse(0, "OK", {}, Body("binary", b"\x12")),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+    config = SecurityConfig()
+    scrubbed = scrub_grpc_interaction(interaction, config)
+
+    assert scrubbed.json_debug is None
 
 
 def test_scrub_ws_headers_custom_filter() -> None:

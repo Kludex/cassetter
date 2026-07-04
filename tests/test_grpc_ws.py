@@ -425,6 +425,46 @@ def test_record_ws_scrubs_headers(tmp_path: object) -> None:
     assert recorded.headers["x-custom"] == ["keep"]
 
 
+def test_record_ws_scrubs_frame_bodies(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "ws_frame_scrub.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    frames = [
+        WsFrame("send", "text", Body("json", {"access_token": "tok_abc", "channel": "ticker"}), 0),
+        WsFrame("recv", "text", Body("text", '{"password": "secret", "ok": true}'), 10),
+    ]
+    cassette.record_ws("wss://ws.example.com", {}, frames)
+
+    recorded = cassette.ws_interactions[0]
+    assert recorded.frames[0].body.content["access_token"] == "[FILTERED]"
+    assert recorded.frames[0].body.content["channel"] == "ticker"
+    assert '"password": "[FILTERED]"' in recorded.frames[1].body.content
+
+
+def test_record_grpc_scrubs_metadata_and_json_debug(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "grpc_scrub.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    cassette.record_grpc(
+        method="/pkg.Svc/Login",
+        metadata={"authorization": ["Bearer super-secret-token"], "x-custom": ["keep"]},
+        request_body=Body("binary", b"\x0a\x0b"),
+        response_body=Body("binary", b"\x12\x03"),
+        response_metadata={"set-cookie": ["session=abc"]},
+        json_debug={"request": {"password": "hunter2"}, "response": {"access_token": "tok"}},
+    )
+
+    recorded = cassette.grpc_interactions[0]
+    assert "authorization" not in recorded.request.metadata
+    assert recorded.request.metadata["x-custom"] == ["keep"]
+    assert "set-cookie" not in recorded.response.metadata
+    assert recorded.json_debug["request"]["password"] == "[FILTERED]"
+    assert recorded.json_debug["response"]["access_token"] == "[FILTERED]"
+    assert recorded.request.body.content == b"\x0a\x0b"
+
+
 def test_play_ws_interaction(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "ws_play.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)

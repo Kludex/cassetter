@@ -35,6 +35,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Security
     m.add_class::<security::SecurityConfig>()?;
     m.add_function(wrap_pyfunction!(security::scrub_interaction, m)?)?;
+    m.add_function(wrap_pyfunction!(security::scrub_grpc_interaction, m)?)?;
     m.add_function(wrap_pyfunction!(security::scrub_ws_interaction, m)?)?;
 
     // Body processing
