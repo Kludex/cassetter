@@ -170,6 +170,7 @@ Available matchers: `method`, `uri`, `headers`, `body`, `json_body`.
 | Library | Protocol | Interception method |
 |---------|----------|-------------------|
 | **httpx** | HTTP | `AsyncBaseTransport` / `BaseTransport` |
+| **httpx2** | HTTP | `AsyncBaseTransport` / `BaseTransport` |
 | **aiohttp** | HTTP | Session `_request` patch |
 | **requests** | HTTP | Session `send` patch |
 | **urllib3** | HTTP | `HTTPConnectionPool.urlopen` patch |

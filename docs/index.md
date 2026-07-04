@@ -93,6 +93,7 @@ Notice what is **not** there: no `authorization` header, no cookies, no API keys
 | Library | Protocol |
 |---------|----------|
 | httpx | HTTP |
+| httpx2 | HTTP |
 | aiohttp | HTTP |
 | requests | HTTP |
 | urllib3 | HTTP |
