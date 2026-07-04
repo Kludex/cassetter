@@ -9,8 +9,12 @@ from cassetter._core import MatchConfig, SecurityConfig
 from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
 from cassetter.intercept._base import InterceptorProtocol
-from cassetter.intercept._httpx import HttpxInterceptor
 from cassetter.recording import RecordMode
+
+try:
+    from cassetter.intercept._httpx import HttpxInterceptor
+except ImportError:  # pragma: no cover
+    HttpxInterceptor = None  # type: ignore[assignment, misc]
 
 try:
     from cassetter.intercept._aiohttp import AiohttpInterceptor
