@@ -14,7 +14,12 @@ from cassetter.recording import RecordMode
 try:
     from cassetter.intercept._httpx import HttpxInterceptor
 except ImportError:  # pragma: no cover
-    HttpxInterceptor = None  # type: ignore[assignment, misc]
+    HttpxInterceptor = None  # type: ignore[assignment]
+
+try:
+    from cassetter.intercept._httpx2 import Httpx2Interceptor
+except ImportError:  # pragma: no cover
+    Httpx2Interceptor = None  # type: ignore[assignment]
 
 try:
     from cassetter.intercept._aiohttp import AiohttpInterceptor
@@ -48,6 +53,7 @@ except ImportError:  # pragma: no cover
 
 _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "httpx": HttpxInterceptor,
+    "httpx2": Httpx2Interceptor,
     "aiohttp": AiohttpInterceptor,
     "requests": RequestsInterceptor,
     "grpc": GrpcInterceptor,
@@ -58,7 +64,7 @@ _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
 
 # Interceptors to enable by default, in order. urllib3 subsumes requests,
 # so requests is excluded when urllib3 is available.
-_AUTO_DETECT_ORDER: list[str] = ["httpx", "urllib3", "aiohttp"]
+_AUTO_DETECT_ORDER: list[str] = ["httpx", "httpx2", "urllib3", "aiohttp"]
 _SUBSUMED_BY: dict[str, str] = {"requests": "urllib3"}
 
 
@@ -159,5 +165,5 @@ def _auto_detect_interceptors() -> list[type[InterceptorProtocol]]:
         if _INTERCEPTOR_MAP.get(name) is not None:
             available.append(name)
     if not available:
-        raise ImportError("no HTTP interceptors available - install httpx, urllib3, or aiohttp")
+        raise ImportError("no HTTP interceptors available - install httpx, httpx2, urllib3, or aiohttp")
     return [_INTERCEPTOR_MAP[name] for name in available]  # type: ignore[misc]
