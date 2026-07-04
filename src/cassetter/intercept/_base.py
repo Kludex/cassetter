@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
 from urllib.parse import urlparse
-
-from typing_extensions import Protocol
 
 LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
 
