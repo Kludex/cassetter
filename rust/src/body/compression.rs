@@ -1,11 +1,12 @@
 use std::io::Read;
 
-use flate2::read::GzDecoder;
+use flate2::read::{DeflateDecoder, GzDecoder, ZlibDecoder};
 
 /// Decompress bytes based on the content-encoding header value.
 pub fn decompress(data: &[u8], encoding: &str) -> Result<Vec<u8>, String> {
     match encoding.trim().to_lowercase().as_str() {
         "gzip" | "x-gzip" => decompress_gzip(data),
+        "deflate" => decompress_deflate(data),
         "br" => decompress_brotli(data),
         "zstd" => decompress_zstd(data),
         "identity" | "" => Ok(data.to_vec()),
@@ -19,6 +20,20 @@ fn decompress_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
     decoder
         .read_to_end(&mut buf)
         .map_err(|e| format!("gzip decompression error: {e}"))?;
+    Ok(buf)
+}
+
+fn decompress_deflate(data: &[u8]) -> Result<Vec<u8>, String> {
+    // HTTP "deflate" is zlib-wrapped per RFC 9110, but some servers send
+    // raw deflate streams; try zlib first, then fall back to raw.
+    let mut buf = Vec::new();
+    if ZlibDecoder::new(data).read_to_end(&mut buf).is_ok() {
+        return Ok(buf);
+    }
+    let mut buf = Vec::new();
+    DeflateDecoder::new(data)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("deflate decompression error: {e}"))?;
     Ok(buf)
 }
 
@@ -62,7 +77,27 @@ mod tests {
 
     #[test]
     fn test_unsupported_encoding() {
-        let result = decompress(b"data", "deflate");
+        let result = decompress(b"data", "compress");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deflate_roundtrip() {
+        use flate2::{write::ZlibEncoder, Compression};
+        use std::io::Write;
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(b"deflated payload").unwrap();
+        let compressed = encoder.finish().unwrap();
+        assert_eq!(decompress(&compressed, "deflate").unwrap(), b"deflated payload");
+    }
+
+    #[test]
+    fn test_raw_deflate_fallback() {
+        use flate2::{write::DeflateEncoder, Compression};
+        use std::io::Write;
+        let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(b"raw deflate").unwrap();
+        let compressed = encoder.finish().unwrap();
+        assert_eq!(decompress(&compressed, "deflate").unwrap(), b"raw deflate");
     }
 }
