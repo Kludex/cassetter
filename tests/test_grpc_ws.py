@@ -1494,9 +1494,10 @@ async def test_patched_connect_async_for_form(tmp_path: object) -> None:
         import websockets.asyncio.client
 
         seen = []
+        # Loop to completion (no break) so the reconnect iterator raises
+        # StopAsyncIteration after yielding its single connection.
         async for ws in websockets.asyncio.client.connect("wss://ws.example.com/p"):
             seen.append(await ws.recv())
-            break
         assert seen == ["yo"]
     finally:
         current_cassette.reset(token)
