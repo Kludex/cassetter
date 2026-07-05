@@ -306,7 +306,7 @@ ws_interactions:
         offset_ms: 120
 ```
 
-On replay, `recv()` returns recorded frames in order without a real connection. `send()` is a no-op. Both text and binary frames are supported.
+On replay, `recv()` returns recorded frames in order without a real connection, then raises `ConnectionClosedOK` when they're exhausted (like a real connection at end-of-stream). `send()` is a no-op. Both text and binary frames are supported, and both `async with websockets.connect(...)` and `ws = await websockets.connect(...)` work.
 
 ## Streaming / SSE support
 
