@@ -12,6 +12,7 @@ use super::Cassette;
 /// Also accepts VCR-format cassettes on read (but never writes that format).
 #[derive(Serialize, Deserialize)]
 pub struct RawCassette {
+    #[serde(default = "default_version")]
     pub version: u32,
     pub interactions: Vec<RawInteraction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -32,20 +33,27 @@ pub struct RawInteraction {
 pub struct RawRequest {
     pub method: String,
     pub uri: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_headers")]
     pub headers: HashMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
+    /// Structured JSON body used by pydantic-ai style VCR serializers in
+    /// place of `body`. Read-only compatibility - never written back out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_body: Option<serde_yaml::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct RawResponse {
     #[serde(deserialize_with = "deserialize_status")]
     pub status: u16,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_headers")]
     pub headers: HashMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
+    /// See `RawRequest::parsed_body`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_body: Option<serde_yaml::Value>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -54,6 +62,10 @@ pub struct RawBody {
     pub body_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<serde_yaml::Value>,
+}
+
+fn default_version() -> u32 {
+    1
 }
 
 fn default_none_type() -> String {
@@ -83,6 +95,48 @@ where
     }
 }
 
+/// Rewrite PyYAML's `!!binary` block scalars into the local tag `!b64`.
+///
+/// serde_yaml silently drops `!!binary` tags, yielding the base64 text as a
+/// plain string, which loses the fact that the value was binary. Local
+/// single-`!` tags survive as `Value::Tagged`, so the tag is rewritten before
+/// parsing. Only the block form PyYAML emits (`... !!binary |` at end of
+/// line) is rewritten, which cannot appear inside a quoted scalar.
+pub fn tag_binary_scalars(content: &str) -> String {
+    if !content.contains("!!binary") {
+        return content.to_string();
+    }
+    let lines: Vec<String> = content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_end();
+            if trimmed.ends_with("!!binary |") || trimmed.ends_with("!!binary |-") {
+                if let Some(pos) = line.rfind("!!binary ") {
+                    let mut out = String::with_capacity(line.len());
+                    out.push_str(&line[..pos]);
+                    out.push_str("!b64 ");
+                    out.push_str(&line[pos + "!!binary ".len()..]);
+                    return out;
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+    lines.join("\n")
+}
+
+/// Decode a `!b64`-tagged scalar produced by `tag_binary_scalars`.
+fn decode_b64_tagged(tagged: &serde_yaml::value::TaggedValue) -> Option<Vec<u8>> {
+    use base64::Engine;
+    if tagged.tag != "!b64" {
+        return None;
+    }
+    let text: String = tagged.value.as_str()?.split_whitespace().collect();
+    base64::engine::general_purpose::STANDARD.decode(text).ok()
+}
+
+const KNOWN_BODY_TYPES: &[&str] = &["json", "text", "binary", "none"];
+
 /// Deserialize body from either cassetter format `{type: ..., content: ...}` or VCR format.
 ///
 /// VCR body formats:
@@ -90,6 +144,8 @@ where
 /// - `""` (empty string) -> none
 /// - `"raw string"` -> detect JSON or use text
 /// - `{string: "..."}` -> detect JSON or use text
+/// - `{string: !!binary ...}` -> binary
+/// - any other mapping -> structured JSON body (aiohttp-recorded shape)
 fn deserialize_body<'de, D>(deserializer: D) -> Result<RawBody, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -98,25 +154,84 @@ where
     match &value {
         serde_yaml::Value::Null => Ok(RawBody::default()),
         serde_yaml::Value::String(s) => Ok(vcr_string_to_raw_body(s)),
+        serde_yaml::Value::Tagged(t) => Ok(match decode_b64_tagged(t) {
+            Some(bytes) => binary_raw_body(&bytes),
+            None => RawBody::default(),
+        }),
         serde_yaml::Value::Mapping(map) => {
             let type_key = serde_yaml::Value::String("type".to_string());
+            let content_key = serde_yaml::Value::String("content".to_string());
             let string_key = serde_yaml::Value::String("string".to_string());
-            if map.contains_key(&type_key) {
-                // Cassetter format - deserialize normally
+            let is_cassetter_body = map
+                .get(&type_key)
+                .and_then(|v| v.as_str())
+                .is_some_and(|t| KNOWN_BODY_TYPES.contains(&t))
+                && map.iter().all(|(k, _)| *k == type_key || *k == content_key);
+            if is_cassetter_body {
                 serde_yaml::from_value(value).map_err(serde::de::Error::custom)
             } else if let Some(string_val) = map.get(&string_key) {
                 // VCR format: {string: "..."}
                 match string_val {
                     serde_yaml::Value::Null => Ok(RawBody::default()),
                     serde_yaml::Value::String(s) => Ok(vcr_string_to_raw_body(s)),
+                    serde_yaml::Value::Tagged(t) => Ok(match decode_b64_tagged(t) {
+                        Some(bytes) => binary_raw_body(&bytes),
+                        None => RawBody::default(),
+                    }),
                     _ => Ok(RawBody::default()),
                 }
             } else {
-                // Unknown mapping, treat as none
-                Ok(RawBody::default())
+                // Bare mapping: a structured JSON body recorded directly
+                // (e.g. aiohttp-recorded request bodies)
+                Ok(RawBody {
+                    body_type: "json".to_string(),
+                    content: Some(value),
+                })
             }
         }
         _ => Ok(RawBody::default()),
+    }
+}
+
+fn binary_raw_body(bytes: &[u8]) -> RawBody {
+    RawBody {
+        body_type: "binary".to_string(),
+        content: Some(serde_yaml::Value::String(hex_encode(bytes))),
+    }
+}
+
+/// Deserialize a header map, decoding `!!binary` header values to strings.
+fn deserialize_headers<'de, D>(deserializer: D) -> Result<HashMap<String, Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_yaml::Value::deserialize(deserializer)?;
+    let serde_yaml::Value::Mapping(map) = value else {
+        return Ok(HashMap::new());
+    };
+    let mut headers = HashMap::new();
+    for (key, values) in map {
+        let Some(name) = key.as_str().map(str::to_string) else {
+            continue;
+        };
+        let decoded: Vec<String> = match values {
+            serde_yaml::Value::Sequence(seq) => seq.iter().filter_map(header_value_to_string).collect(),
+            other => header_value_to_string(&other).into_iter().collect(),
+        };
+        headers.insert(name, decoded);
+    }
+    Ok(headers)
+}
+
+fn header_value_to_string(value: &serde_yaml::Value) -> Option<String> {
+    match value {
+        serde_yaml::Value::String(s) => Some(s.clone()),
+        serde_yaml::Value::Tagged(t) => {
+            decode_b64_tagged(t).map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        }
+        serde_yaml::Value::Number(n) => Some(n.to_string()),
+        serde_yaml::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
     }
 }
 
@@ -208,12 +323,18 @@ pub fn from_raw(raw: RawCassette) -> pyo3::PyResult<Cassette> {
                 method: ri.request.method,
                 uri: ri.request.uri,
                 headers: ri.request.headers,
-                body: body_from_raw(ri.request.body),
+                body: match ri.request.parsed_body {
+                    Some(v) => Body::json(yaml_to_json(v)),
+                    None => body_from_raw(ri.request.body),
+                },
             };
             let response = HttpResponse {
                 status: ri.response.status,
                 headers: ri.response.headers,
-                body: body_from_raw(ri.response.body),
+                body: match ri.response.parsed_body {
+                    Some(v) => Body::json(yaml_to_json(v)),
+                    None => body_from_raw(ri.response.body),
+                },
             };
             HttpInteraction {
                 request,
@@ -261,11 +382,13 @@ pub fn to_raw(cassette: &Cassette) -> RawCassette {
                 uri: i.request.uri.clone(),
                 headers: i.request.headers.clone(),
                 body: body_to_raw(&i.request.body),
+                parsed_body: None,
             },
             response: RawResponse {
                 status: i.response.status,
                 headers: i.response.headers.clone(),
                 body: body_to_raw(&i.response.body),
+                parsed_body: None,
             },
             recorded_at: if i.recorded_at.is_empty() {
                 None
@@ -510,4 +633,105 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
             u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("hex decode error: {e}"))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_binary_body_and_headers_from_vcr() {
+        // "ABCD" base64 in body, "application/json" base64 in header
+        let yaml = "\
+version: 1
+interactions:
+- request:
+    method: GET
+    uri: https://example.com
+    headers: {}
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      content-type:
+      - !!binary |
+        YXBwbGljYXRpb24vanNvbg==
+    body:
+      string: !!binary |
+        QUJDRA==
+";
+        let content = tag_binary_scalars(yaml);
+        let raw: RawCassette = serde_yaml::from_str(&content).unwrap();
+        let cassette = from_raw(raw).unwrap();
+        let response = &cassette.interactions[0].response;
+        assert_eq!(response.headers["content-type"], vec!["application/json"]);
+        match &response.body.inner {
+            BodyContent::Binary(b) => assert_eq!(b, b"ABCD"),
+            other => panic!("expected binary body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_bare_mapping_body_is_json() {
+        let yaml = "\
+interactions:
+- request:
+    method: POST
+    uri: https://example.com
+    headers: {}
+    body:
+      model: llama
+      stream: false
+  response:
+    status:
+      code: 200
+      message: OK
+    headers: {}
+";
+        let raw: RawCassette = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(raw.version, 1);
+        let cassette = from_raw(raw).unwrap();
+        match &cassette.interactions[0].request.body.inner {
+            BodyContent::Json(v) => {
+                assert_eq!(v["model"], "llama");
+                assert_eq!(v["stream"], false);
+            }
+            other => panic!("expected json body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_json_body_with_type_key_not_mistaken_for_cassetter_format() {
+        let yaml = "\
+interactions:
+- request:
+    method: POST
+    uri: https://example.com
+    headers: {}
+    body:
+      type: function
+      name: get_weather
+  response:
+    status:
+      code: 200
+      message: OK
+    headers: {}
+";
+        let raw: RawCassette = serde_yaml::from_str(yaml).unwrap();
+        let cassette = from_raw(raw).unwrap();
+        match &cassette.interactions[0].request.body.inner {
+            BodyContent::Json(v) => {
+                assert_eq!(v["type"], "function");
+                assert_eq!(v["name"], "get_weather");
+            }
+            other => panic!("expected json body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_tag_binary_scalars_leaves_content_untouched() {
+        let yaml = "body:\n  string: |\n    text mentioning !!binary | in prose\n";
+        assert_eq!(tag_binary_scalars(yaml), yaml.trim_end());
+    }
 }

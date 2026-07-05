@@ -8,13 +8,19 @@ Existing VCR cassettes work as is. Cassetter reads both the VCR format and its o
 
 When a cassette is re-recorded, it is written in Cassetter's format, with structured JSON bodies instead of escaped strings.
 
-To bulk convert cassettes without re-recording, use the CLI:
+To bulk convert cassettes without re-recording, use the CLI. In place, keeping YAML:
+
+```console
+$ cassetter convert tests/cassettes/ yaml --force
+```
+
+Or changing the format to TOML:
 
 ```console
 $ cassetter convert tests/cassettes/ toml
 ```
 
-See [Cassette formats](tutorial/formats.md) for the details.
+Conversion applies the default security filtering, so any secrets VCR.py recorded (it keeps `authorization` headers by default) are removed on the way through. Pass `--no-scrub` to skip that. See [Cassette formats](tutorial/formats.md) for the details.
 
 ## Your markers keep working
 

@@ -28,6 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      # cargo test links against libpython (the extension-module feature is
+      # only enabled by maturin when building the wheel)
+      - run: sudo apt-get update && sudo apt-get install -y libpython3-dev
       - run: cargo test --manifest-path rust/Cargo.toml
 
   test:

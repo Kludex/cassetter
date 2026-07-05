@@ -615,3 +615,129 @@ def test_vcr_format_playback(tmp_path: object) -> None:
     response = cassette.play("GET", "https://api.example.com/users", {}, None)
     assert response.status == 200
     assert response.body.content == {"users": []}
+
+
+def test_vcr_format_parsed_body(tmp_path: object) -> None:
+    """pydantic-ai style serializer: structured `parsed_body` instead of `body`."""
+    path = os.path.join(str(tmp_path), "parsed.yaml")
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "POST",
+                    "uri": "https://api.example.com/chat",
+                    "headers": {"content-type": ["application/json"]},
+                    "parsed_body": {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
+                },
+                "response": {
+                    "status": {"code": 200, "message": "OK"},
+                    "headers": {"content-type": ["application/json"]},
+                    "parsed_body": {"id": "abc", "choices": [{"message": {"content": "hello"}}]},
+                },
+            }
+        ],
+    )
+    c = RustCassette.load(path)
+    i = c.interactions[0]
+    assert i.request.body.body_type == "json"
+    assert i.request.body.content["model"] == "gpt-4o"
+    assert i.response.body.body_type == "json"
+    assert i.response.body.content["choices"][0]["message"]["content"] == "hello"
+
+
+def test_vcr_format_missing_version(tmp_path: object) -> None:
+    """Cassettes written without a top-level version key load with version 1."""
+    path = os.path.join(str(tmp_path), "no_version.yaml")
+    data = {
+        "interactions": [
+            {
+                "request": {"method": "GET", "uri": "https://example.com", "headers": {}},
+                "response": {"status": {"code": 200, "message": "OK"}, "headers": {}},
+            }
+        ]
+    }
+    with open(path, "w") as f:
+        yaml.dump(data, f)
+
+    c = RustCassette.load(path)
+    assert c.version == 1
+    assert len(c) == 1
+
+
+def test_parsed_body_saves_as_cassetter_format(tmp_path: object) -> None:
+    """parsed_body cassettes are rewritten in cassetter's own body format on save."""
+    path = os.path.join(str(tmp_path), "parsed.yaml")
+    _write_vcr_cassette(
+        path,
+        [
+            {
+                "request": {
+                    "method": "GET",
+                    "uri": "https://example.com",
+                    "headers": {},
+                    "parsed_body": {"q": 1},
+                },
+                "response": {"status": {"code": 200, "message": "OK"}, "headers": {}},
+            }
+        ],
+    )
+    c = RustCassette.load(path)
+    out = os.path.join(str(tmp_path), "out.yaml")
+    c.save(out)
+
+    with open(out) as f:
+        raw = yaml.safe_load(f)
+    request = raw["interactions"][0]["request"]
+    assert "parsed_body" not in request
+    assert request["body"] == {"type": "json", "content": {"q": 1}}
+
+
+def test_vcr_format_binary_body_and_headers(tmp_path: object) -> None:
+    """PyYAML !!binary scalars (bodies and header values) decode to real bytes."""
+    path = os.path.join(str(tmp_path), "binary.yaml")
+    data = {
+        "interactions": [
+            {
+                "request": {"method": "GET", "uri": "https://example.com/stream", "headers": {}},
+                "response": {
+                    "status": {"code": 200, "message": "OK"},
+                    "headers": {"content-type": [b"application/vnd.amazon.eventstream"]},
+                    "body": {"string": b"\x00\x01\xffbinary-payload"},
+                },
+            }
+        ]
+    }
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f)
+
+    c = RustCassette.load(path)
+    response = c.interactions[0].response
+    assert response.headers["content-type"] == ["application/vnd.amazon.eventstream"]
+    assert response.body.body_type == "binary"
+    assert response.body.content == b"\x00\x01\xffbinary-payload"
+
+
+def test_vcr_format_bare_mapping_request_body(tmp_path: object) -> None:
+    """A structured dict directly under request.body (aiohttp recordings) loads as JSON."""
+    path = os.path.join(str(tmp_path), "mapping.yaml")
+    data = {
+        "interactions": [
+            {
+                "request": {
+                    "method": "POST",
+                    "uri": "https://example.com/chat",
+                    "headers": {},
+                    "body": {"model": "llama", "stream": False},
+                },
+                "response": {"status": {"code": 200, "message": "OK"}, "headers": {}},
+            }
+        ]
+    }
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f)
+
+    c = RustCassette.load(path)
+    body = c.interactions[0].request.body
+    assert body.body_type == "json"
+    assert body.content == {"model": "llama", "stream": False}
