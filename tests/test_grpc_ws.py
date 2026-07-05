@@ -1498,6 +1498,8 @@ async def test_grpc_replay_unknown_status_code_maps_to_unknown() -> None:
     with pytest.raises(grpc.aio.AioRpcError) as exc_info:
         raise_for_status(resp)
     assert exc_info.value.code() == grpc.StatusCode.UNKNOWN
+
+
 @pytest.mark.anyio
 async def test_patched_connect_await_form(tmp_path: object) -> None:
     """`ws = await websockets.connect(uri)` (not just `async with`) must work."""
