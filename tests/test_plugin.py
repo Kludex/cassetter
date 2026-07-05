@@ -317,6 +317,8 @@ def test_ini_options_registered() -> None:
     add_options(parser)
     ini_names = [call.args[0] for call in parser.addini.call_args_list]
     assert ini_names == ["vcr_max_age", "vcr_on_expiry"]
+
+
 def test_check_orphans_includes_toml(tmp_path: object) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.toml")).write_text("---")
