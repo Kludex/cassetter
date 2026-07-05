@@ -186,21 +186,37 @@ fn deserialize_status<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value = Value::deserialize(deserializer)?;
-    match &value {
-        Value::Number(n) => n
-            .as_u64()
-            .and_then(|v| u16::try_from(v).ok())
-            .ok_or_else(|| serde::de::Error::custom("invalid status number")),
-        Value::Object(map) => {
-            // VCR format: {code: 200, message: "OK"}
-            map.get("code")
-                .and_then(|v| v.as_u64())
-                .and_then(|v| u16::try_from(v).ok())
-                .ok_or_else(|| serde::de::Error::custom("VCR status missing 'code' field"))
+    struct StatusVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for StatusVisitor {
+        type Value = u16;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a status number or a VCR {{code, message}} mapping")
         }
-        _ => Err(serde::de::Error::custom("expected number or mapping for status")),
+
+        fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<u16, E> {
+            u16::try_from(v).map_err(|_| E::custom("invalid status number"))
+        }
+
+        fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<u16, E> {
+            u16::try_from(v).map_err(|_| E::custom("invalid status number"))
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<u16, A::Error> {
+            let mut code: Option<u16> = None;
+            while let Some(key) = map.next_key::<String>()? {
+                if key == "code" {
+                    code = Some(map.next_value::<u16>()?);
+                } else {
+                    map.next_value::<serde::de::IgnoredAny>()?;
+                }
+            }
+            code.ok_or_else(|| serde::de::Error::custom("VCR status missing 'code' field"))
+        }
     }
+
+    deserializer.deserialize_any(StatusVisitor)
 }
 
 const KNOWN_BODY_TYPES: &[&str] = &["json", "text", "binary", "none"];
@@ -218,18 +234,60 @@ fn deserialize_body<'de, D>(deserializer: D) -> Result<RawBody, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value = Value::deserialize(deserializer)?;
-    match &value {
-        Value::Null => Ok(RawBody::default()),
-        Value::String(s) => Ok(vcr_string_to_raw_body(s)),
-        Value::Object(map) => {
+    struct BodyVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for BodyVisitor {
+        type Value = RawBody;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a body string, mapping, or null")
+        }
+
+        fn visit_unit<E: serde::de::Error>(self) -> Result<RawBody, E> {
+            Ok(RawBody::default())
+        }
+
+        fn visit_none<E: serde::de::Error>(self) -> Result<RawBody, E> {
+            Ok(RawBody::default())
+        }
+
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<RawBody, E> {
+            Ok(vcr_string_to_raw_body(v))
+        }
+
+        fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<RawBody, E> {
+            Ok(RawBody::default())
+        }
+
+        fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<RawBody, E> {
+            Ok(RawBody::default())
+        }
+
+        fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<RawBody, E> {
+            Ok(RawBody::default())
+        }
+
+        fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<RawBody, E> {
+            Ok(RawBody::default())
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut access: A) -> Result<RawBody, A::Error> {
+            let mut map = serde_json::Map::new();
+            while let Some(key) = access.next_key::<String>()? {
+                let value = access.next_value::<Value>()?;
+                map.insert(key, value);
+            }
             let is_cassetter_body = map
                 .get("type")
                 .and_then(|v| v.as_str())
                 .is_some_and(|t| KNOWN_BODY_TYPES.contains(&t))
                 && map.keys().all(|k| k == "type" || k == "content");
             if is_cassetter_body {
-                serde_json::from_value(value).map_err(serde::de::Error::custom)
+                let body_type = map["type"].as_str().expect("checked above").to_string();
+                Ok(RawBody {
+                    body_type,
+                    content: map.remove("content"),
+                })
             } else if let Some(string_val) = map.get("string") {
                 // VCR format: {string: "..."}
                 match string_val {
@@ -242,12 +300,13 @@ where
                 // (e.g. aiohttp-recorded request bodies)
                 Ok(RawBody {
                     body_type: "json".to_string(),
-                    content: Some(value),
+                    content: Some(Value::Object(map)),
                 })
             }
         }
-        _ => Ok(RawBody::default()),
     }
+
+    deserializer.deserialize_any(BodyVisitor)
 }
 
 /// Deserialize a header map, tolerating scalar (non-sequence) and
@@ -256,28 +315,149 @@ fn deserialize_headers<'de, D>(deserializer: D) -> Result<HashMap<String, Vec<St
 where
     D: serde::Deserializer<'de>,
 {
-    let value = Value::deserialize(deserializer)?;
-    let Value::Object(map) = value else {
-        return Ok(HashMap::new());
-    };
-    let mut headers = HashMap::new();
-    for (name, values) in map {
-        let decoded: Vec<String> = match values {
-            Value::Array(seq) => seq.iter().filter_map(header_value_to_string).collect(),
-            other => header_value_to_string(&other).into_iter().collect(),
-        };
-        headers.insert(name, decoded);
-    }
-    Ok(headers)
-}
+    struct HeaderScalar(Option<String>);
 
-fn header_value_to_string(value: &Value) -> Option<String> {
-    match value {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => Some(n.to_string()),
-        Value::Bool(b) => Some(b.to_string()),
-        _ => None,
+    impl<'de> serde::Deserialize<'de> for HeaderScalar {
+        fn deserialize<D2: serde::Deserializer<'de>>(d: D2) -> Result<Self, D2::Error> {
+            struct V;
+            impl<'de> serde::de::Visitor<'de> for V {
+                type Value = HeaderScalar;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(f, "a header value")
+                }
+
+                fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(Some(v.to_string())))
+                }
+
+                fn visit_string<E: serde::de::Error>(self, v: String) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(Some(v)))
+                }
+
+                fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(Some(v.to_string())))
+                }
+
+                fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(Some(v.to_string())))
+                }
+
+                fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(Some(v.to_string())))
+                }
+
+                fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(Some(v.to_string())))
+                }
+
+                fn visit_unit<E: serde::de::Error>(self) -> Result<HeaderScalar, E> {
+                    Ok(HeaderScalar(None))
+                }
+
+                fn visit_map<A: serde::de::MapAccess<'de>>(
+                    self,
+                    mut access: A,
+                ) -> Result<HeaderScalar, A::Error> {
+                    while access
+                        .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+                        .is_some()
+                    {}
+                    Ok(HeaderScalar(None))
+                }
+
+                fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                    self,
+                    mut access: A,
+                ) -> Result<HeaderScalar, A::Error> {
+                    while access.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+                    Ok(HeaderScalar(None))
+                }
+            }
+            d.deserialize_any(V)
+        }
     }
+
+    struct HeaderValues(Vec<String>);
+
+    impl<'de> serde::Deserialize<'de> for HeaderValues {
+        fn deserialize<D2: serde::Deserializer<'de>>(d: D2) -> Result<Self, D2::Error> {
+            struct V;
+            impl<'de> serde::de::Visitor<'de> for V {
+                type Value = HeaderValues;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(f, "a header value or list of header values")
+                }
+
+                fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                    self,
+                    mut access: A,
+                ) -> Result<HeaderValues, A::Error> {
+                    let mut out = Vec::with_capacity(access.size_hint().unwrap_or(1));
+                    while let Some(HeaderScalar(item)) = access.next_element()? {
+                        if let Some(s) = item {
+                            out.push(s);
+                        }
+                    }
+                    Ok(HeaderValues(out))
+                }
+
+                fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(vec![v.to_string()]))
+                }
+
+                fn visit_string<E: serde::de::Error>(self, v: String) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(vec![v]))
+                }
+
+                fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(vec![v.to_string()]))
+                }
+
+                fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(vec![v.to_string()]))
+                }
+
+                fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(vec![v.to_string()]))
+                }
+
+                fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(vec![v.to_string()]))
+                }
+
+                fn visit_unit<E: serde::de::Error>(self) -> Result<HeaderValues, E> {
+                    Ok(HeaderValues(Vec::new()))
+                }
+            }
+            d.deserialize_any(V)
+        }
+    }
+
+    struct HeadersVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for HeadersVisitor {
+        type Value = HashMap<String, Vec<String>>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a header mapping")
+        }
+
+        fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+            Ok(HashMap::new())
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+            let mut headers = HashMap::with_capacity(access.size_hint().unwrap_or(4));
+            while let Some((name, HeaderValues(values))) = access.next_entry::<String, HeaderValues>()? {
+                headers.insert(name, values);
+            }
+            Ok(headers)
+        }
+    }
+
+    deserializer.deserialize_any(HeadersVisitor)
 }
 
 /// Convert a VCR body string into a RawBody, detecting JSON content.
