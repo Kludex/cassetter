@@ -1,0 +1,24 @@
+name: Latest deps
+
+# Test against the newest resolvable dependency versions (ignoring uv.lock),
+# so breakage in a new release of a supported client (e.g. aiohttp 3.14)
+# surfaces here instead of in user installs.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  test-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: rm uv.lock
+      - run: uv sync
+      - run: uv run maturin develop --release
+      - run: uv run pytest tests/ --strict-config --strict-markers

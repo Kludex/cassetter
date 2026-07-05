@@ -22,6 +22,12 @@ def add_options(parser: Any) -> None:
         metavar="DIR",
         help="Check for orphaned cassette files in DIR that were not loaded during the test run.",
     )
+    parser.addini("vcr_max_age", "Default cassette max age (e.g. '30d'), overridable per test.", default=None)
+    parser.addini(
+        "vcr_on_expiry",
+        "Action for expired cassettes: warn, fail, or rerecord.",
+        default=None,
+    )
 
 
 def session_finish(session: Any) -> None:
@@ -37,7 +43,7 @@ def session_finish(session: Any) -> None:
     orphans: list[str] = []
     for root, _dirs, files in os.walk(orphan_dir):
         for f in files:
-            if f.endswith((".yaml", ".yml")):
+            if f.endswith((".yaml", ".yml", ".toml")):
                 full_path = os.path.abspath(os.path.join(root, f))
                 if full_path not in loaded:
                     orphans.append(os.path.relpath(full_path, orphan_dir))
@@ -56,7 +62,7 @@ def check_orphans(cassette_dir: str, loaded_paths: set[str]) -> list[str]:
     cassette_dir = os.path.abspath(cassette_dir)
     for root, _dirs, files in os.walk(cassette_dir):
         for f in files:
-            if f.endswith((".yaml", ".yml")):
+            if f.endswith((".yaml", ".yml", ".toml")):
                 full_path = os.path.abspath(os.path.join(root, f))
                 if full_path not in loaded_paths:
                     orphans.append(os.path.relpath(full_path, cassette_dir))

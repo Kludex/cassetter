@@ -26,17 +26,25 @@ pub fn scrub_json_value(
             let mut new_map = serde_json::Map::new();
             for (key, val) in map {
                 let key_lower = key.to_lowercase();
-                if patterns.iter().any(|p| key_lower.contains(&p.to_lowercase())) {
-                    new_map.insert(key.clone(), serde_json::Value::String(replacement.to_string()));
+                if patterns
+                    .iter()
+                    .any(|p| key_lower.contains(&p.to_lowercase()))
+                {
+                    new_map.insert(
+                        key.clone(),
+                        serde_json::Value::String(replacement.to_string()),
+                    );
                 } else {
                     new_map.insert(key.clone(), scrub_json_value(val, patterns, replacement));
                 }
             }
             serde_json::Value::Object(new_map)
         }
-        serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(|v| scrub_json_value(v, patterns, replacement)).collect())
-        }
+        serde_json::Value::Array(arr) => serde_json::Value::Array(
+            arr.iter()
+                .map(|v| scrub_json_value(v, patterns, replacement))
+                .collect(),
+        ),
         _ => value.clone(),
     }
 }

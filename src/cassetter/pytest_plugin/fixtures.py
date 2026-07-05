@@ -41,6 +41,8 @@ def _resolve_cassette(
     cli_record_mode: str | None,
     test_fspath: str,
     vcr_cassette_dir: str | None = None,
+    ini_max_age: str | None = None,
+    ini_on_expiry: str | None = None,
 ) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
     cassette_name = node_name + ".yaml"
@@ -92,8 +94,8 @@ def _resolve_cassette(
         security_kwargs["replacement"] = vcr_config["filter_replacement"]
     security_config = SecurityConfig(**security_kwargs)
 
-    max_age = marker_kwargs.get("max_age", vcr_config.get("max_age"))
-    on_expiry = marker_kwargs.get("on_expiry", vcr_config.get("on_expiry", "warn"))
+    max_age = marker_kwargs.get("max_age", vcr_config.get("max_age", ini_max_age))
+    on_expiry = marker_kwargs.get("on_expiry", vcr_config.get("on_expiry", ini_on_expiry or "warn"))
 
     ignore_localhost = vcr_config.get("ignore_localhost", False)
     ignore_hosts = vcr_config.get("ignore_hosts")
@@ -143,6 +145,8 @@ def cassette(
         cli_record_mode=cli_record_mode,
         test_fspath=str(request.path),
         vcr_cassette_dir=vcr_cassette_dir,
+        ini_max_age=request.config.getini("vcr_max_age") or None,
+        ini_on_expiry=request.config.getini("vcr_on_expiry") or None,
     )
 
     # Track loaded cassette paths for orphan detection
@@ -153,12 +157,13 @@ def cassette(
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)
 
-    yield cassette
-
-    # Reset context and release patches
-    current_cassette.reset(token)
-    release_patches(interceptor_classes)
-    cassette.save()
+    try:
+        yield cassette
+    finally:
+        # Reset context and release patches even if the test errors out
+        current_cassette.reset(token)
+        release_patches(interceptor_classes)
+        cassette.save()
 
 
 @pytest.fixture

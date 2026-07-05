@@ -174,6 +174,7 @@ Available matchers: `method`, `uri`, `headers`, `body`, `json_body`.
 | **aiohttp** | HTTP | Session `_request` patch |
 | **requests** | HTTP | Session `send` patch |
 | **urllib3** | HTTP | `HTTPConnectionPool.urlopen` patch |
+| **pyreqwest-impersonate** | HTTP | `Client` method patches |
 | **grpcio** | gRPC | `grpc.aio.Channel` wrapper |
 | **websockets** | WebSocket | `websockets.connect` patch |
 
@@ -306,7 +307,7 @@ ws_interactions:
         offset_ms: 120
 ```
 
-On replay, `recv()` returns recorded frames in order without a real connection. `send()` is a no-op. Both text and binary frames are supported.
+On replay, `recv()` returns recorded frames in order without a real connection, then raises `ConnectionClosedOK` when they're exhausted (like a real connection at end-of-stream). `send()` is a no-op. Both text and binary frames are supported, and both `async with websockets.connect(...)` and `ws = await websockets.connect(...)` work.
 
 ## Streaming / SSE support
 
@@ -524,7 +525,7 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 Requires Rust toolchain and Python 3.10+.
 
 ```bash
-git clone https://github.com/marcelotryle/cassetter.git
+git clone https://github.com/Kludex/cassetter.git
 cd cassetter
 uv sync
 uv run maturin develop

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from typing import Any
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 import aiohttp
 import aiohttp.client_reqrep
@@ -34,7 +36,7 @@ class AiohttpInterceptor:
             if cassette is None:
                 return await original_request(session, method, str_or_url, **kwargs)
 
-            uri = str(URL(str_or_url))
+            uri = str(_build_full_url(session, str_or_url, kwargs.get("params")))
 
             if cassette.should_bypass(uri):
                 return await original_request(session, method, str_or_url, **kwargs)
@@ -83,6 +85,17 @@ class AiohttpInterceptor:
             self._patcher = None
 
 
+def _build_full_url(session: aiohttp.ClientSession, str_or_url: str | URL, params: Any) -> URL:
+    """Resolve the request URL the way aiohttp does: session base_url plus query params."""
+    try:
+        url = session._build_url(str_or_url)
+    except AttributeError:  # pragma: no cover - very old aiohttp
+        url = URL(str_or_url)
+    if params:
+        url = url.update_query(params)
+    return url
+
+
 def extract_request_headers(headers: Any) -> dict[str, list[str]]:
     if headers is None:
         return {}
@@ -99,6 +112,9 @@ def extract_request_body(kwargs: dict[str, Any]) -> bytes | None:
             return data
         if isinstance(data, str):
             return data.encode()
+        if isinstance(data, dict):
+            # aiohttp sends dict data as application/x-www-form-urlencoded
+            return urlencode(data).encode()
     if "json" in kwargs and kwargs["json"] is not None:
         return json.dumps(kwargs["json"]).encode()
     return None
@@ -107,7 +123,12 @@ def extract_request_body(kwargs: dict[str, Any]) -> bytes | None:
 def extract_response_headers(headers: CIMultiDictProxy[str]) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for key, value in headers.items():
-        result.setdefault(key.lower(), []).append(value)
+        lower = key.lower()
+        if lower == "content-encoding":
+            # aiohttp's read() returns the decompressed body; keeping the
+            # header would double-decompress when recording
+            continue
+        result.setdefault(lower, []).append(value)
     return result
 
 
@@ -128,24 +149,42 @@ def build_aiohttp_response(method: str, uri: str, response: _HttpResponse) -> ai
         for v in values:
             headers_multi.add(key, v)
 
-    # Build a mock-like response
-    resp = aiohttp.ClientResponse(
-        method=method,
-        url=URL(uri),
-        writer=None,
-        continue100=None,
-        timer=None,  # type: ignore[arg-type]
-        request_info=aiohttp.RequestInfo(
+    # Build a mock-like response. aiohttp 3.14 renamed/added constructor
+    # kwargs (stream_writer), so pass only what this version accepts.
+    ctor_kwargs: dict[str, Any] = {
+        "method": method,
+        "url": URL(uri),
+        "writer": None,
+        "continue100": None,
+        "timer": None,
+        "request_info": aiohttp.RequestInfo(
             url=URL(uri),
             method=method,
             headers=CIMultiDictProxy(CIMultiDict()),
             real_url=URL(uri),
         ),
-        traces=[],
-        loop=asyncio.get_running_loop(),
-        session=None,  # type: ignore[arg-type]
-    )
+        "traces": [],
+        "loop": asyncio.get_running_loop(),
+        "session": None,
+    }
+    accepted = _client_response_params()
+    ctor_kwargs = {k: v for k, v in ctor_kwargs.items() if k in accepted}
+    if "stream_writer" in accepted:
+        # aiohttp 3.14+: with writer=None ("request already sent"), the
+        # constructor reads stream_writer.output_size
+        ctor_kwargs["stream_writer"] = _StubStreamWriter()
+    resp = aiohttp.ClientResponse(**ctor_kwargs)
     resp.status = response.status
     resp._headers = CIMultiDictProxy(headers_multi)
     resp._body = content
     return resp
+
+
+def _client_response_params() -> frozenset[str]:
+    return frozenset(inspect.signature(aiohttp.ClientResponse.__init__).parameters)
+
+
+class _StubStreamWriter:
+    """Minimal stand-in for the request's stream writer on replayed responses."""
+
+    output_size = 0

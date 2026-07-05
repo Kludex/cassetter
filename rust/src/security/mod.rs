@@ -37,12 +37,24 @@ impl SecurityConfig {
         replacement: Option<String>,
     ) -> Self {
         SecurityConfig {
-            filter_headers: filter_headers
-                .unwrap_or_else(|| defaults::DEFAULT_FILTER_HEADERS.iter().map(|s| s.to_string()).collect()),
-            filter_query_parameters: filter_query_parameters
-                .unwrap_or_else(|| defaults::DEFAULT_FILTER_QUERY_PARAMS.iter().map(|s| s.to_string()).collect()),
-            body_scrub_patterns: body_scrub_patterns
-                .unwrap_or_else(|| defaults::DEFAULT_BODY_SCRUB_PATTERNS.iter().map(|s| s.to_string()).collect()),
+            filter_headers: filter_headers.unwrap_or_else(|| {
+                defaults::DEFAULT_FILTER_HEADERS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            }),
+            filter_query_parameters: filter_query_parameters.unwrap_or_else(|| {
+                defaults::DEFAULT_FILTER_QUERY_PARAMS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            }),
+            body_scrub_patterns: body_scrub_patterns.unwrap_or_else(|| {
+                defaults::DEFAULT_BODY_SCRUB_PATTERNS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            }),
             replacement: replacement.unwrap_or_else(|| "[FILTERED]".to_string()),
         }
     }
@@ -63,19 +75,27 @@ pub fn scrub_interaction(
     headers::filter_headers(&mut scrubbed.response.headers, &config.filter_headers);
 
     // Scrub query params from URI
-    if let Some(new_uri) =
-        headers::filter_query_params(&scrubbed.request.uri, &config.filter_query_parameters, &config.replacement)
-    {
+    if let Some(new_uri) = headers::filter_query_params(
+        &scrubbed.request.uri,
+        &config.filter_query_parameters,
+        &config.replacement,
+    ) {
         scrubbed.request.uri = new_uri;
     }
 
     // Scrub request body
-    scrubbed.request.body =
-        body::scrub_body(&scrubbed.request.body, &config.body_scrub_patterns, &config.replacement);
+    scrubbed.request.body = body::scrub_body(
+        &scrubbed.request.body,
+        &config.body_scrub_patterns,
+        &config.replacement,
+    );
 
     // Scrub response body
-    scrubbed.response.body =
-        body::scrub_body(&scrubbed.response.body, &config.body_scrub_patterns, &config.replacement);
+    scrubbed.response.body = body::scrub_body(
+        &scrubbed.response.body,
+        &config.body_scrub_patterns,
+        &config.replacement,
+    );
 
     scrubbed
 }
@@ -87,7 +107,11 @@ pub fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig
     let mut scrubbed = interaction.clone();
     headers::filter_headers(&mut scrubbed.headers, &config.filter_headers);
     for frame in &mut scrubbed.frames {
-        frame.body = body::scrub_body(&frame.body, &config.body_scrub_patterns, &config.replacement);
+        frame.body = body::scrub_body(
+            &frame.body,
+            &config.body_scrub_patterns,
+            &config.replacement,
+        );
     }
     scrubbed
 }
@@ -96,7 +120,10 @@ pub fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig
 /// response, and scrub sensitive patterns from the `json_debug` payload.
 /// Binary protobuf bodies are stored as-is (they cannot be pattern-scrubbed).
 #[pyfunction]
-pub fn scrub_grpc_interaction(interaction: &GrpcInteraction, config: &SecurityConfig) -> GrpcInteraction {
+pub fn scrub_grpc_interaction(
+    interaction: &GrpcInteraction,
+    config: &SecurityConfig,
+) -> GrpcInteraction {
     let mut scrubbed = interaction.clone();
     headers::filter_headers(&mut scrubbed.request.metadata, &config.filter_headers);
     headers::filter_headers(&mut scrubbed.response.metadata, &config.filter_headers);
@@ -126,7 +153,10 @@ mod tests {
     #[test]
     fn test_scrub_grpc_metadata_and_json_debug() {
         let mut request_metadata = HashMap::new();
-        request_metadata.insert("authorization".to_string(), vec!["Bearer secret".to_string()]);
+        request_metadata.insert(
+            "authorization".to_string(),
+            vec!["Bearer secret".to_string()],
+        );
         request_metadata.insert("x-request-id".to_string(), vec!["abc".to_string()]);
         let mut response_metadata = HashMap::new();
         response_metadata.insert("set-cookie".to_string(), vec!["session=abc".to_string()]);
@@ -172,7 +202,9 @@ mod tests {
                 WsFrame {
                     direction: "send".to_string(),
                     frame_type: "text".to_string(),
-                    body: Body::json(serde_json::json!({"access_token": "tok_abc", "channel": "ticker"})),
+                    body: Body::json(
+                        serde_json::json!({"access_token": "tok_abc", "channel": "ticker"}),
+                    ),
                     offset_ms: 0,
                 },
                 WsFrame {

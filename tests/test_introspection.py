@@ -105,3 +105,26 @@ def test_introspection_before_load() -> None:
     assert cassette.play_counts == Counter()
     # vcrpy semantics: an empty cassette counts as fully played
     assert cassette.all_played
+
+
+def test_play_counts_track_repeats(tmp_path: object) -> None:
+    """Replaying the same interaction twice (matcher fallback) counts both plays."""
+    path = os.path.join(str(tmp_path), "repeats.yaml")
+    inner = RustCassette()
+    inner.add_interaction(
+        HttpInteraction(
+            HttpRequest("GET", "https://example.com/one", {}, Body("none")),
+            HttpResponse(200, {}, Body("json", {"n": 1})),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    inner.save(path)
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
+
+    cassette.play("GET", "https://example.com/one", {}, None)
+    cassette.play("GET", "https://example.com/one", {}, None)
+
+    assert cassette.play_count == 2
+    assert cassette.play_counts == Counter({0: 2})
+    assert cassette.all_played

@@ -118,7 +118,7 @@ impl GrpcInteraction {
     ) -> PyResult<Self> {
         let debug_val = match json_debug {
             Some(obj) => {
-                let val: serde_json::Value = pythonize::depythonize(&obj.bind(py))?;
+                let val: serde_json::Value = pythonize::depythonize(obj.bind(py))?;
                 Some(val)
             }
             None => None,
