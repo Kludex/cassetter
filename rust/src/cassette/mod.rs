@@ -202,6 +202,17 @@ impl Cassette {
         });
         std::fs::write(&tmp, out)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("write error: {e}")))?;
+        // Preserve the original file's permissions across the rename: the temp
+        // file is created with the process umask, which would drop a
+        // restrictive mode (e.g. 0600 on a cassette holding unscrubbed data).
+        #[cfg(unix)]
+        if let Ok(meta) = std::fs::metadata(p) {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(
+                &tmp,
+                std::fs::Permissions::from_mode(meta.permissions().mode()),
+            );
+        }
         std::fs::rename(&tmp, p)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("rename error: {e}")))?;
         Ok(())

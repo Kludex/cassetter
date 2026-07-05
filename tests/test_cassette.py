@@ -947,3 +947,29 @@ def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
     rerecord.load()
     rerecord.save()
     assert len(RustCassette.load(path)) == 0
+
+
+def test_save_preserves_file_permissions(tmp_path: object) -> None:
+    """Atomic save must keep a restrictive mode on an existing cassette."""
+    import os as _os
+    import stat
+    import sys
+
+    if sys.platform == "win32":  # pragma: no cover
+        pytest.skip("POSIX permissions only")
+
+    path = _os.path.join(str(tmp_path), "private.yaml")
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "2026-01-01T00:00:00Z")
+    )
+    c.save(path)
+    _os.chmod(path, 0o600)
+
+    c.add_interaction(
+        HttpInteraction(HttpRequest("GET", "https://example.com/2"), HttpResponse(200), "2026-01-01T00:00:00Z")
+    )
+    c.save(path)
+
+    mode = stat.S_IMODE(_os.stat(path).st_mode)
+    assert mode == 0o600
