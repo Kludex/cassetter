@@ -63,11 +63,7 @@ async def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_interceptor_record(tmp_path: object) -> None:
-    import asyncio
     from unittest.mock import patch
-
-    from multidict import CIMultiDict, CIMultiDictProxy
-    from yarl import URL
 
     path = os.path.join(str(tmp_path), "test.yaml")
 
@@ -77,25 +73,12 @@ async def test_interceptor_record(tmp_path: object) -> None:
         str_or_url: object,
         **kwargs: object,
     ) -> aiohttp.ClientResponse:
-        resp = aiohttp.ClientResponse(
-            method=method,
-            url=URL(str(str_or_url)),
-            writer=None,  # type: ignore[arg-type]
-            continue100=None,
-            timer=None,  # type: ignore[arg-type]
-            request_info=aiohttp.RequestInfo(
-                url=URL(str(str_or_url)),
-                method=method,
-                headers=CIMultiDictProxy(CIMultiDict()),
-                real_url=URL(str(str_or_url)),
-            ),
-            traces=[],
-            loop=asyncio.get_running_loop(),
-            session=None,  # type: ignore[arg-type]
+        # Reuse the version-adaptive constructor from the interceptor module
+        resp = build_aiohttp_response(
+            method,
+            str(str_or_url),
+            HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"recorded": True})),
         )
-        resp.status = 200
-        resp._headers = CIMultiDictProxy(CIMultiDict({"content-type": "application/json"}))  # type: ignore[assignment]
-        resp._body = b'{"recorded": true}'  # type: ignore[assignment]
         return resp
 
     # Mock _request first, then install interceptor so the interceptor's
@@ -197,3 +180,30 @@ async def testbuild_aiohttp_response_none_body() -> None:
         HttpResponse(200, body=Body("none")),
     )
     assert resp.status == 200
+
+
+@pytest.mark.anyio
+async def test_build_full_url_resolves_base_url_and_params() -> None:
+    from cassetter.intercept._aiohttp import _build_full_url
+
+    async with aiohttp.ClientSession(base_url="https://api.example.com") as session:
+        url = _build_full_url(session, "/v1/items", {"page": "2", "q": "x"})
+    assert str(url) == "https://api.example.com/v1/items?page=2&q=x"
+
+
+def test_extract_request_body_dict_form() -> None:
+    from cassetter.intercept._aiohttp import extract_request_body
+
+    body = extract_request_body({"data": {"grant_type": "password", "user": "alice"}})
+    assert body == b"grant_type=password&user=alice"
+
+
+def test_response_headers_drop_content_encoding() -> None:
+    from multidict import CIMultiDict, CIMultiDictProxy
+
+    from cassetter.intercept._aiohttp import extract_response_headers
+
+    headers = CIMultiDictProxy(CIMultiDict({"Content-Encoding": "gzip", "Content-Type": "application/json"}))
+    result = extract_response_headers(headers)
+    assert "content-encoding" not in result
+    assert result["content-type"] == ["application/json"]
