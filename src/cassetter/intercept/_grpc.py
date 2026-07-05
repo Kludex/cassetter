@@ -11,6 +11,21 @@ from cassetter._core import Body, GrpcResponse
 from cassetter._state import get_current_cassette
 from cassetter.cassette import NoMatchError
 
+_STATUS_BY_CODE = {sc.value[0]: sc for sc in grpc.StatusCode}
+
+
+def raise_for_status(grpc_resp: GrpcResponse) -> None:
+    """Replay a recorded non-OK gRPC status as the AioRpcError it originally was."""
+    if grpc_resp.status_code == 0:
+        return
+    code = _STATUS_BY_CODE.get(grpc_resp.status_code, grpc.StatusCode.UNKNOWN)
+    raise grpc.aio.AioRpcError(
+        code=code,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(),
+        details=grpc_resp.status_message,
+    )
+
 
 class VCRUnaryUnaryCallable:
     """Wraps a unary-unary gRPC callable for record/replay."""
@@ -55,6 +70,7 @@ class VCRUnaryUnaryCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
+            raise_for_status(grpc_resp)
             content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
             return self._response_deserializer(content)
         except NoMatchError:
@@ -128,7 +144,7 @@ class VCRUnaryStreamCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
-            return replay_stream(grpc_resp, self._response_deserializer)
+            return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
         except NoMatchError:
             if not cassette.can_record:
                 raise
@@ -226,6 +242,7 @@ class VCRStreamUnaryCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
+            raise_for_status(grpc_resp)
             content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
             return self._response_deserializer(content)
         except NoMatchError:
@@ -295,7 +312,7 @@ class VCRStreamStreamCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
-            return replay_stream(grpc_resp, self._response_deserializer)
+            return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
         except NoMatchError:
             if not cassette.can_record:
                 raise
@@ -476,6 +493,7 @@ def metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
 
 
 async def replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIterator[Any]:
+    raise_for_status(grpc_resp)
     body = grpc_resp.body
     data = body.content if isinstance(body.content, bytes) else b""
     chunks = decode_chunks(data)
