@@ -31,7 +31,7 @@ from cassetter._core import (
     scrub_interaction,
     scrub_ws_interaction,
 )
-from cassetter.introspection import RecordedRequest, play_counter, recorded_request
+from cassetter.introspection import RecordedRequest, recorded_request
 from cassetter.recording import RecordMode
 
 
@@ -121,6 +121,7 @@ class Cassette:
         self._inner: _RustCassette | None = None
         self._dirty = False
         self._once_replay_only = False
+        self._play_counter: Counter[int] = Counter()
 
     @property
     def path(self) -> str:
@@ -172,13 +173,13 @@ class Cassette:
 
     @property
     def play_count(self) -> int:
-        """Number of interactions that have been replayed."""
-        return sum(self.played_indices)
+        """Total number of replays, counting repeats (vcrpy semantics)."""
+        return sum(self._play_counter.values())
 
     @property
     def play_counts(self) -> Counter[int]:
-        """Replay count per interaction index, vcrpy style."""
-        return play_counter(self.played_indices)
+        """Replay count per interaction index, counting repeats (vcrpy semantics)."""
+        return Counter(self._play_counter)
 
     @property
     def all_played(self) -> bool:
@@ -209,6 +210,7 @@ class Cassette:
 
         self._inner = _RustCassette.load(self._path)
         self._once_replay_only = True
+        self._play_counter = Counter()
         self._check_expiry()
 
     def _check_expiry(self) -> None:
@@ -293,6 +295,7 @@ class Cassette:
 
         idx, interaction = result
         self._inner.mark_played(idx)
+        self._play_counter[idx] += 1
         return interaction.response
 
     def record(
