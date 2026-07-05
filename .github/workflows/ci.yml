@@ -28,16 +28,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
       # cargo test links against libpython (the extension-module feature is
       # only enabled by maturin when building the wheel)
       - run: sudo apt-get update && sudo apt-get install -y libpython3-dev
+      - run: cargo fmt --manifest-path rust/Cargo.toml --check
+      - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # wheels are published for macOS and Windows, so test them too
+          - os: macos-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,8 +59,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
       - run: uv sync
-      - run: uv run maturin develop
-      - run: uv run pytest tests/ --strict-config --strict-markers -v
+      - run: uv run maturin develop --release
+      - run: uv run pytest tests/ --strict-config --strict-markers --cov -v
 
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:

@@ -168,7 +168,11 @@ pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
                     j += 1;
                 }
                 if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&b64) {
-                    out.push(format!("{}{}", &line[..pos], binary_sentinel(binaries.len())));
+                    out.push(format!(
+                        "{}{}",
+                        &line[..pos],
+                        binary_sentinel(binaries.len())
+                    ));
                     binaries.push(bytes);
                     i = j;
                     continue;
@@ -271,7 +275,10 @@ where
             Ok(RawBody::default())
         }
 
-        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut access: A) -> Result<RawBody, A::Error> {
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut access: A,
+        ) -> Result<RawBody, A::Error> {
             let mut map = serde_json::Map::new();
             while let Some(key) = access.next_key::<String>()? {
                 let value = access.next_value::<Value>()?;
@@ -448,9 +455,14 @@ where
             Ok(HashMap::new())
         }
 
-        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut access: A,
+        ) -> Result<Self::Value, A::Error> {
             let mut headers = HashMap::with_capacity(access.size_hint().unwrap_or(4));
-            while let Some((name, HeaderValues(values))) = access.next_entry::<String, HeaderValues>()? {
+            while let Some((name, HeaderValues(values))) =
+                access.next_entry::<String, HeaderValues>()?
+            {
                 headers.insert(name, values);
             }
             Ok(headers)
@@ -637,17 +649,9 @@ pub fn to_raw(cassette: &Cassette) -> RawCassette {
         })
         .collect();
 
-    let grpc_interactions = cassette
-        .grpc_interactions
-        .iter()
-        .map(|i| grpc_to_raw(i))
-        .collect();
+    let grpc_interactions = cassette.grpc_interactions.iter().map(grpc_to_raw).collect();
 
-    let ws_interactions = cassette
-        .ws_interactions
-        .iter()
-        .map(|i| ws_to_raw(i))
-        .collect();
+    let ws_interactions = cassette.ws_interactions.iter().map(ws_to_raw).collect();
 
     RawCassette {
         version: cassette.version,
@@ -817,7 +821,7 @@ fn hex_encode(data: &[u8]) -> String {
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd-length hex string".to_string());
     }
     if !s.is_ascii() {

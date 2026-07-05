@@ -175,13 +175,13 @@ async def test_api():  # No need for `cassette` param
     ...
 ```
 
-This is implemented via `pytest_collection_modifyitems` adding `cassette` to `fixturenames`.
+This is implemented as an autouse fixture that checks for the `@pytest.mark.vcr` marker and yields `None` (doing nothing) for unmarked tests, so only marked tests get recording/playback.
 
 **Alternatives considered:**
 
 - **Require explicit fixture parameter (our initial approach).** More explicit, but adds noise to every VCR test. In pydantic-ai's test suite, most tests don't need to interact with the cassette directly - they just need recording/playback to happen. Rejected because it adds boilerplate.
 
-- **Autouse fixture on all tests.** Too broad - would affect tests that don't need VCR. Rejected because it violates the principle of least surprise.
+- **`pytest_collection_modifyitems` injecting `cassette` into `fixturenames`.** Works, but mutating collected items is more fragile across pytest versions than a marker-guarded autouse fixture.
 
 **Why this choice:** Matches pytest-recording's behavior, which pydantic-ai and many other projects already use. Tests that need direct cassette access can still declare the parameter.
 

@@ -148,9 +148,8 @@ impl Cassette {
                 "cassette not found: {path}"
             )));
         }
-        let content = std::fs::read_to_string(p).map_err(|e| {
-            pyo3::exceptions::PyIOError::new_err(format!("read error: {e}"))
-        })?;
+        let content = std::fs::read_to_string(p)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("read error: {e}")))?;
 
         if is_toml(path) {
             let raw: format_toml::TomlCassette = toml::from_str(&content).map_err(|e| {
@@ -175,9 +174,8 @@ impl Cassette {
         // Ensure parent directory exists
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                pyo3::exceptions::PyIOError::new_err(format!("mkdir error: {e}"))
-            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("mkdir error: {e}")))?;
         }
 
         if is_toml(path) {
@@ -185,17 +183,15 @@ impl Cassette {
             let out = toml::to_string_pretty(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("TOML serialize error: {e}"))
             })?;
-            std::fs::write(p, out).map_err(|e| {
-                pyo3::exceptions::PyIOError::new_err(format!("write error: {e}"))
-            })?;
+            std::fs::write(p, out)
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("write error: {e}")))?;
         } else {
             let raw = format::to_raw(self);
             let yaml = serde_saphyr::to_string(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("YAML serialize error: {e}"))
             })?;
-            std::fs::write(p, yaml).map_err(|e| {
-                pyo3::exceptions::PyIOError::new_err(format!("write error: {e}"))
-            })?;
+            std::fs::write(p, yaml)
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("write error: {e}")))?;
         }
         Ok(())
     }

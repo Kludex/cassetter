@@ -33,7 +33,7 @@ pub fn process_body(
     // Determine if this is JSON
     let is_json = content_type
         .as_deref()
-        .map(|ct| json::is_json_content_type(ct))
+        .map(json::is_json_content_type)
         .unwrap_or(false);
 
     if is_json {

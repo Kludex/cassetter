@@ -37,7 +37,7 @@ impl Body {
                 let obj = content.ok_or_else(|| {
                     pyo3::exceptions::PyValueError::new_err("JSON body requires content")
                 })?;
-                let val: serde_json::Value = pythonize::depythonize(&obj.bind(py))?;
+                let val: serde_json::Value = pythonize::depythonize(obj.bind(py))?;
                 BodyContent::Json(val)
             }
             "text" => {
@@ -176,11 +176,7 @@ pub struct HttpResponse {
 impl HttpResponse {
     #[new]
     #[pyo3(signature = (status, headers=None, body=None))]
-    fn new(
-        status: u16,
-        headers: Option<HashMap<String, Vec<String>>>,
-        body: Option<Body>,
-    ) -> Self {
+    fn new(status: u16, headers: Option<HashMap<String, Vec<String>>>, body: Option<Body>) -> Self {
         HttpResponse {
             status,
             headers: headers.unwrap_or_default(),

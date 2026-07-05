@@ -22,8 +22,8 @@ pub fn find_match(
     let match_fields = &config.match_on;
 
     // Use index for fast method+URI lookup if matching on those fields
-    let use_index = match_fields.iter().any(|f| f == "method")
-        && match_fields.iter().any(|f| f == "uri");
+    let use_index =
+        match_fields.iter().any(|f| f == "method") && match_fields.iter().any(|f| f == "uri");
 
     let candidates: Vec<usize> = if use_index {
         let index = CassetteIndex::build(&interactions);
