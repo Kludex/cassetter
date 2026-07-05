@@ -4,6 +4,7 @@ import fnmatch
 import os
 import re
 import warnings
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from cassetter._core import (
     scrub_interaction,
     scrub_ws_interaction,
 )
+from cassetter.introspection import RecordedRequest, play_counter, recorded_request
 from cassetter.recording import RecordMode
 
 
@@ -155,6 +157,32 @@ class Cassette:
         if self._inner is None:
             return []
         return self._inner.interactions
+
+    @property
+    def requests(self) -> list[RecordedRequest]:
+        """Recorded requests with vcrpy-compatible attributes."""
+        return [recorded_request(i) for i in self.interactions]
+
+    @property
+    def played_indices(self) -> list[bool]:
+        if self._inner is None:
+            return []
+        return self._inner.played_indices
+
+    @property
+    def play_count(self) -> int:
+        """Number of interactions that have been replayed."""
+        return sum(self.played_indices)
+
+    @property
+    def play_counts(self) -> Counter[int]:
+        """Replay count per interaction index, vcrpy style."""
+        return play_counter(self.played_indices)
+
+    @property
+    def all_played(self) -> bool:
+        """Whether every recorded interaction has been replayed."""
+        return all(self.played_indices)
 
     @property
     def grpc_interactions(self) -> list[GrpcInteraction]:

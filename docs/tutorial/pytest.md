@@ -60,6 +60,16 @@ async def test_with_cassette(cassette: Cassette):
 
 The fixture is also available under the name `vcr`, for compatibility with pytest-recording.
 
+The cassette exposes vcrpy's introspection surface, so wire-contract assertions port over unchanged: `cassette.requests` returns the recorded requests with `.method`, `.uri`, `.headers`, `.body`, `.path`, `.host`, and `.query` attributes, and `cassette.play_count`, `cassette.play_counts`, and `cassette.all_played` report replay progress.
+
+```python
+@pytest.mark.vcr
+async def test_sends_tool_definitions(cassette: Cassette):
+    ...
+    request_body = json.loads(cassette.requests[0].body)
+    assert request_body["tools"][0]["name"] == "get_weather"
+```
+
 ## Configure with `vcr_config`
 
 Override the `vcr_config` fixture to set options for a whole module:
