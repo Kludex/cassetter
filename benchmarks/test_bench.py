@@ -90,6 +90,56 @@ def yaml_file_1000(cassette_1000: Cassette) -> str:
     return path
 
 
+def _build_llm_cassette(n: int) -> Cassette:
+    """LLM-shaped cassette: few interactions with large SSE/JSON bodies.
+
+    This mirrors real recorded traffic (e.g. the pydantic-ai test corpus):
+    load cost is dominated by large scalars rather than by event count,
+    the opposite profile of `_build_cassette`.
+    """
+    sse_body = "".join(
+        f'data: {{"id":"chatcmpl-abc","choices":[{{"delta":{{"content":"token {i} of a streamed completion"}}}}]}}\n\n'
+        for i in range(400)
+    )
+    long_text = " ".join(f"word{i}" for i in range(2000))
+    c = Cassette()
+    for i in range(n):
+        c.add_interaction(
+            HttpInteraction(
+                request=HttpRequest(
+                    "POST",
+                    "https://api.example.com/v1/chat/completions",
+                    {"content-type": ["application/json"]},
+                    Body(
+                        "json",
+                        {
+                            "model": "gpt-5",
+                            "stream": True,
+                            "messages": [
+                                {"role": "system", "content": long_text},
+                                {"role": "user", "content": f"question {i}: {long_text}"},
+                            ],
+                        },
+                    ),
+                ),
+                response=HttpResponse(
+                    200,
+                    {"content-type": ["text/event-stream"]},
+                    Body("text", sse_body),
+                ),
+                recorded_at="2026-01-01T00:00:00Z",
+            )
+        )
+    return c
+
+
+@pytest.fixture(scope="module")
+def llm_yaml_file(tmp_path_factory: pytest.TempPathFactory) -> str:
+    path = str(tmp_path_factory.mktemp("bench") / "llm.yaml")
+    _build_llm_cassette(8).save(path)
+    return path
+
+
 @pytest.fixture(scope="module")
 def toml_file_100(cassette_100: Cassette) -> str:
     path = tempfile.mktemp(suffix=".toml")
@@ -121,6 +171,13 @@ def test_load_yaml_1000(yaml_file_1000: str, benchmark: Any) -> None:
     @benchmark
     def _() -> None:
         Cassette.load(yaml_file_1000)
+
+
+@pytest.mark.benchmark
+def test_load_yaml_llm_bodies(llm_yaml_file: str, benchmark: Any) -> None:
+    @benchmark
+    def _() -> None:
+        Cassette.load(llm_yaml_file)
 
 
 @pytest.mark.benchmark

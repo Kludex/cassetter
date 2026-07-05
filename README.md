@@ -470,7 +470,7 @@ Run `uv run python benchmarks/bench.py` and `uv run python benchmarks/bench_form
 
 vcrpy uses `yaml.load()` with an unsafe loader (`CLoader`/`Loader`) that can execute arbitrary Python via `!!python/object` tags. A malicious cassette file could run code when loaded.
 
-cassetter parses YAML in Rust, which has no concept of Python object construction - only data types are supported.
+cassetter parses YAML in Rust with [serde-saphyr](https://crates.io/crates/serde-saphyr) - no Python object construction, no `unsafe` code, panic-free on malformed input, and hard budgets against alias-expansion attacks (billion laughs). Only data types are supported.
 
 ## Migrating from pytest-recording / VCR.py
 
