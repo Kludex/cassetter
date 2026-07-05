@@ -26,6 +26,7 @@ from cassetter.cassette import (
     SkipRecording,
 )
 from cassetter.context import use_cassette
+from cassetter.introspection import RecordedRequest
 from cassetter.recording import RecordMode
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "MatchConfig",
     "NoMatchError",
     "RawRequest",
+    "RecordedRequest",
     "RawResponse",
     "RecordMode",
     "SkipRecording",

@@ -41,6 +41,7 @@ $ pytest
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `before_record_request` | `before_record_request` | Same name, same behavior |
 | `before_record_response` | `before_record_response` | Same name, same behavior |
+| `cassette.requests`, `play_count`, `play_counts`, `all_played` | Same names | vcrpy-style introspection on the cassette object |
 | `decode_compressed_response` | automatic | Responses are always decompressed |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Pattern based instead of parameter name based |
 
