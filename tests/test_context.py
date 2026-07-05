@@ -124,11 +124,20 @@ async def test_use_cassette_expired_warns(tmp_path: object) -> None:
             pass
 
 
-def test_resolve_interceptors_drops_subsumed() -> None:
+def test_resolve_interceptors_honors_explicit_list() -> None:
+    """An explicit list installs exactly what was requested, even overlapping ones."""
     from cassetter.context import _INTERCEPTOR_MAP, resolve_interceptors
 
     resolved = resolve_interceptors(["requests", "urllib3"])
-    assert resolved == [_INTERCEPTOR_MAP["urllib3"]]
+    assert resolved == [_INTERCEPTOR_MAP["requests"], _INTERCEPTOR_MAP["urllib3"]]
+
+
+def test_auto_detect_excludes_requests() -> None:
+    """Auto-detect never installs requests (it overlaps urllib3)."""
+    from cassetter.context import _INTERCEPTOR_MAP, resolve_interceptors
+
+    resolved = resolve_interceptors()
+    assert _INTERCEPTOR_MAP["requests"] not in resolved
 
 
 def test_acquire_patches_rolls_back_on_failure() -> None:

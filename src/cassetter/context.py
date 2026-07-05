@@ -62,10 +62,11 @@ _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "pyreqwest": PyreqwestInterceptor,
 }
 
-# Interceptors to enable by default, in order. urllib3 subsumes requests,
-# so requests is excluded when urllib3 is available.
+# Interceptors auto-detected by default, in order. requests is intentionally
+# omitted: requests traffic flows through urllib3, so recording both layers
+# would capture each request twice. Callers who want requests can name it
+# explicitly.
 _AUTO_DETECT_ORDER: list[str] = ["httpx", "httpx2", "urllib3", "aiohttp"]
-_SUBSUMED_BY: dict[str, str] = {"requests": "urllib3"}
 
 
 @contextlib.contextmanager
@@ -147,10 +148,10 @@ def resolve_interceptors(names: list[str] | None = None) -> list[type[Intercepto
     """Import and return interceptor classes by name, or auto-detect if None."""
     if names is None:
         return _auto_detect_interceptors()
-    # Drop interceptors subsumed by another requested one (e.g. requests
-    # traffic already flows through the patched urllib3 layer) so a single
-    # request is not recorded twice.
-    names = [n for n in names if _SUBSUMED_BY.get(n) not in names]
+    # An explicit list installs exactly what was requested. requests and
+    # urllib3 overlap (requests flows through urllib3), but a session with a
+    # custom adapter may not, so dropping a requested interceptor could
+    # silently bypass the cassette. Auto-detect avoids the overlap instead.
     interceptors: list[type[InterceptorProtocol]] = []
     for name in names:
         cls = _INTERCEPTOR_MAP.get(name)
