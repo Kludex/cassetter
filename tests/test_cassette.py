@@ -744,6 +744,63 @@ def test_vcr_format_bare_mapping_request_body(tmp_path: object) -> None:
     assert body.content == {"model": "llama", "stream": False}
 
 
+def test_match_config_rejects_unknown_matcher() -> None:
+    with pytest.raises(ValueError, match="unknown matcher"):
+        MatchConfig(match_on=["method", "url"])
+
+
+def test_toml_save_refuses_grpc_interactions(tmp_path: object) -> None:
+    from cassetter._core import Body, GrpcInteraction, GrpcRequest, GrpcResponse
+
+    c = RustCassette()
+    c.add_grpc_interaction(
+        GrpcInteraction(
+            GrpcRequest("/pkg.Svc/M", {}, Body("binary", b"\x01")),
+            GrpcResponse(0, "OK", {}, Body("binary", b"\x02")),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    with pytest.raises(ValueError, match="TOML cassettes cannot store gRPC"):
+        c.save(os.path.join(str(tmp_path), "grpc.toml"))
+
+
+def test_saved_headers_are_sorted(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "sorted.yaml")
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            HttpRequest("GET", "https://example.com", {"zebra": ["1"], "alpha": ["2"], "mid": ["3"]}),
+            HttpResponse(200),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(path)
+    with open(path) as f:
+        text = f.read()
+    assert text.index("alpha") < text.index("mid") < text.index("zebra")
+    # deterministic across saves
+    c.save(path)
+    with open(path) as f:
+        assert f.read() == text
+
+
+def test_body_repr_multibyte_no_panic() -> None:
+    body = Body("text", "é" * 40)
+    assert repr(body)  # must not raise a panic across the FFI boundary
+
+
+def test_scrub_multibyte_query_no_panic() -> None:
+    from cassetter._core import SecurityConfig, scrub_interaction
+
+    interaction = HttpInteraction(
+        HttpRequest("GET", "https://example.com/?%a€=1&api_key=x"),
+        HttpResponse(200),
+        "2026-01-01T00:00:00Z",
+    )
+    scrubbed = scrub_interaction(interaction, SecurityConfig())
+    assert "api_key=[FILTERED]" in scrubbed.request.uri
+
+
 def test_once_with_existing_cassette_is_replay_only(tmp_path: object) -> None:
     """`once` must not record (or hit the network) when the cassette already exists."""
     path = os.path.join(str(tmp_path), "once.yaml")
