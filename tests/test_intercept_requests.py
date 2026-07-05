@@ -11,7 +11,6 @@ from cassetter.cassette import Cassette, NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._requests import (
     RequestsInterceptor,
-    VCRAdapter,
     build_requests_response,
     extract_headers,
 )
@@ -31,42 +30,6 @@ def _preload_cassette(path: str) -> Cassette:
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     cassette.load()
     return cassette
-
-
-def test_vcr_adapter_replay(tmp_path: object) -> None:
-    path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
-
-    real_adapter = requests.adapters.HTTPAdapter()
-    adapter = VCRAdapter(cassette, real_adapter)
-
-    req = requests.Request("GET", "https://example.com/api").prepare()
-    response = adapter.send(req)
-
-    assert response.status_code == 200
-    assert response.json() == {"data": "hello"}
-
-
-def test_vcr_adapter_record(tmp_path: object) -> None:
-    path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = Cassette(path, record_mode=RecordMode.ALL)
-    cassette.load()
-
-    fake_response = requests.Response()
-    fake_response.status_code = 201
-    fake_response._content = b'{"created": true}'  # type: ignore[attr-defined]
-    fake_response.headers["content-type"] = "application/json"
-
-    class MockAdapter(requests.adapters.HTTPAdapter):
-        def send(self, request: requests.PreparedRequest, **kwargs: object) -> requests.Response:  # type: ignore[override]
-            return fake_response
-
-    adapter = VCRAdapter(cassette, MockAdapter())
-    req = requests.Request("POST", "https://example.com/create").prepare()
-    response = adapter.send(req)
-
-    assert response.status_code == 201
-    assert len(cassette.interactions) == 1
 
 
 def test_requests_interceptor_replay(tmp_path: object) -> None:
@@ -123,18 +86,6 @@ def testextract_headers_dict() -> None:
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def test_vcr_adapter_no_match(tmp_path: object) -> None:
-    path = os.path.join(str(tmp_path), "test.yaml")
-    cassette = _preload_cassette(path)
-
-    real_adapter = requests.adapters.HTTPAdapter()
-    adapter = VCRAdapter(cassette, real_adapter)
-
-    req = requests.Request("DELETE", "https://example.com/unknown").prepare()
-    with pytest.raises(NoMatchError):
-        adapter.send(req)
-
-
 def test_requests_interceptor_no_match(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
@@ -174,3 +125,11 @@ def testbuild_requests_response_none_body() -> None:
         HttpResponse(200, body=Body("none")),
     )
     assert response.content == b""
+
+
+def test_recorded_response_headers_drop_content_encoding() -> None:
+    from cassetter.intercept._requests import extract_headers_skip_encoding
+
+    result = extract_headers_skip_encoding({"Content-Encoding": "gzip", "Content-Type": "text/html"})
+    assert "content-encoding" not in result
+    assert result["content-type"] == ["text/html"]

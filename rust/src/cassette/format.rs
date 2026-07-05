@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ use super::Cassette;
 pub struct RawCassette {
     #[serde(default = "default_version")]
     pub version: u32,
+    #[serde(default)]
     pub interactions: Vec<RawInteraction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grpc_interactions: Vec<RawGrpcInteraction>,
@@ -36,7 +37,7 @@ pub struct RawRequest {
     pub method: String,
     pub uri: String,
     #[serde(default, deserialize_with = "deserialize_headers")]
-    pub headers: HashMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
     /// Structured JSON body used by pydantic-ai style VCR serializers in
@@ -50,7 +51,7 @@ pub struct RawResponse {
     #[serde(deserialize_with = "deserialize_status")]
     pub status: u16,
     #[serde(default, deserialize_with = "deserialize_headers")]
-    pub headers: HashMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_body")]
     pub body: RawBody,
     /// See `RawRequest::parsed_body`.
@@ -159,14 +160,25 @@ pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
                 let node_indent = line_indent(line);
                 let mut b64 = String::new();
                 let mut j = i + 1;
+                // Blank lines are legal inside block scalars and contribute
+                // nothing to base64; only consume them when more block
+                // content follows, so trailing blanks stay with the parent.
+                let mut pending_blanks = 0usize;
                 while j < lines.len() {
                     let content_line = lines[j];
-                    if content_line.trim().is_empty() || line_indent(content_line) <= node_indent {
+                    if content_line.trim().is_empty() {
+                        pending_blanks += 1;
+                        j += 1;
+                        continue;
+                    }
+                    if line_indent(content_line) <= node_indent {
                         break;
                     }
+                    pending_blanks = 0;
                     b64.push_str(content_line.trim());
                     j += 1;
                 }
+                j -= pending_blanks;
                 if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&b64) {
                     out.push(format!("{}{}", &line[..pos], binary_sentinel(binaries.len())));
                     binaries.push(bytes);
@@ -277,6 +289,13 @@ where
                 let value = access.next_value::<Value>()?;
                 map.insert(key, value);
             }
+            // A mapping shaped exactly like cassetter's envelope is treated as
+            // the envelope. This is ambiguous with a bare JSON payload whose
+            // keys are exactly {type, content} with a known type value, but no
+            // cassette-level discriminator exists (VCR files also carry a
+            // top-level version), and preferring the payload interpretation
+            // would corrupt every cassetter-format body instead of this one
+            // rare shape. Documented in the migration guide.
             let is_cassetter_body = map
                 .get("type")
                 .and_then(|v| v.as_str())
@@ -311,7 +330,7 @@ where
 
 /// Deserialize a header map, tolerating scalar (non-sequence) and
 /// number/bool values.
-fn deserialize_headers<'de, D>(deserializer: D) -> Result<HashMap<String, Vec<String>>, D::Error>
+fn deserialize_headers<'de, D>(deserializer: D) -> Result<BTreeMap<String, Vec<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -438,18 +457,18 @@ where
     struct HeadersVisitor;
 
     impl<'de> serde::de::Visitor<'de> for HeadersVisitor {
-        type Value = HashMap<String, Vec<String>>;
+        type Value = BTreeMap<String, Vec<String>>;
 
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "a header mapping")
         }
 
         fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-            Ok(HashMap::new())
+            Ok(BTreeMap::new())
         }
 
         fn visit_map<A: serde::de::MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
-            let mut headers = HashMap::with_capacity(access.size_hint().unwrap_or(4));
+            let mut headers = BTreeMap::new();
             while let Some((name, HeaderValues(values))) = access.next_entry::<String, HeaderValues>()? {
                 headers.insert(name, values);
             }
@@ -506,7 +525,7 @@ pub struct RawGrpcInteraction {
 pub struct RawGrpcRequest {
     pub method: String,
     #[serde(default)]
-    pub metadata: HashMap<String, Vec<String>>,
+    pub metadata: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub body: RawBody,
 }
@@ -517,7 +536,7 @@ pub struct RawGrpcResponse {
     #[serde(default = "default_ok")]
     pub status_message: String,
     #[serde(default)]
-    pub metadata: HashMap<String, Vec<String>>,
+    pub metadata: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub body: RawBody,
 }
@@ -532,7 +551,7 @@ fn default_ok() -> String {
 pub struct RawWsInteraction {
     pub uri: String,
     #[serde(default)]
-    pub headers: HashMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub frames: Vec<RawWsFrame>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -619,13 +638,13 @@ pub fn to_raw(cassette: &Cassette) -> RawCassette {
             request: RawRequest {
                 method: i.request.method.clone(),
                 uri: i.request.uri.clone(),
-                headers: i.request.headers.clone(),
+                headers: sorted_headers(&i.request.headers),
                 body: body_to_raw(&i.request.body),
                 parsed_body: None,
             },
             response: RawResponse {
                 status: i.response.status,
-                headers: i.response.headers.clone(),
+                headers: sorted_headers(&i.response.headers),
                 body: body_to_raw(&i.response.body),
                 parsed_body: None,
             },
@@ -661,13 +680,13 @@ fn grpc_from_raw(raw: RawGrpcInteraction, binaries: &[Vec<u8>]) -> GrpcInteracti
     GrpcInteraction {
         request: GrpcRequest {
             method: raw.request.method,
-            metadata: raw.request.metadata,
+            metadata: raw.request.metadata.into_iter().collect(),
             body: body_from_raw(raw.request.body, binaries),
         },
         response: GrpcResponse {
             status_code: raw.response.status_code,
             status_message: raw.response.status_message,
-            metadata: raw.response.metadata,
+            metadata: raw.response.metadata.into_iter().collect(),
             body: body_from_raw(raw.response.body, binaries),
         },
         json_debug: raw.json_debug,
@@ -679,13 +698,13 @@ fn grpc_to_raw(i: &GrpcInteraction) -> RawGrpcInteraction {
     RawGrpcInteraction {
         request: RawGrpcRequest {
             method: i.request.method.clone(),
-            metadata: i.request.metadata.clone(),
+            metadata: sorted_headers(&i.request.metadata),
             body: body_to_raw(&i.request.body),
         },
         response: RawGrpcResponse {
             status_code: i.response.status_code,
             status_message: i.response.status_message.clone(),
-            metadata: i.response.metadata.clone(),
+            metadata: sorted_headers(&i.response.metadata),
             body: body_to_raw(&i.response.body),
         },
         json_debug: i.json_debug.clone(),
@@ -710,7 +729,7 @@ fn ws_from_raw(raw: RawWsInteraction, binaries: &[Vec<u8>]) -> WsInteraction {
         .collect();
     WsInteraction {
         uri: raw.uri,
-        headers: raw.headers,
+        headers: raw.headers.into_iter().collect(),
         frames,
         recorded_at: raw.recorded_at.unwrap_or_default(),
     }
@@ -729,7 +748,7 @@ fn ws_to_raw(i: &WsInteraction) -> RawWsInteraction {
         .collect();
     RawWsInteraction {
         uri: i.uri.clone(),
-        headers: i.headers.clone(),
+        headers: sorted_headers(&i.headers),
         frames,
         recorded_at: if i.recorded_at.is_empty() {
             None
@@ -739,12 +758,16 @@ fn ws_to_raw(i: &WsInteraction) -> RawWsInteraction {
     }
 }
 
+fn sorted_headers(headers: &HashMap<String, Vec<String>>) -> BTreeMap<String, Vec<String>> {
+    headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+}
+
 fn resolve_headers(
-    headers: HashMap<String, Vec<String>>,
+    headers: BTreeMap<String, Vec<String>>,
     binaries: &[Vec<u8>],
 ) -> HashMap<String, Vec<String>> {
     if binaries.is_empty() {
-        return headers;
+        return headers.into_iter().collect();
     }
     headers
         .into_iter()
@@ -947,6 +970,33 @@ interactions:
                 assert_eq!(v["name"], "get_weather");
             }
             other => panic!("expected json body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_binary_block_with_blank_lines() {
+        // Blank lines are legal inside block scalars; "ABCD" split around one.
+        let yaml = "\
+interactions:
+- request:
+    method: GET
+    uri: https://example.com
+    headers: {}
+  response:
+    status:
+      code: 200
+      message: OK
+    headers: {}
+    body:
+      string: !!binary |
+        QUJD
+
+        RA==
+";
+        let cassette = load_yaml(yaml);
+        match &cassette.interactions[0].response.body.inner {
+            BodyContent::Binary(b) => assert_eq!(b, b"ABCD"),
+            other => panic!("expected binary body, got {other:?}"),
         }
     }
 

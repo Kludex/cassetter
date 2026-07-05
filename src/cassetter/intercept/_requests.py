@@ -5,57 +5,10 @@ from typing import Any
 from unittest.mock import patch
 
 import requests
-import requests.adapters
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import Cassette, NoMatchError, RawRequest, SkipRecording
-
-
-class VCRAdapter(requests.adapters.HTTPAdapter):
-    """requests HTTPAdapter that records/replays via a Cassette."""
-
-    def __init__(self, cassette: Cassette, real_adapter: requests.adapters.HTTPAdapter) -> None:
-        super().__init__()
-        self._cassette = cassette
-        self._real_adapter = real_adapter
-
-    def send(  # type: ignore[override]
-        self,
-        request: requests.PreparedRequest,
-        stream: bool = False,
-        timeout: float | tuple[float, float] | None = None,
-        verify: bool | str = True,
-        cert: str | tuple[str, str] | None = None,
-        proxies: dict[str, str] | None = None,
-    ) -> requests.Response:
-        method = (request.method or "GET").upper()
-        uri = request.url or ""
-        headers = extract_headers(request.headers)
-        body = request.body if isinstance(request.body, bytes) else (request.body.encode() if request.body else None)
-
-        try:
-            response = self._cassette.play(method, uri, headers, body)
-            return build_requests_response(request, response)
-        except NoMatchError:
-            if not self._cassette.can_record:
-                raise
-
-        real_response = self._real_adapter.send(
-            request, stream=stream, timeout=timeout, verify=verify, cert=cert, proxies=proxies
-        )
-        resp_headers = extract_headers(real_response.headers)
-
-        self._cassette.record(
-            method=method,
-            uri=uri,
-            request_headers=headers,
-            request_body=body,
-            status=real_response.status_code,
-            response_headers=resp_headers,
-            response_body=real_response.content,
-        )
-        return real_response
+from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
 
 
 class RequestsInterceptor:
@@ -100,7 +53,9 @@ class RequestsInterceptor:
                     raise
 
             real_response = original_send(session, request, **kwargs)
-            resp_headers = extract_headers(real_response.headers)
+            # requests exposes the decompressed body via .content, so drop
+            # content-encoding to prevent double-decompression when recording
+            resp_headers = extract_headers_skip_encoding(real_response.headers)
 
             cassette.record(
                 method=method,
@@ -128,6 +83,12 @@ def extract_headers(headers: Any) -> dict[str, list[str]]:
         return result
     for key, value in headers.items():
         result.setdefault(str(key).lower(), []).append(str(value))
+    return result
+
+
+def extract_headers_skip_encoding(headers: Any) -> dict[str, list[str]]:
+    result = extract_headers(headers)
+    result.pop("content-encoding", None)
     return result
 
 
