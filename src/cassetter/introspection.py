@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from dataclasses import dataclass
 from typing import cast
 from urllib.parse import parse_qsl, urlparse
@@ -57,10 +56,6 @@ def recorded_request(interaction: HttpInteraction) -> RecordedRequest:
         headers=request.headers,
         body=_wire_body(request.body),
     )
-
-
-def play_counter(played_indices: list[bool]) -> Counter[int]:
-    return Counter({index: 1 for index, played in enumerate(played_indices) if played})
 
 
 def _wire_body(body: Body) -> str | bytes | None:
