@@ -111,7 +111,7 @@ source_pkgs = ["cassetter", "tests"]
 cassetter = ["src/cassetter", "*/site-packages/cassetter"]
 
 [tool.coverage.report]
-fail_under = 88  # TODO: raise to 100 (audit follow-up)
+fail_under = 100
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

@@ -60,7 +60,8 @@ jobs:
           allow-prereleases: true
       - run: uv sync
       - run: uv run maturin develop --release
-      - run: uv run pytest tests/ --strict-config --strict-markers --cov -v
+      - run: uv run coverage run -m pytest tests/ --strict-config --strict-markers -v
+      - run: uv run coverage report
 
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:

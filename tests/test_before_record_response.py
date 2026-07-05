@@ -41,7 +41,7 @@ async def test_before_record_response_skip_recording(cassette_path: str) -> None
     def skip_errors(response: RawResponse) -> RawResponse:
         if response.status >= 500:
             raise SkipRecording
-        return response
+        return response  # pragma: no cover
 
     mock_transport = httpx.MockTransport(lambda request: httpx.Response(503, json={"error": "down"}))
 
@@ -86,8 +86,8 @@ async def test_before_record_response_not_called_on_replay(tmp_path: object) -> 
     calls: list[RawResponse] = []
 
     def track_calls(response: RawResponse) -> RawResponse:
-        calls.append(response)
-        return response
+        calls.append(response)  # pragma: no cover
+        return response  # pragma: no cover
 
     with use_cassette(path, record_mode="none", intercept=["httpx"], before_record_response=track_calls):
         async with httpx.AsyncClient() as client:
@@ -100,7 +100,7 @@ def test_before_record_response_with_vcr_config(tmp_path: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
 
     def my_hook(response: RawResponse) -> RawResponse:
-        return response
+        return response  # pragma: no cover
 
     cassette = Cassette(path, before_record_response=my_hook)
     assert cassette.before_record_response is my_hook

@@ -254,3 +254,25 @@ def testbuild_urllib3_response_headers() -> None:
         "https://example.com",
     )
     assert response.headers.getlist("x-custom") == ["a", "b"]
+
+
+def test_record_urllib3_rewrites_content_length(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A recorded response carrying content-length has it rewritten to the stored body length."""
+    path = os.path.join(str(tmp_path), "clen.yaml")
+    body = b'{"recorded": true}'
+    fake_response = urllib3.response.HTTPResponse(
+        body=io.BytesIO(body),
+        headers={"content-type": "application/json", "content-length": "999"},
+        status=200,
+        preload_content=False,
+    )
+    fake_response._body = body
+    monkeypatch.setattr(
+        urllib3.connectionpool.HTTPConnectionPool,
+        "urlopen",
+        lambda self, method, url, **kwargs: fake_response,
+    )
+    with use_cassette(path, record_mode="all", intercept=["urllib3"]):
+        resp = urllib3.PoolManager().request("GET", "https://example.com/clen")
+    assert resp.headers["content-length"] == str(len(body))
+    monkeypatch.undo()

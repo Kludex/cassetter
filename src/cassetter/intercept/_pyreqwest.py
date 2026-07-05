@@ -97,7 +97,7 @@ def intercept(
     kwargs: dict[str, Any],
 ) -> Any:
     cassette = get_current_cassette()
-    if cassette is None:
+    if cassette is None:  # pragma: no cover - patch active without a cassette context
         return original(client, *original_args, **kwargs)
 
     if cassette.should_bypass(url):

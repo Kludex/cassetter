@@ -201,3 +201,17 @@ def test_sync_replay_streaming_request_body(preloaded_cassette: str) -> None:
 
     assert response.status_code == 200
     assert response.json()["origin"] == "127.0.0.1"
+
+
+def test_sync_hook_rewrites_to_match(preloaded_cassette: str) -> None:
+    """A sync before_record_request hook that rewrites the URI to match replays without network."""
+    from cassetter import RawRequest
+
+    def hook(request: RawRequest) -> RawRequest:
+        request.uri = "https://httpbin.org/get"
+        return request
+
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"], before_record_request=hook):
+        with httpx.Client() as client:
+            response = client.get("https://httpbin.org/original")
+    assert response.status_code == 200
