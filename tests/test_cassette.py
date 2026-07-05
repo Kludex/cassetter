@@ -799,6 +799,8 @@ def test_scrub_multibyte_query_no_panic() -> None:
     )
     scrubbed = scrub_interaction(interaction, SecurityConfig())
     assert "api_key=[FILTERED]" in scrubbed.request.uri
+
+
 def test_once_with_existing_cassette_is_replay_only(tmp_path: object) -> None:
     """`once` must not record (or hit the network) when the cassette already exists."""
     path = os.path.join(str(tmp_path), "once.yaml")
