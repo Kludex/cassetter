@@ -178,21 +178,32 @@ impl Cassette {
                 .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("mkdir error: {e}")))?;
         }
 
-        if is_toml(path) {
+        let out = if is_toml(path) {
+            if !self.grpc_interactions.is_empty() || !self.ws_interactions.is_empty() {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "TOML cassettes cannot store gRPC or WebSocket interactions; use YAML",
+                ));
+            }
             let raw = format_toml::to_toml(self);
-            let out = toml::to_string_pretty(&raw).map_err(|e| {
+            toml::to_string_pretty(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("TOML serialize error: {e}"))
-            })?;
-            std::fs::write(p, out)
-                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("write error: {e}")))?;
+            })?
         } else {
             let raw = format::to_raw(self);
-            let yaml = serde_saphyr::to_string(&raw).map_err(|e| {
+            serde_saphyr::to_string(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("YAML serialize error: {e}"))
-            })?;
-            std::fs::write(p, yaml)
-                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("write error: {e}")))?;
-        }
+            })?
+        };
+        // Write via a temp file + rename so a crash mid-write never leaves a
+        // truncated cassette.
+        let tmp = p.with_extension(match p.extension().and_then(|e| e.to_str()) {
+            Some(ext) => format!("tmp.{ext}"),
+            None => "tmp".to_string(),
+        });
+        std::fs::write(&tmp, out)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("write error: {e}")))?;
+        std::fs::rename(&tmp, p)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("rename error: {e}")))?;
         Ok(())
     }
 

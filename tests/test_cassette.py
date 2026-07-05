@@ -15,6 +15,7 @@ from cassetter._core import (
     HttpInteraction,
     HttpRequest,
     HttpResponse,
+    MatchConfig,
     WsInteraction,
 )
 from cassetter.cassette import (
@@ -741,3 +742,208 @@ def test_vcr_format_bare_mapping_request_body(tmp_path: object) -> None:
     body = c.interactions[0].request.body
     assert body.body_type == "json"
     assert body.content == {"model": "llama", "stream": False}
+
+
+def test_match_config_rejects_unknown_matcher() -> None:
+    with pytest.raises(ValueError, match="unknown matcher"):
+        MatchConfig(match_on=["method", "url"])
+
+
+def test_toml_save_refuses_grpc_interactions(tmp_path: object) -> None:
+    from cassetter._core import Body, GrpcInteraction, GrpcRequest, GrpcResponse
+
+    c = RustCassette()
+    c.add_grpc_interaction(
+        GrpcInteraction(
+            GrpcRequest("/pkg.Svc/M", {}, Body("binary", b"\x01")),
+            GrpcResponse(0, "OK", {}, Body("binary", b"\x02")),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    with pytest.raises(ValueError, match="TOML cassettes cannot store gRPC"):
+        c.save(os.path.join(str(tmp_path), "grpc.toml"))
+
+
+def test_saved_headers_are_sorted(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "sorted.yaml")
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            HttpRequest("GET", "https://example.com", {"zebra": ["1"], "alpha": ["2"], "mid": ["3"]}),
+            HttpResponse(200),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(path)
+    with open(path) as f:
+        text = f.read()
+    assert text.index("alpha") < text.index("mid") < text.index("zebra")
+    # deterministic across saves
+    c.save(path)
+    with open(path) as f:
+        assert f.read() == text
+
+
+def test_body_repr_multibyte_no_panic() -> None:
+    body = Body("text", "é" * 40)
+    assert repr(body)  # must not raise a panic across the FFI boundary
+
+
+def test_scrub_multibyte_query_no_panic() -> None:
+    from cassetter._core import SecurityConfig, scrub_interaction
+
+    interaction = HttpInteraction(
+        HttpRequest("GET", "https://example.com/?%a€=1&api_key=x"),
+        HttpResponse(200),
+        "2026-01-01T00:00:00Z",
+    )
+    scrubbed = scrub_interaction(interaction, SecurityConfig())
+    assert "api_key=[FILTERED]" in scrubbed.request.uri
+
+
+def test_once_with_existing_cassette_is_replay_only(tmp_path: object) -> None:
+    """`once` must not record (or hit the network) when the cassette already exists."""
+    path = os.path.join(str(tmp_path), "once.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record(
+        method="GET",
+        uri="https://example.com/known",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    recorder.save()
+
+    cassette = Cassette(path, record_mode=RecordMode.ONCE)
+    cassette.load()
+    assert cassette.can_record is False
+
+    # Matched requests still replay
+    assert cassette.play("GET", "https://example.com/known", {}, None).status == 200
+
+    # Unmatched requests raise instead of recording
+    with pytest.raises(NoMatchError):
+        cassette.play("GET", "https://example.com/unknown", {}, None)
+
+
+def test_once_without_cassette_records(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "fresh.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ONCE)
+    cassette.load()
+    assert cassette.can_record is True
+
+
+def test_once_rerecord_expiry_allows_recording(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "expired.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record(
+        method="GET",
+        uri="https://example.com",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    recorder.save()
+
+    # Rewrite the recorded_at to be ancient
+    with open(path) as f:
+        content = f.read().replace(recorder.interactions[0].recorded_at, "2020-01-01T00:00:00+00:00")
+    with open(path, "w") as f:
+        f.write(content)
+
+    cassette = Cassette(path, record_mode=RecordMode.ONCE, max_age="1d", on_expiry="rerecord")
+    cassette.load()
+    assert cassette.can_record is True
+
+
+def test_play_matches_uri_with_filtered_query_param(tmp_path: object) -> None:
+    """Scrubbed query params must not break replay matching."""
+    path = os.path.join(str(tmp_path), "filtered.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record(
+        method="GET",
+        uri="https://example.com/data?api_key=super-secret&page=1",
+        request_headers={"authorization": ["Bearer tok"]},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b'{"ok": true}',
+    )
+    recorder.save()
+
+    # The stored URI is scrubbed
+    stored_uri = recorder.interactions[0].request.uri
+    assert "super-secret" not in stored_uri
+
+    # Replay with the raw, unfiltered request must still match
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
+    response = cassette.play(
+        "GET",
+        "https://example.com/data?api_key=super-secret&page=1",
+        {"authorization": ["Bearer tok"]},
+        None,
+    )
+    assert response.status == 200
+
+
+def test_play_matches_scrubbed_json_body(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "body_match.yaml")
+    config = MatchConfig(match_on=["method", "uri", "json_body"])
+    recorder = Cassette(path, record_mode=RecordMode.ALL, match_config=config)
+    recorder.load()
+    recorder.record(
+        method="POST",
+        uri="https://example.com/login",
+        request_headers={"content-type": ["application/json"]},
+        request_body=b'{"username": "alice", "password": "hunter2"}',
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    recorder.save()
+
+    cassette = Cassette(path, record_mode=RecordMode.NONE, match_config=config)
+    cassette.load()
+    response = cassette.play(
+        "POST",
+        "https://example.com/login",
+        {"content-type": ["application/json"]},
+        b'{"username": "alice", "password": "hunter2"}',
+    )
+    assert response.status == 200
+
+
+def test_invalid_on_expiry_rejected(tmp_path: object) -> None:
+    with pytest.raises(ValueError, match="invalid on_expiry"):
+        Cassette(os.path.join(str(tmp_path), "x.yaml"), on_expiry="error")
+
+
+def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "stale.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record(
+        method="GET",
+        uri="https://example.com/old",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    recorder.save()
+    assert len(RustCassette.load(path)) == 1
+
+    # Re-record run that captures nothing must truncate the stale content
+    rerecord = Cassette(path, record_mode=RecordMode.ALL)
+    rerecord.load()
+    rerecord.save()
+    assert len(RustCassette.load(path)) == 0

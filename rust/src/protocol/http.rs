@@ -78,7 +78,14 @@ impl Body {
         match &self.inner {
             BodyContent::Json(_) => "Body(type='json', ...)".to_string(),
             BodyContent::Text(s) => {
-                let preview = if s.len() > 50 { &s[..50] } else { s };
+                let boundary = s
+                    .char_indices()
+                    .take_while(|(idx, _)| *idx <= 50)
+                    .last()
+                    .map(|(idx, c)| idx + c.len_utf8())
+                    .unwrap_or(0)
+                    .min(s.len());
+                let preview = &s[..boundary];
                 format!("Body(type='text', content='{preview}...')")
             }
             BodyContent::Binary(b) => format!("Body(type='binary', len={})", b.len()),

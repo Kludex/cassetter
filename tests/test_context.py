@@ -122,3 +122,37 @@ async def test_use_cassette_expired_warns(tmp_path: object) -> None:
     with pytest.warns(CassetteExpiredWarning):
         with use_cassette(path, record_mode="none", max_age="1h", on_expiry="warn"):
             pass
+
+
+def test_resolve_interceptors_drops_subsumed() -> None:
+    from cassetter.context import _INTERCEPTOR_MAP, resolve_interceptors
+
+    resolved = resolve_interceptors(["requests", "urllib3"])
+    assert resolved == [_INTERCEPTOR_MAP["urllib3"]]
+
+
+def test_acquire_patches_rolls_back_on_failure() -> None:
+    from cassetter._state import acquire_patches, installed
+
+    events: list[str] = []
+
+    class GoodInterceptor:
+        def install(self) -> None:
+            events.append("good-install")
+
+        def uninstall(self) -> None:
+            events.append("good-uninstall")
+
+    class BadInterceptor:
+        def install(self) -> None:
+            raise RuntimeError("boom")
+
+        def uninstall(self) -> None:  # pragma: no cover
+            events.append("bad-uninstall")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        acquire_patches([GoodInterceptor, BadInterceptor])
+
+    assert events == ["good-install", "good-uninstall"]
+    assert GoodInterceptor not in installed
+    assert BadInterceptor not in installed

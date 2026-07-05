@@ -147,6 +147,10 @@ def resolve_interceptors(names: list[str] | None = None) -> list[type[Intercepto
     """Import and return interceptor classes by name, or auto-detect if None."""
     if names is None:
         return _auto_detect_interceptors()
+    # Drop interceptors subsumed by another requested one (e.g. requests
+    # traffic already flows through the patched urllib3 layer) so a single
+    # request is not recorded twice.
+    names = [n for n in names if _SUBSUMED_BY.get(n) not in names]
     interceptors: list[type[InterceptorProtocol]] = []
     for name in names:
         cls = _INTERCEPTOR_MAP.get(name)
