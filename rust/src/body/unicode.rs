@@ -25,7 +25,10 @@ mod tests {
         // Smart quotes must NOT be replaced - they are valid in JSON strings
         // and replacing them with ASCII quotes would break embedded JSON
         let input = "\u{201C}hello\u{201D} \u{2018}world\u{2019}";
-        assert_eq!(normalize_text(input), "\u{201C}hello\u{201D} \u{2018}world\u{2019}");
+        assert_eq!(
+            normalize_text(input),
+            "\u{201C}hello\u{201D} \u{2018}world\u{2019}"
+        );
     }
 
     #[test]

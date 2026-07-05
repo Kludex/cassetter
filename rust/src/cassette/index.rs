@@ -17,7 +17,11 @@ impl CassetteIndex {
     pub fn build(interactions: &[crate::protocol::http::HttpInteraction]) -> Self {
         let mut index = CassetteIndex::new();
         for (i, interaction) in interactions.iter().enumerate() {
-            let key = format!("{} {}", interaction.request.method.to_uppercase(), interaction.request.uri);
+            let key = format!(
+                "{} {}",
+                interaction.request.method.to_uppercase(),
+                interaction.request.uri
+            );
             index.entries.entry(key).or_default().push(i);
         }
         index
@@ -69,6 +73,8 @@ mod tests {
             index.lookup("POST", "https://api.example.com/users"),
             vec![1]
         );
-        assert!(index.lookup("DELETE", "https://api.example.com/users").is_empty());
+        assert!(index
+            .lookup("DELETE", "https://api.example.com/users")
+            .is_empty());
     }
 }

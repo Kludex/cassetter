@@ -76,7 +76,10 @@ mod tests {
     fn test_filter_headers() {
         let mut headers = HashMap::new();
         headers.insert("Authorization".to_string(), vec!["Bearer abc".to_string()]);
-        headers.insert("Content-Type".to_string(), vec!["application/json".to_string()]);
+        headers.insert(
+            "Content-Type".to_string(),
+            vec!["application/json".to_string()],
+        );
         headers.insert("X-Api-Key".to_string(), vec!["secret".to_string()]);
 
         filter_headers(
@@ -91,11 +94,7 @@ mod tests {
     #[test]
     fn test_filter_query_params() {
         let uri = "https://api.example.com/v1/data?api_key=secret&format=json";
-        let result = filter_query_params(
-            uri,
-            &["api_key".to_string()],
-            "[FILTERED]",
-        );
+        let result = filter_query_params(uri, &["api_key".to_string()], "[FILTERED]");
         assert!(result.is_some());
         let new_uri = result.unwrap();
         assert!(new_uri.contains("api_key=[FILTERED]"));

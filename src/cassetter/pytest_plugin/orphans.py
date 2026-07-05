@@ -22,6 +22,12 @@ def add_options(parser: Any) -> None:
         metavar="DIR",
         help="Check for orphaned cassette files in DIR that were not loaded during the test run.",
     )
+    parser.addini("vcr_max_age", "Default cassette max age (e.g. '30d'), overridable per test.", default=None)
+    parser.addini(
+        "vcr_on_expiry",
+        "Action for expired cassettes: warn, fail, or rerecord.",
+        default=None,
+    )
 
 
 def session_finish(session: Any) -> None:

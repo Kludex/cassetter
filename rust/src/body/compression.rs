@@ -88,7 +88,10 @@ mod tests {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(b"deflated payload").unwrap();
         let compressed = encoder.finish().unwrap();
-        assert_eq!(decompress(&compressed, "deflate").unwrap(), b"deflated payload");
+        assert_eq!(
+            decompress(&compressed, "deflate").unwrap(),
+            b"deflated payload"
+        );
     }
 
     #[test]

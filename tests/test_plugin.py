@@ -307,6 +307,18 @@ def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
     assert cassette is not None
 
 
+def test_ini_options_registered() -> None:
+    """The README-documented vcr_max_age / vcr_on_expiry ini options exist."""
+    from unittest.mock import MagicMock
+
+    from cassetter.pytest_plugin.orphans import add_options
+
+    parser = MagicMock()
+    add_options(parser)
+    ini_names = [call.args[0] for call in parser.addini.call_args_list]
+    assert ini_names == ["vcr_max_age", "vcr_on_expiry"]
+
+
 def test_check_orphans_includes_toml(tmp_path: object) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.toml")).write_text("---")

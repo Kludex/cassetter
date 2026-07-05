@@ -148,9 +148,8 @@ impl Cassette {
                 "cassette not found: {path}"
             )));
         }
-        let content = std::fs::read_to_string(p).map_err(|e| {
-            pyo3::exceptions::PyIOError::new_err(format!("read error: {e}"))
-        })?;
+        let content = std::fs::read_to_string(p)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("read error: {e}")))?;
 
         if is_toml(path) {
             let raw: format_toml::TomlCassette = toml::from_str(&content).map_err(|e| {
@@ -175,9 +174,8 @@ impl Cassette {
         // Ensure parent directory exists
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                pyo3::exceptions::PyIOError::new_err(format!("mkdir error: {e}"))
-            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("mkdir error: {e}")))?;
         }
 
         let out = if is_toml(path) {

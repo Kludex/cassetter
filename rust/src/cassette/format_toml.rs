@@ -122,7 +122,10 @@ pub fn from_toml(raw: TomlCassette) -> Cassette {
 
 fn body_to_toml(body: &Body) -> (String, Option<String>) {
     match &body.inner {
-        BodyContent::Json(val) => ("json".to_string(), Some(serde_json::to_string(val).unwrap())),
+        BodyContent::Json(val) => (
+            "json".to_string(),
+            Some(serde_json::to_string(val).unwrap()),
+        ),
         BodyContent::Text(s) => ("text".to_string(), Some(s.clone())),
         BodyContent::Binary(b) => ("binary".to_string(), Some(hex_encode(b))),
         BodyContent::None => ("none".to_string(), None),
@@ -163,7 +166,7 @@ fn hex_encode(data: &[u8]) -> String {
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("invalid hex length".to_string());
     }
     (0..s.len())
