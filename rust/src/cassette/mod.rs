@@ -159,11 +159,16 @@ impl Cassette {
             return Ok(format_toml::from_toml(raw));
         }
 
-        let content = format::tag_binary_scalars(&content);
-        let raw: format::RawCassette = serde_yaml::from_str(&content).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("YAML parse error: {e}"))
-        })?;
-        format::from_raw(raw)
+        let (content, binaries) = format::extract_binary_scalars(&content);
+        // strict_booleans: YAML 1.2 core schema semantics - only true/false are
+        // booleans, so unquoted yes/no/on/off scalars stay strings, matching
+        // how existing cassettes were written.
+        let options = serde_saphyr::options! { strict_booleans: true };
+        let raw: format::RawCassette = serde_saphyr::from_str_with_options(&content, options)
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("YAML parse error: {e}"))
+            })?;
+        format::from_raw(raw, &binaries)
     }
 
     fn save(&self, path: &str) -> PyResult<()> {
@@ -185,7 +190,7 @@ impl Cassette {
             })?;
         } else {
             let raw = format::to_raw(self);
-            let yaml = serde_yaml::to_string(&raw).map_err(|e| {
+            let yaml = serde_saphyr::to_string(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("YAML serialize error: {e}"))
             })?;
             std::fs::write(p, yaml).map_err(|e| {

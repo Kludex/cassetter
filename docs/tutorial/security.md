@@ -90,4 +90,4 @@ There is a second security angle to cassettes: loading them.
 
 VCR.py parses cassettes with an unsafe YAML loader that supports `!!python/object` tags. A malicious cassette file can execute arbitrary Python code when loaded.
 
-Cassetter parses YAML in Rust. The Rust parser has no concept of Python object construction, only data. A cassette file can never run code.
+Cassetter parses YAML in Rust with [serde-saphyr](https://crates.io/crates/serde-saphyr), a parser built for hostile input: no `unsafe` code, panic-free on malformed documents, and hard budgets on aliases and nesting, so a malicious cassette cannot trigger code execution or a billion laughs attack. A cassette file is only ever data.
