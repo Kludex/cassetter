@@ -160,14 +160,25 @@ pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
                 let node_indent = line_indent(line);
                 let mut b64 = String::new();
                 let mut j = i + 1;
+                // Blank lines are legal inside block scalars and contribute
+                // nothing to base64; only consume them when more block
+                // content follows, so trailing blanks stay with the parent.
+                let mut pending_blanks = 0usize;
                 while j < lines.len() {
                     let content_line = lines[j];
-                    if content_line.trim().is_empty() || line_indent(content_line) <= node_indent {
+                    if content_line.trim().is_empty() {
+                        pending_blanks += 1;
+                        j += 1;
+                        continue;
+                    }
+                    if line_indent(content_line) <= node_indent {
                         break;
                     }
+                    pending_blanks = 0;
                     b64.push_str(content_line.trim());
                     j += 1;
                 }
+                j -= pending_blanks;
                 if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&b64) {
                     out.push(format!("{}{}", &line[..pos], binary_sentinel(binaries.len())));
                     binaries.push(bytes);
@@ -278,6 +289,13 @@ where
                 let value = access.next_value::<Value>()?;
                 map.insert(key, value);
             }
+            // A mapping shaped exactly like cassetter's envelope is treated as
+            // the envelope. This is ambiguous with a bare JSON payload whose
+            // keys are exactly {type, content} with a known type value, but no
+            // cassette-level discriminator exists (VCR files also carry a
+            // top-level version), and preferring the payload interpretation
+            // would corrupt every cassetter-format body instead of this one
+            // rare shape. Documented in the migration guide.
             let is_cassetter_body = map
                 .get("type")
                 .and_then(|v| v.as_str())
@@ -952,6 +970,33 @@ interactions:
                 assert_eq!(v["name"], "get_weather");
             }
             other => panic!("expected json body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_binary_block_with_blank_lines() {
+        // Blank lines are legal inside block scalars; "ABCD" split around one.
+        let yaml = "\
+interactions:
+- request:
+    method: GET
+    uri: https://example.com
+    headers: {}
+  response:
+    status:
+      code: 200
+      message: OK
+    headers: {}
+    body:
+      string: !!binary |
+        QUJD
+
+        RA==
+";
+        let cassette = load_yaml(yaml);
+        match &cassette.interactions[0].response.body.inner {
+            BodyContent::Binary(b) => assert_eq!(b, b"ABCD"),
+            other => panic!("expected binary body, got {other:?}"),
         }
     }
 

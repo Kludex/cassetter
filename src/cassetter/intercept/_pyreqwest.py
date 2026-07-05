@@ -126,11 +126,16 @@ def intercept(
             raise
 
     real_response = original(client, *original_args, **kwargs)
+    # pyreqwest decompresses the body, so drop content-encoding to prevent
+    # double-decompression when recording
     resp_headers = extract_headers(real_response.headers)
+    resp_headers.pop("content-encoding", None)
 
     cassette.record(
         method=method,
-        uri=real_response.url,
+        # record the request URL: replay matches on it, and real_response.url
+        # is post-redirect/normalized so it would never match
+        uri=url,
         request_headers=norm_headers,
         request_body=body,
         status=real_response.status_code,

@@ -45,3 +45,7 @@ Now two bodies that differ only in `request_id` and `timestamp` are considered e
 
 !!! tip
     Start with the default `["method", "uri"]`. Only add `json_body` when your test makes several requests to the same URI with different payloads and you need to tell them apart.
+
+## Matching and security filtering
+
+Cassettes are stored with sensitive values filtered, so the live request is passed through the same filters before matching. A request recorded as `?api_key=[FILTERED]` matches the real request carrying the actual key, and a scrubbed `password` field in a stored JSON body matches the real payload. Filtering never breaks replay.
