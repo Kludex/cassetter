@@ -20,24 +20,36 @@ def get_current_cassette() -> Cassette | None:
 
 def acquire_patches(interceptor_classes: list[type[InterceptorProtocol]]) -> None:
     with lock:
-        for cls in interceptor_classes:
-            if cls in installed:
-                instance, count = installed[cls]
-                installed[cls] = (instance, count + 1)
-            else:
-                instance = cls()
-                instance.install()
-                installed[cls] = (instance, 1)
+        acquired: list[type[InterceptorProtocol]] = []
+        try:
+            for cls in interceptor_classes:
+                if cls in installed:
+                    instance, count = installed[cls]
+                    installed[cls] = (instance, count + 1)
+                else:
+                    instance = cls()
+                    instance.install()
+                    installed[cls] = (instance, 1)
+                acquired.append(cls)
+        except BaseException:
+            # Roll back so a failed install never leaves earlier patches
+            # applied with no owner to release them.
+            _release_locked(acquired)
+            raise
+
+
+def _release_locked(interceptor_classes: list[type[InterceptorProtocol]]) -> None:
+    for cls in interceptor_classes:
+        if cls not in installed:
+            continue
+        instance, count = installed[cls]
+        if count <= 1:
+            instance.uninstall()
+            del installed[cls]
+        else:
+            installed[cls] = (instance, count - 1)
 
 
 def release_patches(interceptor_classes: list[type[InterceptorProtocol]]) -> None:
     with lock:
-        for cls in interceptor_classes:
-            if cls not in installed:
-                continue
-            instance, count = installed[cls]
-            if count <= 1:
-                instance.uninstall()
-                del installed[cls]
-            else:
-                installed[cls] = (instance, count - 1)
+        _release_locked(interceptor_classes)

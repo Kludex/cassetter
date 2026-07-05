@@ -31,7 +31,7 @@ from cassetter._core import (
     scrub_interaction,
     scrub_ws_interaction,
 )
-from cassetter.introspection import RecordedRequest, play_counter, recorded_request
+from cassetter.introspection import RecordedRequest, recorded_request
 from cassetter.recording import RecordMode
 
 
@@ -113,6 +113,8 @@ class Cassette:
         self._match_config = match_config or MatchConfig()
         self._security_config = security_config or SecurityConfig()
         self._max_age = _parse_duration(max_age) if max_age is not None else None
+        if on_expiry not in ("warn", "fail", "rerecord"):
+            raise ValueError(f"invalid on_expiry: {on_expiry!r} (expected 'warn', 'fail', or 'rerecord')")
         self._on_expiry = on_expiry
         self._ignore_localhost = ignore_localhost
         self._ignore_hosts = ignore_hosts or []
@@ -120,6 +122,8 @@ class Cassette:
         self._before_record_response = before_record_response
         self._inner: _RustCassette | None = None
         self._dirty = False
+        self._once_replay_only = False
+        self._play_counter: Counter[int] = Counter()
 
     @property
     def path(self) -> str:
@@ -171,13 +175,13 @@ class Cassette:
 
     @property
     def play_count(self) -> int:
-        """Number of interactions that have been replayed."""
-        return sum(self.played_indices)
+        """Total number of replays, counting repeats (vcrpy semantics)."""
+        return sum(self._play_counter.values())
 
     @property
     def play_counts(self) -> Counter[int]:
-        """Replay count per interaction index, vcrpy style."""
-        return play_counter(self.played_indices)
+        """Replay count per interaction index, counting repeats (vcrpy semantics)."""
+        return Counter(self._play_counter)
 
     @property
     def all_played(self) -> bool:
@@ -207,6 +211,8 @@ class Cassette:
             return
 
         self._inner = _RustCassette.load(self._path)
+        self._once_replay_only = True
+        self._play_counter = Counter()
         self._check_expiry()
 
     def _check_expiry(self) -> None:
@@ -229,6 +235,7 @@ class Cassette:
             raise CassetteExpiredError(msg)
         if self._on_expiry == "rerecord":
             self._inner = _RustCassette()
+            self._once_replay_only = False
             self._dirty = True
             return
         warnings.warn(msg, CassetteExpiredWarning, stacklevel=3)
@@ -248,14 +255,26 @@ class Cassette:
         return max(datetime.fromisoformat(ts.replace("Z", "+00:00")) for ts in timestamps)
 
     def save(self) -> None:
-        """Save the cassette to disk if modified and has any interactions."""
-        if self._inner is not None and self._dirty and len(self._inner) > 0:
+        """Save the cassette to disk if modified.
+
+        An empty cassette is written only when a file already exists, so a
+        re-record that captured nothing truncates the stale file instead of
+        leaving it behind.
+        """
+        if self._inner is None or not self._dirty:
+            return
+        if len(self._inner) > 0 or os.path.exists(self._path):
             self._inner.save(self._path)
             self._dirty = False
 
     @property
     def can_record(self) -> bool:
-        return self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES, RecordMode.ONCE)
+        if self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES):
+            return True
+        # `once` records only when the cassette didn't exist: with an existing
+        # cassette an unmatched request must raise instead of silently hitting
+        # the network and appending.
+        return self._record_mode == RecordMode.ONCE and not self._once_replay_only
 
     def play(
         self,
@@ -273,6 +292,11 @@ class Cassette:
         processed_body = process_body(body or b"", content_type, content_encoding)
 
         request = HttpRequest(method, uri, headers, processed_body)
+        # Interactions are scrubbed at write time, so the live request must be
+        # scrubbed with the same config before matching: a URI recorded as
+        # api_key=[FILTERED] would otherwise never match the real query string.
+        probe = HttpInteraction(request, HttpResponse(0), "")
+        request = scrub_interaction(probe, self._security_config).request
         result = find_match(request, self._inner.interactions, self._inner.played_indices, self._match_config)
 
         if result is None:
@@ -280,6 +304,7 @@ class Cassette:
 
         idx, interaction = result
         self._inner.mark_played(idx)
+        self._play_counter[idx] += 1
         return interaction.response
 
     def record(

@@ -49,6 +49,10 @@ $ pytest
 
 Filtering is **on by default**. VCR.py records `authorization` headers unless you configure `filter_headers` yourself. Cassetter strips the common sensitive headers, query parameters, and body fields without any configuration. If you relied on credentials being in the cassette (for example, asserting on them), you will need to adjust those tests.
 
+## Known limitation
+
+A raw JSON request body whose keys are exactly `type` and `content`, with `type` equal to `json`, `text`, `binary`, or `none`, is indistinguishable from Cassetter's own body envelope and is read as the envelope. If an API you record uses that exact payload shape, re-record the cassette with Cassetter (which stores the payload inside the envelope) instead of converting it.
+
 ## Not supported
 
 Some VCR.py features have no Cassetter equivalent yet:

@@ -17,9 +17,5 @@ pub static DEFAULT_FILTER_QUERY_PARAMS: &[&str] = &[
     "client_secret",
 ];
 
-pub static DEFAULT_BODY_SCRUB_PATTERNS: &[&str] = &[
-    "access_token",
-    "refresh_token",
-    "client_secret",
-    "password",
-];
+pub static DEFAULT_BODY_SCRUB_PATTERNS: &[&str] =
+    &["access_token", "refresh_token", "client_secret", "password"];
