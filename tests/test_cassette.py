@@ -741,3 +741,31 @@ def test_vcr_format_bare_mapping_request_body(tmp_path: object) -> None:
     body = c.interactions[0].request.body
     assert body.body_type == "json"
     assert body.content == {"model": "llama", "stream": False}
+
+
+def test_invalid_on_expiry_rejected(tmp_path: object) -> None:
+    with pytest.raises(ValueError, match="invalid on_expiry"):
+        Cassette(os.path.join(str(tmp_path), "x.yaml"), on_expiry="error")
+
+
+def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "stale.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record(
+        method="GET",
+        uri="https://example.com/old",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    recorder.save()
+    assert len(RustCassette.load(path)) == 1
+
+    # Re-record run that captures nothing must truncate the stale content
+    rerecord = Cassette(path, record_mode=RecordMode.ALL)
+    rerecord.load()
+    rerecord.save()
+    assert len(RustCassette.load(path)) == 0

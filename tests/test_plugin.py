@@ -305,3 +305,9 @@ def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
     )
 
     assert cassette is not None
+
+
+def test_check_orphans_includes_toml(tmp_path: object) -> None:
+    cassette_dir = str(tmp_path)
+    Path(os.path.join(cassette_dir, "orphan.toml")).write_text("---")
+    assert check_orphans(cassette_dir, set()) == ["orphan.toml"]
