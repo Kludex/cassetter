@@ -186,3 +186,18 @@ def testextract_headers_skip_encoding() -> None:
     assert "content-encoding" not in result
     assert result["content-type"] == ["text/html"]
     assert result["x-custom"] == ["val"]
+
+
+def test_sync_replay_streaming_request_body(preloaded_cassette: str) -> None:
+    """Sync streaming request bodies raise RequestNotRead on .content access."""
+
+    def body_stream():  # type: ignore[no-untyped-def]
+        yield b"chunk1"
+        yield b"chunk2"
+
+    with use_cassette(preloaded_cassette, record_mode="none", intercept=["httpx"]):
+        with httpx.Client() as client:
+            response = client.request("GET", "https://httpbin.org/get", content=body_stream())
+
+    assert response.status_code == 200
+    assert response.json()["origin"] == "127.0.0.1"
