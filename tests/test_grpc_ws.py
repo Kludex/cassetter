@@ -1484,7 +1484,7 @@ async def test_grpc_replay_stream_error_status_raises() -> None:
     resp = GrpcResponse(7, "permission denied", {}, Body("binary", b""))
     with pytest.raises(grpc.aio.AioRpcError) as exc_info:
         async for _ in replay_stream(resp, lambda b: b):
-            pass
+            pass  # pragma: no cover
     assert exc_info.value.code() == grpc.StatusCode.PERMISSION_DENIED
 
 
