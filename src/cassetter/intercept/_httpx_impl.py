@@ -76,7 +76,10 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
         return passthrough(request)
 
     headers = extract_headers(request.headers)
-    body: bytes | None = request.content
+    try:
+        body: bytes | None = request.content
+    except mod.RequestNotRead:
+        body = request.read()
 
     hook = cassette.before_record_request
     if hook is not None:

@@ -143,3 +143,37 @@ def testbuild_replay_response_none_body() -> None:
         HttpResponse(200, body=Body("none")),
     )
     assert resp.content == b""
+
+
+def test_record_uses_request_url_not_response_url(tmp_path: object) -> None:
+    """Recording must store the request URL: responses carry post-redirect URLs
+    that would never match on replay."""
+    from unittest.mock import patch
+
+    path = os.path.join(str(tmp_path), "redirect.yaml")
+
+    class FakeResponse:
+        url = "https://example.com/redirected-target"
+        status_code = 200
+        headers = {"content-type": "application/json", "content-encoding": "gzip"}
+        content = b'{"ok": true}'
+
+    def fake_get(self: object, url: str, **kwargs: object) -> FakeResponse:
+        return FakeResponse()
+
+    with patch.object(pri.Client, "get", fake_get):
+        with use_cassette(path, record_mode="all", intercept=["pyreqwest"]) as cassette:
+            client = pri.Client()
+            client.get("https://example.com/original")
+
+            recorded = cassette.interactions[0]
+            assert recorded.request.uri == "https://example.com/original"
+            # decompressed content is recorded, so the encoding header is dropped
+            assert "content-encoding" not in recorded.response.headers
+
+    # Replay with the original request URL must match
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+        client = pri.Client()
+        response = client.get("https://example.com/original")
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
