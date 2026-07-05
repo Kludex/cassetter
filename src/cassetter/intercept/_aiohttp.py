@@ -33,7 +33,7 @@ class AiohttpInterceptor:
             **kwargs: Any,
         ) -> aiohttp.ClientResponse:
             cassette = get_current_cassette()
-            if cassette is None:
+            if cassette is None:  # pragma: no cover - patch active without a cassette context
                 return await original_request(session, method, str_or_url, **kwargs)
 
             uri = str(_build_full_url(session, str_or_url, kwargs.get("params")))

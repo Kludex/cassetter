@@ -85,7 +85,7 @@ async def test_bypass_cassette_exception_passes_through(cassette_path: str) -> N
     def hook(request: RawRequest) -> RawRequest:
         if "googleapis.com" in request.uri:
             raise SkipRecording
-        return request
+        return request  # pragma: no cover
 
     with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
@@ -115,7 +115,7 @@ def test_sync_bypass_cassette_exception_passes_through(cassette_path: str) -> No
     def hook(request: RawRequest) -> RawRequest:
         if "googleapis.com" in request.uri:
             raise SkipRecording
-        return request
+        return request  # pragma: no cover
 
     with use_cassette(cassette_path, record_mode="none", intercept=["httpx"], before_record_request=hook):
         mock_transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"token": "xyz"}))
