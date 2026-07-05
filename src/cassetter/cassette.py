@@ -120,6 +120,7 @@ class Cassette:
         self._before_record_response = before_record_response
         self._inner: _RustCassette | None = None
         self._dirty = False
+        self._once_replay_only = False
 
     @property
     def path(self) -> str:
@@ -207,6 +208,7 @@ class Cassette:
             return
 
         self._inner = _RustCassette.load(self._path)
+        self._once_replay_only = True
         self._check_expiry()
 
     def _check_expiry(self) -> None:
@@ -229,6 +231,7 @@ class Cassette:
             raise CassetteExpiredError(msg)
         if self._on_expiry == "rerecord":
             self._inner = _RustCassette()
+            self._once_replay_only = False
             self._dirty = True
             return
         warnings.warn(msg, CassetteExpiredWarning, stacklevel=3)
@@ -255,7 +258,12 @@ class Cassette:
 
     @property
     def can_record(self) -> bool:
-        return self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES, RecordMode.ONCE)
+        if self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES):
+            return True
+        # `once` records only when the cassette didn't exist: with an existing
+        # cassette an unmatched request must raise instead of silently hitting
+        # the network and appending.
+        return self._record_mode == RecordMode.ONCE and not self._once_replay_only
 
     def play(
         self,
@@ -273,6 +281,11 @@ class Cassette:
         processed_body = process_body(body or b"", content_type, content_encoding)
 
         request = HttpRequest(method, uri, headers, processed_body)
+        # Interactions are scrubbed at write time, so the live request must be
+        # scrubbed with the same config before matching: a URI recorded as
+        # api_key=[FILTERED] would otherwise never match the real query string.
+        probe = HttpInteraction(request, HttpResponse(0), "")
+        request = scrub_interaction(probe, self._security_config).request
         result = find_match(request, self._inner.interactions, self._inner.played_indices, self._match_config)
 
         if result is None:
