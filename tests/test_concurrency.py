@@ -308,7 +308,7 @@ async def test_concurrent_tasks_with_no_match_isolation(tmp_path: object) -> Non
             async with httpx.AsyncClient() as client:
                 try:
                     await client.get("https://api.example.com/data")  # wrong URL for cassette B
-                    return "unexpected_success"
+                    return "unexpected_success"  # pragma: no cover
                 except NoMatchError:
                     return "no_match"
 

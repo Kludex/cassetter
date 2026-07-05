@@ -53,7 +53,7 @@ class VCRUnaryUnaryCallable:
         compression: Any = None,
     ) -> Any:
         cassette = get_current_cassette()
-        if cassette is None:
+        if cassette is None:  # pragma: no cover - needs a live gRPC channel
             assert self._real is not None
             return await self._real(
                 request,
@@ -127,7 +127,7 @@ class VCRUnaryStreamCallable:
         compression: Any = None,
     ) -> AsyncIterator[Any]:
         cassette = get_current_cassette()
-        if cassette is None:
+        if cassette is None:  # pragma: no cover - needs a live gRPC channel
             assert self._real is not None
             return self._real(  # type: ignore[no-any-return]
                 request,
@@ -223,7 +223,7 @@ class VCRStreamUnaryCallable:
         compression: Any = None,
     ) -> Any:
         cassette = get_current_cassette()
-        if cassette is None:
+        if cassette is None:  # pragma: no cover - needs a live gRPC channel
             assert self._real is not None
             return await self._real(
                 request_iterator,
@@ -297,7 +297,7 @@ class VCRStreamStreamCallable:
         compression: Any = None,
     ) -> AsyncIterator[Any]:
         cassette = get_current_cassette()
-        if cassette is None:
+        if cassette is None:  # pragma: no cover - needs a live gRPC channel
             assert self._real is not None
             return self._real(  # type: ignore[no-any-return]
                 request_iterator,

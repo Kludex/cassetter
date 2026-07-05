@@ -752,7 +752,7 @@ async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
     try:
         with pytest.raises(NoMatchError):
             async for _ in callable_(object()):
-                pass
+                pass  # pragma: no cover
     finally:
         current_cassette.reset(token)
 
@@ -827,7 +827,7 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
     )
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
+        yield b"\x01"  # type: ignore[misc]  # pragma: no cover
 
     callable_ = VCRStreamStreamCallable(
         "/pkg.Svc/Bidi",
@@ -854,14 +854,14 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
     cassette.load()
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
+        yield b"\x01"  # type: ignore[misc]  # pragma: no cover
 
     callable_ = VCRStreamStreamCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
     token = current_cassette.set(cassette)
     try:
         with pytest.raises(NoMatchError):
             async for _ in callable_(request_iter()):
-                pass
+                pass  # pragma: no cover
     finally:
         current_cassette.reset(token)
 
@@ -1094,7 +1094,7 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
             self._idx = 0
 
         async def send(self, msg: str | bytes) -> None:
-            pass
+            pass  # pragma: no cover
 
         async def recv(self) -> str:
             if self._idx >= len(self._msgs):
@@ -1106,7 +1106,7 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
             return msg
 
         async def close(self, code: int = 1000, reason: str = "") -> None:
-            pass
+            pass  # pragma: no cover
 
     token = current_cassette.set(cassette)
     try:
@@ -1159,7 +1159,7 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
 
         with pytest.raises(NoMatchError):
             async with websockets.asyncio.client.connect("wss://ws.example.com/unknown"):
-                pass
+                pass  # pragma: no cover
     finally:
         current_cassette.reset(token)
         interceptor.uninstall()
@@ -1404,7 +1404,7 @@ async def test_vcr_channel_context_manager() -> None:
             self.exited = True
 
         async def close(self) -> None:
-            pass
+            pass  # pragma: no cover
 
     fake = FakeChannel()
     channel = VCRChannel(fake)  # type: ignore[arg-type]

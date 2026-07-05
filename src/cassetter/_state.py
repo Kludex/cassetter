@@ -40,7 +40,7 @@ def acquire_patches(interceptor_classes: list[type[InterceptorProtocol]]) -> Non
 
 def _release_locked(interceptor_classes: list[type[InterceptorProtocol]]) -> None:
     for cls in interceptor_classes:
-        if cls not in installed:
+        if cls not in installed:  # pragma: no cover - defensive: release of an unheld interceptor
             continue
         instance, count = installed[cls]
         if count <= 1:

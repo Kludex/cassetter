@@ -71,7 +71,7 @@ def _resolve_cassette(
         test_file = Path(test_fspath)
         test_dir = str(test_file.parent)
         cassette_dir = os.path.join(test_dir, vcr_config["cassette_dir"], test_file.stem)
-    else:
+    else:  # pragma: no cover - the vcr_cassette_dir fixture always supplies a directory
         test_file = Path(test_fspath)
         test_dir = str(test_file.parent)
         cassette_dir = os.path.join(test_dir, "cassettes", test_file.stem)
