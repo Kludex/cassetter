@@ -919,3 +919,57 @@ def test_play_matches_scrubbed_json_body(tmp_path: object) -> None:
         b'{"username": "alice", "password": "hunter2"}',
     )
     assert response.status == 200
+
+
+def test_invalid_on_expiry_rejected(tmp_path: object) -> None:
+    with pytest.raises(ValueError, match="invalid on_expiry"):
+        Cassette(os.path.join(str(tmp_path), "x.yaml"), on_expiry="error")
+
+
+def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "stale.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record(
+        method="GET",
+        uri="https://example.com/old",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    recorder.save()
+    assert len(RustCassette.load(path)) == 1
+
+    # Re-record run that captures nothing must truncate the stale content
+    rerecord = Cassette(path, record_mode=RecordMode.ALL)
+    rerecord.load()
+    rerecord.save()
+    assert len(RustCassette.load(path)) == 0
+
+
+def test_save_preserves_file_permissions(tmp_path: object) -> None:
+    """Atomic save must keep a restrictive mode on an existing cassette."""
+    import os as _os
+    import stat
+    import sys
+
+    if sys.platform == "win32":  # pragma: no cover
+        pytest.skip("POSIX permissions only")
+
+    path = _os.path.join(str(tmp_path), "private.yaml")
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "2026-01-01T00:00:00Z")
+    )
+    c.save(path)
+    _os.chmod(path, 0o600)
+
+    c.add_interaction(
+        HttpInteraction(HttpRequest("GET", "https://example.com/2"), HttpResponse(200), "2026-01-01T00:00:00Z")
+    )
+    c.save(path)
+
+    mode = stat.S_IMODE(_os.stat(path).st_mode)
+    assert mode == 0o600

@@ -153,12 +153,13 @@ def cassette(
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)
 
-    yield cassette
-
-    # Reset context and release patches
-    current_cassette.reset(token)
-    release_patches(interceptor_classes)
-    cassette.save()
+    try:
+        yield cassette
+    finally:
+        # Reset context and release patches even if the test errors out
+        current_cassette.reset(token)
+        release_patches(interceptor_classes)
+        cassette.save()
 
 
 @pytest.fixture

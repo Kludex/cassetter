@@ -113,6 +113,8 @@ class Cassette:
         self._match_config = match_config or MatchConfig()
         self._security_config = security_config or SecurityConfig()
         self._max_age = _parse_duration(max_age) if max_age is not None else None
+        if on_expiry not in ("warn", "fail", "rerecord"):
+            raise ValueError(f"invalid on_expiry: {on_expiry!r} (expected 'warn', 'fail', or 'rerecord')")
         self._on_expiry = on_expiry
         self._ignore_localhost = ignore_localhost
         self._ignore_hosts = ignore_hosts or []
@@ -253,8 +255,15 @@ class Cassette:
         return max(datetime.fromisoformat(ts.replace("Z", "+00:00")) for ts in timestamps)
 
     def save(self) -> None:
-        """Save the cassette to disk if modified and has any interactions."""
-        if self._inner is not None and self._dirty and len(self._inner) > 0:
+        """Save the cassette to disk if modified.
+
+        An empty cassette is written only when a file already exists, so a
+        re-record that captured nothing truncates the stale file instead of
+        leaving it behind.
+        """
+        if self._inner is None or not self._dirty:
+            return
+        if len(self._inner) > 0 or os.path.exists(self._path):
             self._inner.save(self._path)
             self._dirty = False
 
