@@ -60,7 +60,13 @@ jobs:
           allow-prereleases: true
       - run: uv sync
       - run: uv run maturin develop --release
-      - run: uv run pytest tests/ --strict-config --strict-markers --cov -v
+      - run: uv run coverage run -m pytest tests/ --strict-config --strict-markers -v
+      # The coverage gate is measured on Linux only: the mac/Windows matrix
+      # entries verify platform compatibility, and OS-conditional tests (e.g.
+      # POSIX file-permission tests skipped on Windows) would otherwise leave
+      # their bodies uncovered there.
+      - if: matrix.os == 'ubuntu-latest'
+        run: uv run coverage report
 
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:

@@ -752,7 +752,7 @@ async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
     try:
         with pytest.raises(NoMatchError):
             async for _ in callable_(object()):
-                pass
+                pass  # pragma: no cover
     finally:
         current_cassette.reset(token)
 
@@ -827,7 +827,7 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
     )
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
+        yield b"\x01"  # type: ignore[misc]  # pragma: no cover
 
     callable_ = VCRStreamStreamCallable(
         "/pkg.Svc/Bidi",
@@ -854,14 +854,14 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
     cassette.load()
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
+        yield b"\x01"  # type: ignore[misc]  # pragma: no cover
 
     callable_ = VCRStreamStreamCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
     token = current_cassette.set(cassette)
     try:
         with pytest.raises(NoMatchError):
             async for _ in callable_(request_iter()):
-                pass
+                pass  # pragma: no cover
     finally:
         current_cassette.reset(token)
 
@@ -926,7 +926,10 @@ async def test_replay_ws_recv() -> None:
     ws = VCRWebSocketReplay(interaction)
     assert await ws.recv() == "pong"
     assert await ws.recv() == "data"
-    with pytest.raises(StopAsyncIteration):
+    # Exhausted replay signals a clean close, like a real connection at EOF
+    from websockets.exceptions import ConnectionClosedOK
+
+    with pytest.raises(ConnectionClosedOK):
         await ws.recv()
 
 
@@ -1091,7 +1094,7 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
             self._idx = 0
 
         async def send(self, msg: str | bytes) -> None:
-            pass
+            pass  # pragma: no cover
 
         async def recv(self) -> str:
             if self._idx >= len(self._msgs):
@@ -1103,7 +1106,7 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
             return msg
 
         async def close(self, code: int = 1000, reason: str = "") -> None:
-            pass
+            pass  # pragma: no cover
 
     token = current_cassette.set(cassette)
     try:
@@ -1156,7 +1159,7 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
 
         with pytest.raises(NoMatchError):
             async with websockets.asyncio.client.connect("wss://ws.example.com/unknown"):
-                pass
+                pass  # pragma: no cover
     finally:
         current_cassette.reset(token)
         interceptor.uninstall()
@@ -1401,7 +1404,7 @@ async def test_vcr_channel_context_manager() -> None:
             self.exited = True
 
         async def close(self) -> None:
-            pass
+            pass  # pragma: no cover
 
     fake = FakeChannel()
     channel = VCRChannel(fake)  # type: ignore[arg-type]
@@ -1449,3 +1452,86 @@ def test_grpciter_bytes() -> None:
 
     result = iter_bytes([b"\x01"], lambda b: b)
     assert result is not None
+
+
+@pytest.mark.anyio
+async def test_patched_connect_await_form(tmp_path: object) -> None:
+    """`ws = await websockets.connect(uri)` (not just `async with`) must work."""
+    from cassetter.intercept._websockets import WebSocketInterceptor
+
+    path = os.path.join(str(tmp_path), "ws_await.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+    cassette.record_ws("wss://ws.example.com/p", {}, [WsFrame("recv", "text", Body("text", "hi"), 0)])
+
+    interceptor = WebSocketInterceptor()
+    interceptor.install()
+    token = current_cassette.set(cassette)
+    try:
+        import websockets.asyncio.client
+
+        ws = await websockets.asyncio.client.connect("wss://ws.example.com/p")
+        assert await ws.recv() == "hi"
+    finally:
+        current_cassette.reset(token)
+        interceptor.uninstall()
+
+
+@pytest.mark.anyio
+async def test_patched_connect_async_for_form(tmp_path: object) -> None:
+    """`async for ws in connect(...)` reconnect loop yields one connection."""
+    from cassetter.intercept._websockets import WebSocketInterceptor
+
+    path = os.path.join(str(tmp_path), "ws_for.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+    cassette.record_ws("wss://ws.example.com/p", {}, [WsFrame("recv", "text", Body("text", "yo"), 0)])
+
+    interceptor = WebSocketInterceptor()
+    interceptor.install()
+    token = current_cassette.set(cassette)
+    try:
+        import websockets.asyncio.client
+
+        seen = []
+        # Loop to completion (no break) so the reconnect iterator raises
+        # StopAsyncIteration after yielding its single connection.
+        async for ws in websockets.asyncio.client.connect("wss://ws.example.com/p"):
+            seen.append(await ws.recv())
+        assert seen == ["yo"]
+    finally:
+        current_cassette.reset(token)
+        interceptor.uninstall()
+
+
+@pytest.mark.anyio
+async def test_ws_bypass_ignores_localhost(tmp_path: object) -> None:
+    """A bypassed WS URI must not consult the cassette (would raise NoMatch here)."""
+    from cassetter.intercept._websockets import WebSocketInterceptor, _PatchedConnect
+
+    path = os.path.join(str(tmp_path), "ws_bypass.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.NONE, ignore_localhost=True)
+    cassette.load()
+
+    sentinel = object()
+
+    async def fake_original(uri: str, **kwargs: object) -> object:
+        return sentinel
+
+    interceptor = WebSocketInterceptor()
+    interceptor.install()
+    token = current_cassette.set(cassette)
+    try:
+        conn = _PatchedConnect(fake_original, "ws://localhost:1234/x", {})
+        result = await conn
+        assert result is sentinel
+    finally:
+        current_cassette.reset(token)
+        interceptor.uninstall()
+
+
+def test_extract_ws_headers_list_of_tuples() -> None:
+    from cassetter.intercept._websockets import extract_ws_headers
+
+    headers = extract_ws_headers({"additional_headers": [("Authorization", "Bearer x"), ("X-Trace", "1")]})
+    assert headers == {"authorization": ["Bearer x"], "x-trace": ["1"]}

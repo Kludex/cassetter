@@ -32,7 +32,7 @@ class Urllib3Interceptor:
             **kwargs: Any,
         ) -> urllib3.response.HTTPResponse:
             cassette = get_current_cassette()
-            if cassette is None:
+            if cassette is None:  # pragma: no cover - patch active without a cassette context
                 return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
 
             full_url = reconstruct_url(pool, url)

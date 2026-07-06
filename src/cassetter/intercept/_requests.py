@@ -24,7 +24,7 @@ class RequestsInterceptor:
             session: requests.Session, request: requests.PreparedRequest, **kwargs: Any
         ) -> requests.Response:
             cassette = get_current_cassette()
-            if cassette is None:
+            if cassette is None:  # pragma: no cover - patch active without a cassette context
                 return original_send(session, request, **kwargs)
 
             uri = request.url or ""

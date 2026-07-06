@@ -279,3 +279,77 @@ def test_convert_empty_directory(tmp_path: Path) -> None:
     empty.mkdir()
     with pytest.raises(SystemExit, match="1"):
         main(["convert", str(empty), "toml"])
+
+
+def test_convert_scrubs_grpc_and_ws(tmp_path: Path) -> None:
+    from cassetter._core import GrpcInteraction, GrpcRequest, GrpcResponse, WsFrame, WsInteraction
+
+    src = str(tmp_path / "mixed.yaml")
+    c = Cassette()
+    c.add_grpc_interaction(
+        GrpcInteraction(
+            GrpcRequest("/pkg.Svc/M", {"authorization": ["Bearer x"]}, Body("binary", b"\x01")),
+            GrpcResponse(0, "OK", {}, Body("binary", b"\x02")),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.add_ws_interaction(
+        WsInteraction(
+            "wss://ws.example.com",
+            {"authorization": ["Bearer y"]},
+            [WsFrame("send", "text", Body("text", "hi"), 0)],
+        )
+    )
+    c.save(src)
+
+    dst = str(tmp_path / "clean.yaml")
+    main(["convert", src, dst])
+    loaded = Cassette.load(dst)
+    assert "authorization" not in loaded.grpc_interactions[0].request.metadata
+    assert "authorization" not in loaded.ws_interactions[0].headers
+
+
+def test_convert_directory_same_format_in_place(tmp_path: Path) -> None:
+    src_dir = tmp_path / "cassettes"
+    src_dir.mkdir()
+    c = Cassette()
+    c.add_interaction(
+        HttpInteraction(
+            HttpRequest("GET", "https://example.com", {"authorization": ["Bearer x"]}),
+            HttpResponse(200),
+            "2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(str(src_dir / "a.yaml"))
+
+    # bare same-extension target with --force rewrites in place
+    main(["convert", str(src_dir), "yaml", "--force"])
+    loaded = Cassette.load(str(src_dir / "a.yaml"))
+    assert "authorization" not in loaded.interactions[0].request.headers
+
+
+def test_convert_directory_to_dir_no_format_change(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    c = Cassette()
+    c.add_interaction(
+        HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "2026-01-01T00:00:00Z")
+    )
+    c.save(str(src_dir / "a.yaml"))
+
+    out_dir = tmp_path / "out"
+    main(["convert", str(src_dir), str(out_dir)])
+    assert (out_dir / "a.yaml").exists()
+
+
+def test_convert_directory_bare_extension_target(tmp_path: Path) -> None:
+    """A single-component target with a cassette extension is treated as the output format."""
+    src_dir = tmp_path / "cassettes"
+    src_dir.mkdir()
+    c = Cassette()
+    c.add_interaction(
+        HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "2026-01-01T00:00:00Z")
+    )
+    c.save(str(src_dir / "a.yaml"))
+    main(["convert", str(src_dir), "out.toml"])
+    assert (src_dir / "a.toml").exists()
