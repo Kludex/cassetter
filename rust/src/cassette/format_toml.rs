@@ -127,7 +127,7 @@ fn body_to_toml(body: &Body) -> (String, Option<String>) {
             Some(serde_json::to_string(val).unwrap()),
         ),
         BodyContent::Text(s) => ("text".to_string(), Some(s.clone())),
-        BodyContent::Binary(b) => ("binary".to_string(), Some(hex_encode(b))),
+        BodyContent::Binary(b) => ("binary".to_string(), Some(crate::body::hex::encode(b))),
         BodyContent::None => ("none".to_string(), None),
     }
 }
@@ -151,7 +151,7 @@ fn body_from_toml(body_type: &str, content: Option<String>) -> Body {
         }
         "binary" => {
             if let Some(s) = content {
-                if let Ok(bytes) = hex_decode(&s) {
+                if let Ok(bytes) = crate::body::hex::decode(&s) {
                     return Body::binary(bytes);
                 }
             }
@@ -159,18 +159,4 @@ fn body_from_toml(body_type: &str, content: Option<String>) -> Body {
         }
         _ => Body::none(),
     }
-}
-
-fn hex_encode(data: &[u8]) -> String {
-    data.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
-    if !s.len().is_multiple_of(2) {
-        return Err("invalid hex length".to_string());
-    }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("hex decode error: {e}")))
-        .collect()
 }

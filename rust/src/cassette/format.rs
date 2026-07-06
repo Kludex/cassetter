@@ -809,7 +809,7 @@ fn body_from_raw(raw: RawBody, binaries: &[Vec<u8>]) -> Body {
         }
         "binary" => {
             if let Some(Value::String(s)) = raw.content {
-                match hex_decode(&s) {
+                match crate::body::hex::decode(&s) {
                     Ok(bytes) => Body::binary(bytes),
                     Err(_) => Body::text(s),
                 }
@@ -833,30 +833,13 @@ fn body_to_raw(body: &Body) -> RawBody {
         },
         BodyContent::Binary(b) => RawBody {
             body_type: "binary".to_string(),
-            content: Some(Value::String(hex_encode(b))),
+            content: Some(Value::String(crate::body::hex::encode(b))),
         },
         BodyContent::None => RawBody {
             body_type: "none".to_string(),
             content: None,
         },
     }
-}
-
-fn hex_encode(data: &[u8]) -> String {
-    data.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
-    if !s.len().is_multiple_of(2) {
-        return Err("odd-length hex string".to_string());
-    }
-    if !s.is_ascii() {
-        return Err("non-ASCII hex string".to_string());
-    }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| e.to_string()))
-        .collect()
 }
 
 #[cfg(test)]
