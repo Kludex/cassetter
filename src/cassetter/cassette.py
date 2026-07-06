@@ -31,6 +31,7 @@ from cassetter._core import (
     scrub_interaction,
     scrub_ws_interaction,
 )
+from cassetter.intercept._base import is_localhost
 from cassetter.introspection import RecordedRequest, recorded_request
 from cassetter.recording import RecordMode
 
@@ -147,7 +148,7 @@ class Cassette:
 
     def should_bypass(self, uri: str) -> bool:
         """Check if a request URI should bypass the cassette entirely."""
-        if self._ignore_localhost and _is_localhost(uri):
+        if self._ignore_localhost and is_localhost(uri):
             return True
         if self._ignore_hosts:
             host = urlparse(uri).hostname or ""
@@ -433,14 +434,6 @@ class Cassette:
 
         self._inner.add_ws_interaction(interaction)
         self._dirty = True
-
-
-_LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
-
-
-def _is_localhost(uri: str) -> bool:
-    host = urlparse(uri).hostname or ""
-    return host in _LOCALHOST_HOSTS
 
 
 def _get_header(headers: dict[str, list[str]], name: str) -> str | None:
