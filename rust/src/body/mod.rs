@@ -1,4 +1,5 @@
 pub mod compression;
+pub mod hex;
 pub mod json;
 pub mod unicode;
 
