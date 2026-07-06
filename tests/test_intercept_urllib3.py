@@ -133,7 +133,7 @@ def test_uninstall_without_install() -> None:
     interceptor.uninstall()
 
 
-def testreconstruct_url_https_default_port() -> None:
+def test_reconstruct_url_https_default_port() -> None:
     pool = MagicMock()
     pool.scheme = "https"
     pool.host = "example.com"
@@ -141,7 +141,7 @@ def testreconstruct_url_https_default_port() -> None:
     assert reconstruct_url(pool, "/api") == "https://example.com/api"
 
 
-def testreconstruct_url_http_default_port() -> None:
+def test_reconstruct_url_http_default_port() -> None:
     pool = MagicMock()
     pool.scheme = "http"
     pool.host = "example.com"
@@ -149,7 +149,7 @@ def testreconstruct_url_http_default_port() -> None:
     assert reconstruct_url(pool, "/api") == "http://example.com/api"
 
 
-def testreconstruct_url_custom_port() -> None:
+def test_reconstruct_url_custom_port() -> None:
     pool = MagicMock()
     pool.scheme = "https"
     pool.host = "example.com"
@@ -157,7 +157,7 @@ def testreconstruct_url_custom_port() -> None:
     assert reconstruct_url(pool, "/api") == "https://example.com:8443/api"
 
 
-def testreconstruct_url_no_port() -> None:
+def test_reconstruct_url_no_port() -> None:
     pool = MagicMock()
     pool.scheme = "https"
     pool.host = "example.com"
@@ -165,29 +165,29 @@ def testreconstruct_url_no_port() -> None:
     assert reconstruct_url(pool, "/api?q=1") == "https://example.com/api?q=1"
 
 
-def testis_default_port_http_80() -> None:
+def test_is_default_port_http_80() -> None:
     assert is_default_port("http", 80) is True
 
 
-def testis_default_port_https_443() -> None:
+def test_is_default_port_https_443() -> None:
     assert is_default_port("https", 443) is True
 
 
-def testis_default_port_non_default() -> None:
+def test_is_default_port_non_default() -> None:
     assert is_default_port("https", 8080) is False
 
 
-def testextract_headers_none() -> None:
+def test_extract_headers_none() -> None:
     assert extract_headers(None) == {}
 
 
-def testextract_headers_dict() -> None:
+def test_extract_headers_dict() -> None:
     headers = {"Content-Type": "application/json", "Accept": "text/html"}
     result = extract_headers(headers)
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def testbuild_urllib3_response_json_body() -> None:
+def test_build_urllib3_response_json_body() -> None:
     response = build_urllib3_response(
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
         "https://example.com",
@@ -198,7 +198,7 @@ def testbuild_urllib3_response_json_body() -> None:
     assert b'"value"' in data
 
 
-def testbuild_urllib3_response_content_length_recomputed() -> None:
+def test_build_urllib3_response_content_length_recomputed() -> None:
     """content-length must match the re-serialized JSON body, not the original stored value."""
     original_body = {"key": "value"}
     wrong_length = "999"
@@ -216,7 +216,7 @@ def testbuild_urllib3_response_content_length_recomputed() -> None:
     assert response.data == expected
 
 
-def testbuild_urllib3_response_content_length_absent_stays_absent() -> None:
+def test_build_urllib3_response_content_length_absent_stays_absent() -> None:
     response = build_urllib3_response(
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"a": 1})),
         "https://example.com",
@@ -224,7 +224,7 @@ def testbuild_urllib3_response_content_length_absent_stays_absent() -> None:
     assert "content-length" not in response.headers
 
 
-def testbuild_urllib3_response_text_body() -> None:
+def test_build_urllib3_response_text_body() -> None:
     response = build_urllib3_response(
         HttpResponse(200, body=Body("text", "hello world")),
         "https://example.com",
@@ -232,7 +232,7 @@ def testbuild_urllib3_response_text_body() -> None:
     assert response.data == b"hello world"
 
 
-def testbuild_urllib3_response_binary_body() -> None:
+def test_build_urllib3_response_binary_body() -> None:
     response = build_urllib3_response(
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
         "https://example.com",
@@ -240,7 +240,7 @@ def testbuild_urllib3_response_binary_body() -> None:
     assert response.data == b"\x00\x01\x02"
 
 
-def testbuild_urllib3_response_none_body() -> None:
+def test_build_urllib3_response_none_body() -> None:
     response = build_urllib3_response(
         HttpResponse(200, body=Body("none")),
         "https://example.com",
@@ -248,7 +248,7 @@ def testbuild_urllib3_response_none_body() -> None:
     assert response.data == b""
 
 
-def testbuild_urllib3_response_headers() -> None:
+def test_build_urllib3_response_headers() -> None:
     response = build_urllib3_response(
         HttpResponse(200, {"x-custom": ["a", "b"]}, Body("none")),
         "https://example.com",

@@ -121,28 +121,28 @@ async def test_async_record(cassette_path: str) -> None:
         assert len(cassette.interactions) == 1
 
 
-def testbuild_httpx2_response_json_body() -> None:
+def test_build_httpx2_response_json_body() -> None:
     response = build_httpx2_response(
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
     )
     assert response.json() == {"key": "value"}
 
 
-def testbuild_httpx2_response_text_body() -> None:
+def test_build_httpx2_response_text_body() -> None:
     response = build_httpx2_response(
         HttpResponse(200, body=Body("text", "hello world")),
     )
     assert response.text == "hello world"
 
 
-def testbuild_httpx2_response_binary_body() -> None:
+def test_build_httpx2_response_binary_body() -> None:
     response = build_httpx2_response(
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
     )
     assert response.content == b"\x00\x01\x02"
 
 
-def testbuild_httpx2_response_none_body() -> None:
+def test_build_httpx2_response_none_body() -> None:
     response = build_httpx2_response(
         HttpResponse(200, body=Body("none")),
     )
