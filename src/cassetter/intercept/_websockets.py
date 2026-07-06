@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Generator
+from collections.abc import AsyncIterator, Generator
 from typing import Any
 
 import websockets
@@ -127,13 +127,13 @@ class _PatchedConnect:
         self._uri = uri
         self._kwargs = kwargs
         self._ws: VCRWebSocket | VCRWebSocketReplay | None = None
-        self._reconnect_done = False
+        self._bypassed: Any = None
 
-    async def _resolve(self) -> VCRWebSocket | VCRWebSocketReplay:
+    async def _resolve(self) -> Any:
         cassette = get_current_cassette()
         if cassette is None or cassette.should_bypass(self._uri):
-            conn = self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
-            return await conn  # type: ignore[no-any-return]  # pragma: no cover
+            self._bypassed = await self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
+            return self._bypassed  # pragma: no cover
 
         try:
             interaction = cassette.play_ws(self._uri)
@@ -149,25 +149,34 @@ class _PatchedConnect:
         self._ws = VCRWebSocket(real_ws, self._uri, headers)  # pragma: no cover
         return self._ws  # pragma: no cover
 
-    def __await__(self) -> Generator[Any, None, VCRWebSocket | VCRWebSocketReplay]:
+    async def _cleanup(self) -> None:
+        # Flush recorded frames / close the connection regardless of call style.
+        if self._ws is not None:
+            await self._ws.__aexit__(None, None, None)
+        elif self._bypassed is not None:  # pragma: no cover - bypass needs a live server
+            await self._bypassed.close()
+
+    def __await__(self) -> Generator[Any, None, Any]:
         return self._resolve().__await__()
 
-    async def __aenter__(self) -> VCRWebSocket | VCRWebSocketReplay:
+    async def __aenter__(self) -> Any:
         return await self._resolve()
 
     async def __aexit__(self, *args: Any) -> None:
-        if self._ws is not None:
-            await self._ws.__aexit__(*args)
+        await self._cleanup()
 
-    def __aiter__(self) -> _PatchedConnect:
-        # `async for ws in connect(...)` reconnect loop: yield one connection.
-        return self
+    def __aiter__(self) -> Any:
+        # `async for ws in connect(...)` yields one connection then cleans up in
+        # the generator's finally - Python does not call __aexit__ on async-for
+        # iterations, so recorded frames would otherwise never be flushed.
+        return self._reconnect()
 
-    async def __anext__(self) -> VCRWebSocket | VCRWebSocketReplay:
-        if self._reconnect_done:
-            raise StopAsyncIteration
-        self._reconnect_done = True
-        return await self._resolve()
+    async def _reconnect(self) -> AsyncIterator[Any]:
+        ws = await self._resolve()
+        try:
+            yield ws
+        finally:
+            await self._cleanup()
 
 
 class WebSocketInterceptor:
