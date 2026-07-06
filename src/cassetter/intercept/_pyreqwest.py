@@ -9,7 +9,8 @@ import pyreqwest_impersonate as pri
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
+from cassetter.cassette import NoMatchError
+from cassetter.intercept._shared import apply_before_record_request, body_to_bytes
 
 METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
 ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
@@ -110,13 +111,10 @@ def intercept(
         json_payload=kwargs.get("json"),
     )
 
-    hook = cassette.before_record_request
-    if hook is not None:
-        try:
-            raw = hook(RawRequest(method, url, norm_headers, body))
-        except SkipRecording:
-            return original(client, *original_args, **kwargs)
-        method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body
+    raw = apply_before_record_request(cassette.before_record_request, method, url, norm_headers, body)
+    if raw is None:
+        return original(client, *original_args, **kwargs)
+    method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
         response = cassette.play(method, url, norm_headers, body)
@@ -170,15 +168,7 @@ def extract_body(
 
 
 def build_replay_response(url: str, response: _HttpResponse) -> ReplayResponse:
-    body = response.body
-    if body.body_type == "json":
-        content = json.dumps(body.content).encode()
-    elif body.body_type == "text":
-        content = body.content.encode() if isinstance(body.content, str) else b""
-    elif body.body_type == "binary":
-        content = body.content if isinstance(body.content, bytes) else b""
-    else:
-        content = b""
+    content = body_to_bytes(response.body)
 
     flat_headers: dict[str, str] = {}
     for key, values in response.headers.items():

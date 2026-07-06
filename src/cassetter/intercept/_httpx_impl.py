@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
+from cassetter.cassette import NoMatchError
 from cassetter.intercept._base import InterceptorProtocol
+from cassetter.intercept._shared import apply_before_record_request, body_to_bytes
 
 AsyncPassthrough = Callable[[Any], Awaitable[Any]]
 SyncPassthrough = Callable[[Any], Any]
@@ -30,13 +30,10 @@ async def async_intercept(mod: Any, request: Any, passthrough: AsyncPassthrough)
     except mod.RequestNotRead:
         body = await request.aread()
 
-    hook = cassette.before_record_request
-    if hook is not None:
-        try:
-            raw = hook(RawRequest(method, uri, headers, body))
-        except SkipRecording:
-            return await passthrough(request)
-        method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
+    raw = apply_before_record_request(cassette.before_record_request, method, uri, headers, body)
+    if raw is None:
+        return await passthrough(request)
+    method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
         response = cassette.play(method, uri, headers, body)
@@ -81,13 +78,10 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
     except mod.RequestNotRead:
         body = request.read()
 
-    hook = cassette.before_record_request
-    if hook is not None:
-        try:
-            raw = hook(RawRequest(method, uri, headers, body))
-        except SkipRecording:
-            return passthrough(request)
-        method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
+    raw = apply_before_record_request(cassette.before_record_request, method, uri, headers, body)
+    if raw is None:
+        return passthrough(request)
+    method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
         response = cassette.play(method, uri, headers, body)
@@ -137,15 +131,7 @@ def build_response(mod: Any, response: _HttpResponse, request: Any = None) -> An
         for v in values:
             headers_list.append((key, v))
 
-    body = response.body
-    if body.body_type == "json":
-        content = json.dumps(body.content).encode()
-    elif body.body_type == "text":
-        content = body.content.encode() if isinstance(body.content, str) else b""
-    elif body.body_type == "binary":
-        content = body.content if isinstance(body.content, bytes) else b""
-    else:
-        content = b""
+    content = body_to_bytes(response.body)
 
     return mod.Response(
         status_code=response.status,

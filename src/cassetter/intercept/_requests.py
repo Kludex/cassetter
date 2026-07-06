@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import patch
 
@@ -8,7 +7,8 @@ import requests
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
+from cassetter.cassette import NoMatchError
+from cassetter.intercept._shared import apply_before_record_request, body_to_bytes
 
 
 class RequestsInterceptor:
@@ -37,13 +37,10 @@ class RequestsInterceptor:
             raw_body = request.body
             body = raw_body if isinstance(raw_body, bytes) else (raw_body.encode() if raw_body else None)
 
-            hook = cassette.before_record_request
-            if hook is not None:
-                try:
-                    raw = hook(RawRequest(method, uri, headers, body))
-                except SkipRecording:
-                    return original_send(session, request, **kwargs)
-                method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
+            raw = apply_before_record_request(cassette.before_record_request, method, uri, headers, body)
+            if raw is None:
+                return original_send(session, request, **kwargs)
+            method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
                 response = cassette.play(method, uri, headers, body)
@@ -94,15 +91,7 @@ def extract_headers_skip_encoding(headers: Any) -> dict[str, list[str]]:
 
 def build_requests_response(request: requests.PreparedRequest, response: _HttpResponse) -> requests.Response:
 
-    body = response.body
-    if body.body_type == "json":
-        content = json.dumps(body.content).encode()
-    elif body.body_type == "text":
-        content = body.content.encode() if isinstance(body.content, str) else b""
-    elif body.body_type == "binary":
-        content = body.content if isinstance(body.content, bytes) else b""
-    else:
-        content = b""
+    content = body_to_bytes(response.body)
 
     resp = requests.Response()
     resp.status_code = response.status

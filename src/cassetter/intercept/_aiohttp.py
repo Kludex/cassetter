@@ -14,7 +14,8 @@ from yarl import URL
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
+from cassetter.cassette import NoMatchError
+from cassetter.intercept._shared import apply_before_record_request, body_to_bytes
 
 
 class AiohttpInterceptor:
@@ -46,13 +47,10 @@ class AiohttpInterceptor:
 
             norm_method = method.upper()
 
-            hook = cassette.before_record_request
-            if hook is not None:
-                try:
-                    raw = hook(RawRequest(norm_method, uri, headers, body))
-                except SkipRecording:
-                    return await original_request(session, method, str_or_url, **kwargs)
-                norm_method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
+            raw = apply_before_record_request(cassette.before_record_request, norm_method, uri, headers, body)
+            if raw is None:
+                return await original_request(session, method, str_or_url, **kwargs)
+            norm_method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
                 response = cassette.play(norm_method, uri, headers, body)
@@ -134,15 +132,7 @@ def extract_response_headers(headers: CIMultiDictProxy[str]) -> dict[str, list[s
 
 def build_aiohttp_response(method: str, uri: str, response: _HttpResponse) -> aiohttp.ClientResponse:
 
-    body = response.body
-    if body.body_type == "json":
-        content = json.dumps(body.content).encode()
-    elif body.body_type == "text":
-        content = body.content.encode() if isinstance(body.content, str) else b""
-    elif body.body_type == "binary":
-        content = body.content if isinstance(body.content, bytes) else b""
-    else:
-        content = b""
+    content = body_to_bytes(response.body)
 
     headers_multi: CIMultiDict[str] = CIMultiDict()
     for key, values in response.headers.items():
