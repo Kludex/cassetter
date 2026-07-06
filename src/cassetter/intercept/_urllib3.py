@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import json
 from typing import Any
 from unittest.mock import patch
 
@@ -11,7 +10,8 @@ import urllib3.response
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError, RawRequest, SkipRecording
+from cassetter.cassette import NoMatchError
+from cassetter.intercept._shared import apply_before_record_request, body_to_bytes
 
 
 class Urllib3Interceptor:
@@ -44,13 +44,12 @@ class Urllib3Interceptor:
             norm_headers = extract_headers(headers)
             norm_body = body.encode() if isinstance(body, str) else body
 
-            hook = cassette.before_record_request
-            if hook is not None:
-                try:
-                    raw = hook(RawRequest(norm_method, full_url, norm_headers, norm_body))
-                except SkipRecording:
-                    return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
-                norm_method, full_url, norm_headers, norm_body = raw.method, raw.uri, raw.headers, raw.body
+            raw = apply_before_record_request(
+                cassette.before_record_request, norm_method, full_url, norm_headers, norm_body
+            )
+            if raw is None:
+                return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
+            norm_method, full_url, norm_headers, norm_body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
                 response = cassette.play(norm_method, full_url, norm_headers, norm_body)
@@ -120,15 +119,7 @@ def extract_headers(headers: Any) -> dict[str, list[str]]:
 
 
 def build_urllib3_response(response: _HttpResponse, request_url: str) -> urllib3.response.HTTPResponse:
-    body = response.body
-    if body.body_type == "json":
-        content = json.dumps(body.content).encode()
-    elif body.body_type == "text":
-        content = body.content.encode() if isinstance(body.content, str) else b""
-    elif body.body_type == "binary":
-        content = body.content if isinstance(body.content, bytes) else b""
-    else:
-        content = b""
+    content = body_to_bytes(response.body)
 
     resp_headers = urllib3._collections.HTTPHeaderDict()
     for key, values in response.headers.items():
