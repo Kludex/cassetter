@@ -11,7 +11,7 @@ from cassetter._types import CassetteConfig
 from cassetter.cassette import CassetteExpiredError, CassetteExpiredWarning
 from cassetter.pytest_plugin.fixtures import _resolve_cassette
 from cassetter.pytest_plugin.markers import configure
-from cassetter.pytest_plugin.orphans import check_orphans, session_finish
+from cassetter.pytest_plugin.orphans import add_options, check_orphans, session_finish
 from cassetter.recording import RecordMode
 
 
@@ -309,10 +309,6 @@ def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
 
 def test_ini_options_registered() -> None:
     """The README-documented vcr_max_age / vcr_on_expiry ini options exist."""
-    from unittest.mock import MagicMock
-
-    from cassetter.pytest_plugin.orphans import add_options
-
     parser = MagicMock()
     add_options(parser)
     ini_names = [call.args[0] for call in parser.addini.call_args_list]

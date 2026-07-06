@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import stat
+import sys
 from datetime import timedelta
 
 import pytest
@@ -16,7 +18,9 @@ from cassetter._core import (
     HttpRequest,
     HttpResponse,
     MatchConfig,
+    SecurityConfig,
     WsInteraction,
+    scrub_interaction,
 )
 from cassetter.cassette import (
     Cassette,
@@ -750,8 +754,6 @@ def test_match_config_rejects_unknown_matcher() -> None:
 
 
 def test_toml_save_refuses_grpc_interactions(tmp_path: object) -> None:
-    from cassetter._core import Body, GrpcInteraction, GrpcRequest, GrpcResponse
-
     c = RustCassette()
     c.add_grpc_interaction(
         GrpcInteraction(
@@ -790,8 +792,6 @@ def test_body_repr_multibyte_no_panic() -> None:
 
 
 def test_scrub_multibyte_query_no_panic() -> None:
-    from cassetter._core import SecurityConfig, scrub_interaction
-
     interaction = HttpInteraction(
         HttpRequest("GET", "https://example.com/?%a€=1&api_key=x"),
         HttpResponse(200),
@@ -951,25 +951,21 @@ def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
 
 def test_save_preserves_file_permissions(tmp_path: object) -> None:
     """Atomic save must keep a restrictive mode on an existing cassette."""
-    import os as _os
-    import stat
-    import sys
-
     if sys.platform == "win32":  # pragma: no cover
         pytest.skip("POSIX permissions only")
 
-    path = _os.path.join(str(tmp_path), "private.yaml")
+    path = os.path.join(str(tmp_path), "private.yaml")
     c = RustCassette()
     c.add_interaction(
         HttpInteraction(HttpRequest("GET", "https://example.com"), HttpResponse(200), "2026-01-01T00:00:00Z")
     )
     c.save(path)
-    _os.chmod(path, 0o600)
+    os.chmod(path, 0o600)
 
     c.add_interaction(
         HttpInteraction(HttpRequest("GET", "https://example.com/2"), HttpResponse(200), "2026-01-01T00:00:00Z")
     )
     c.save(path)
 
-    mode = stat.S_IMODE(_os.stat(path).st_mode)
+    mode = stat.S_IMODE(os.stat(path).st_mode)
     assert mode == 0o600

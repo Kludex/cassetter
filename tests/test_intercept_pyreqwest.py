@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from unittest.mock import patch
 
 import pyreqwest_impersonate as pri
 import pytest
@@ -148,7 +149,6 @@ def testbuild_replay_response_none_body() -> None:
 def test_record_uses_request_url_not_response_url(tmp_path: object) -> None:
     """Recording must store the request URL: responses carry post-redirect URLs
     that would never match on replay."""
-    from unittest.mock import patch
 
     path = os.path.join(str(tmp_path), "redirect.yaml")
 

@@ -13,6 +13,7 @@ from cassetter.intercept._requests import (
     RequestsInterceptor,
     build_requests_response,
     extract_headers,
+    extract_headers_skip_encoding,
 )
 from cassetter.recording import RecordMode
 
@@ -128,7 +129,6 @@ def testbuild_requests_response_none_body() -> None:
 
 
 def test_recorded_response_headers_drop_content_encoding() -> None:
-    from cassetter.intercept._requests import extract_headers_skip_encoding
 
     result = extract_headers_skip_encoding({"Content-Encoding": "gzip", "Content-Type": "text/html"})
     assert "content-encoding" not in result

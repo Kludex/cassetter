@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter._state import acquire_patches, installed
 from cassetter.cassette import CassetteExpiredWarning
 from cassetter.context import _AUTO_DETECT_ORDER, _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
 from cassetter.recording import RecordMode
@@ -126,23 +127,17 @@ async def test_use_cassette_expired_warns(tmp_path: object) -> None:
 
 def test_resolve_interceptors_honors_explicit_list() -> None:
     """An explicit list installs exactly what was requested, even overlapping ones."""
-    from cassetter.context import _INTERCEPTOR_MAP, resolve_interceptors
-
     resolved = resolve_interceptors(["requests", "urllib3"])
     assert resolved == [_INTERCEPTOR_MAP["requests"], _INTERCEPTOR_MAP["urllib3"]]
 
 
 def test_auto_detect_excludes_requests() -> None:
     """Auto-detect never installs requests (it overlaps urllib3)."""
-    from cassetter.context import _INTERCEPTOR_MAP, resolve_interceptors
-
     resolved = resolve_interceptors()
     assert _INTERCEPTOR_MAP["requests"] not in resolved
 
 
 def test_acquire_patches_rolls_back_on_failure() -> None:
-    from cassetter._state import acquire_patches, installed
-
     events: list[str] = []
 
     class GoodInterceptor:
