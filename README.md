@@ -146,7 +146,7 @@ with use_cassette("cassette.toml"):
     ...
 ```
 
-TOML loads ~2x faster than YAML and produces ~12% smaller files.
+TOML loads ~2.8x faster than YAML and produces ~12% smaller files (saves are slower).
 
 ## Request matching
 
@@ -445,24 +445,26 @@ pytest --vcr-check-orphans=tests/cassettes/
 
 ## Performance
 
-Rust-powered YAML parsing and serialization is 3-6x faster than vcrpy (which uses PyYAML/libyaml):
+Cassetter's Rust core is faster than vcrpy (compared against vcrpy with libyaml, its fastest configuration) - roughly 2-3x on load and 7-12x on save:
 
 ```
   1000 interactions
-                    cassetter    vcrpy         speedup
-  load              13.53 ms          58.90 ms      4.4x
-  match             0.98 ms           1.29 ms       1.3x
-  save              7.58 ms           45.64 ms      6.0x
+                    cassetter    vcrpy        speedup
+  load              35 ms        96 ms        2.7x
+  match             1.3 ms       1.85 ms      1.4x
+  save              6.5 ms       77 ms        11.8x
 ```
 
-TOML cassettes (`.toml`) load ~2x faster than YAML and produce ~12% smaller files:
+Absolute timings are machine dependent; the speedup ratios are the portable part. Load speedup also depends on cassette shape: many small interactions (as above) is the hardest case for the parser, while cassettes with large bodies (e.g. LLM/SSE responses) load proportionally faster.
+
+TOML cassettes (`.toml`) load ~2.8x faster than YAML and produce ~12% smaller files (at the cost of slower saves):
 
 ```
   1000 interactions
                       YAML         TOML
-  save                10.59 ms     11.67 ms
-  load                18.99 ms      9.79 ms
-  size                768.0 KB     675.3 KB
+  save                10.7 ms      18.0 ms
+  load                53 ms        18.6 ms
+  size                768 KB       675 KB
 ```
 
 Run `uv run python benchmarks/bench.py` and `uv run python benchmarks/bench_formats.py` to reproduce.

@@ -4,29 +4,29 @@ Cassette parsing, matching, and serialization run in Rust, through a PyO3 extens
 
 ## Benchmarks
 
-Compared with VCR.py (which uses PyYAML with libyaml), on a cassette with 1000 interactions:
+Compared with VCR.py (using its fastest configuration, PyYAML with libyaml), on a cassette with 1000 interactions:
 
 ```
                 cassetter    vcrpy       speedup
-load            13.53 ms     58.90 ms    4.4x
-match           0.98 ms      1.29 ms     1.3x
-save            7.58 ms      45.64 ms    6.0x
+load            35 ms        96 ms       2.7x
+match           1.3 ms       1.85 ms     1.4x
+save            6.5 ms       77 ms       11.8x
 ```
 
-TOML cassettes load about 2 times faster than YAML and produce about 12% smaller files:
+Absolute timings are machine dependent, so the speedup ratios matter more than the raw numbers. Load speedup also depends on cassette shape: many tiny interactions (as above) is the hardest case for the parser, while cassettes dominated by large bodies - LLM and SSE responses, for example - load proportionally faster.
+
+TOML cassettes load about 2.8 times faster than YAML and produce about 12% smaller files, at the cost of slower saves:
 
 ```
                 YAML         TOML
-save            10.59 ms     11.67 ms
-load            18.99 ms     9.79 ms
-size            768.0 KB     675.3 KB
+save            10.7 ms      18.0 ms
+load            53 ms        18.6 ms
+size            768 KB       675 KB
 ```
 
 ## Why it matters
 
-A single cassette load taking 50 ms sounds harmless. Now multiply it by 500 tests, each loading a cassette in its setup. That is 25 seconds of pure parsing overhead per test run, before a single assertion executes.
-
-At Cassetter's speed the same suite spends about 7 seconds parsing, and switching the large cassettes to TOML brings it further down.
+Saves are 7 to 12 times faster than VCR.py, which matters when you re-record. Loads run on every test: a cassette-heavy suite that spends seconds in VCR.py's parser spends a fraction of that here, and switching large cassettes to TOML cuts load time further.
 
 ## Reproduce the numbers
 
