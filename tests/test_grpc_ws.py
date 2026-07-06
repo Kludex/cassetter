@@ -1455,6 +1455,52 @@ def test_grpciter_bytes() -> None:
 
 
 @pytest.mark.anyio
+async def test_grpc_replay_error_status_raises() -> None:
+    """A recorded non-OK gRPC status must replay as AioRpcError, not a success."""
+    import grpc
+
+    from cassetter.intercept._grpc import raise_for_status
+
+    resp = GrpcResponse(5, "not found", {}, Body("binary", b""))
+    with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+        raise_for_status(resp)
+    assert exc_info.value.code() == grpc.StatusCode.NOT_FOUND
+    assert exc_info.value.details() == "not found"
+
+
+@pytest.mark.anyio
+async def test_grpc_replay_ok_status_does_not_raise() -> None:
+    from cassetter.intercept._grpc import raise_for_status
+
+    raise_for_status(GrpcResponse(0, "OK", {}, Body("binary", b"")))
+
+
+@pytest.mark.anyio
+async def test_grpc_replay_stream_error_status_raises() -> None:
+    import grpc
+
+    from cassetter.intercept._grpc import replay_stream
+
+    resp = GrpcResponse(7, "permission denied", {}, Body("binary", b""))
+    with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+        async for _ in replay_stream(resp, lambda b: b):
+            pass  # pragma: no cover
+    assert exc_info.value.code() == grpc.StatusCode.PERMISSION_DENIED
+
+
+@pytest.mark.anyio
+async def test_grpc_replay_unknown_status_code_maps_to_unknown() -> None:
+    import grpc
+
+    from cassetter.intercept._grpc import raise_for_status
+
+    resp = GrpcResponse(999, "weird", {}, Body("binary", b""))
+    with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+        raise_for_status(resp)
+    assert exc_info.value.code() == grpc.StatusCode.UNKNOWN
+
+
+@pytest.mark.anyio
 async def test_patched_connect_await_form(tmp_path: object) -> None:
     """`ws = await websockets.connect(uri)` (not just `async with`) must work."""
     from cassetter.intercept._websockets import WebSocketInterceptor
