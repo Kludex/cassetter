@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+import httpx
 import httpx2
 import pytest
 
@@ -164,7 +165,6 @@ def test_install_uninstall() -> None:
 
 def test_httpx_and_httpx2_intercept_independently(cassette_path: str) -> None:
     """Both libraries can be intercepted under the same cassette without clashing."""
-    import httpx
 
     with use_cassette(cassette_path, record_mode="all", intercept=["httpx", "httpx2"]) as cassette:
         transport1 = httpx.MockTransport(lambda request: httpx.Response(200, json={"lib": "httpx"}))

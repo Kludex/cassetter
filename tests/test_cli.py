@@ -4,7 +4,18 @@ from pathlib import Path
 
 import pytest
 
-from cassetter._core import Body, Cassette, HttpInteraction, HttpRequest, HttpResponse
+from cassetter._core import (
+    Body,
+    Cassette,
+    GrpcInteraction,
+    GrpcRequest,
+    GrpcResponse,
+    HttpInteraction,
+    HttpRequest,
+    HttpResponse,
+    WsFrame,
+    WsInteraction,
+)
 from cassetter.cli import main
 
 
@@ -282,8 +293,6 @@ def test_convert_empty_directory(tmp_path: Path) -> None:
 
 
 def test_convert_scrubs_grpc_and_ws(tmp_path: Path) -> None:
-    from cassetter._core import GrpcInteraction, GrpcRequest, GrpcResponse, WsFrame, WsInteraction
-
     src = str(tmp_path / "mixed.yaml")
     c = Cassette()
     c.add_grpc_interaction(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 from unittest.mock import MagicMock
 
@@ -209,7 +210,6 @@ def testbuild_urllib3_response_content_length_recomputed() -> None:
         ),
         "https://example.com",
     )
-    import json
 
     expected = json.dumps(original_body).encode()
     assert response.headers["content-length"] == str(len(expected))

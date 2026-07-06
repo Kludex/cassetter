@@ -5,6 +5,7 @@ import os
 import httpx
 import pytest
 
+from cassetter import RawRequest
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.context import use_cassette
@@ -205,7 +206,6 @@ def test_sync_replay_streaming_request_body(preloaded_cassette: str) -> None:
 
 def test_sync_hook_rewrites_to_match(preloaded_cassette: str) -> None:
     """A sync before_record_request hook that rewrites the URI to match replays without network."""
-    from cassetter import RawRequest
 
     def hook(request: RawRequest) -> RawRequest:
         request.uri = "https://httpbin.org/get"
