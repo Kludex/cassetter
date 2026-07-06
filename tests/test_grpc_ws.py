@@ -589,33 +589,33 @@ def test_grpc_chunk_decode_truncated() -> None:
 # --- gRPC interceptor helpers ---
 
 
-def testmetadata_to_dict_none() -> None:
+def test_metadata_to_dict_none() -> None:
 
     assert metadata_to_dict(None) == {}
 
 
-def testmetadata_to_dict_str_values() -> None:
+def test_metadata_to_dict_str_values() -> None:
 
     md = [("key1", "val1"), ("key2", "val2"), ("key1", "val1b")]
     result = metadata_to_dict(md)
     assert result == {"key1": ["val1", "val1b"], "key2": ["val2"]}
 
 
-def testmetadata_to_dict_bytes_values() -> None:
+def test_metadata_to_dict_bytes_values() -> None:
 
     md = [("key", b"binary-val")]
     result = metadata_to_dict(md)
     assert result == {"key": ["binary-val"]}
 
 
-def testbuild_json_debug_no_protobuf() -> None:
+def test_build_json_debug_no_protobuf() -> None:
 
     # Objects without MessageToDict support return None
     result = build_json_debug("req", "resp")
     assert result is None
 
 
-def testbuild_json_debug_none_request() -> None:
+def test_build_json_debug_none_request() -> None:
 
     result = build_json_debug(None, "resp")
     assert result is None
@@ -875,36 +875,36 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
 # --- WebSocket interceptor helpers ---
 
 
-def testframe_to_data_text() -> None:
+def test_frame_to_data_text() -> None:
 
     frame = WsFrame("recv", "text", Body("text", "hello"), 0)
     assert frame_to_data(frame) == "hello"
 
 
-def testframe_to_data_binary() -> None:
+def test_frame_to_data_binary() -> None:
 
     frame = WsFrame("recv", "binary", Body("binary", b"\x01\x02"), 0)
     assert frame_to_data(frame) == b"\x01\x02"
 
 
-def testframe_to_data_none_body() -> None:
+def test_frame_to_data_none_body() -> None:
 
     frame = WsFrame("recv", "text", Body("none", b""), 0)
     assert frame_to_data(frame) == ""
 
 
-def testextract_ws_headers_empty() -> None:
+def test_extract_ws_headers_empty() -> None:
 
     assert extract_ws_headers({}) == {}
 
 
-def testextract_ws_headers_additional() -> None:
+def test_extract_ws_headers_additional() -> None:
 
     result = extract_ws_headers({"additional_headers": {"Authorization": "Bearer tok"}})
     assert result == {"authorization": ["Bearer tok"]}
 
 
-def testextract_ws_headers_extra() -> None:
+def test_extract_ws_headers_extra() -> None:
 
     result = extract_ws_headers({"extra_headers": {"X-Key": "val"}})
     assert result == {"x-key": ["val"]}
