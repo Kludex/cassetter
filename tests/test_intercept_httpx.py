@@ -5,6 +5,7 @@ import os
 import httpx
 import pytest
 
+from cassetter import RawRequest
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import Cassette, NoMatchError
 from cassetter.context import use_cassette
@@ -122,28 +123,28 @@ async def test_async_record(cassette_path: str) -> None:
         assert len(cassette.interactions) == 1
 
 
-def testbuild_httpx_response_json_body() -> None:
+def test_build_httpx_response_json_body() -> None:
     response = build_httpx_response(
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
     )
     assert response.json() == {"key": "value"}
 
 
-def testbuild_httpx_response_text_body() -> None:
+def test_build_httpx_response_text_body() -> None:
     response = build_httpx_response(
         HttpResponse(200, body=Body("text", "hello world")),
     )
     assert response.text == "hello world"
 
 
-def testbuild_httpx_response_binary_body() -> None:
+def test_build_httpx_response_binary_body() -> None:
     response = build_httpx_response(
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
     )
     assert response.content == b"\x00\x01\x02"
 
 
-def testbuild_httpx_response_none_body() -> None:
+def test_build_httpx_response_none_body() -> None:
     response = build_httpx_response(
         HttpResponse(200, body=Body("none")),
     )
@@ -180,7 +181,7 @@ async def test_replay_streaming_request_body(preloaded_cassette: str) -> None:
     assert response.json()["origin"] == "127.0.0.1"
 
 
-def testextract_headers_skip_encoding() -> None:
+def test_extract_headers_skip_encoding() -> None:
     headers = httpx.Headers({"content-type": "text/html", "content-encoding": "gzip", "x-custom": "val"})
     result = extract_headers_skip_encoding(headers)
     assert "content-encoding" not in result
@@ -205,7 +206,6 @@ def test_sync_replay_streaming_request_body(preloaded_cassette: str) -> None:
 
 def test_sync_hook_rewrites_to_match(preloaded_cassette: str) -> None:
     """A sync before_record_request hook that rewrites the URI to match replays without network."""
-    from cassetter import RawRequest
 
     def hook(request: RawRequest) -> RawRequest:
         request.uri = "https://httpbin.org/get"

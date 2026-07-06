@@ -13,6 +13,7 @@ from cassetter.intercept._requests import (
     RequestsInterceptor,
     build_requests_response,
     extract_headers,
+    extract_headers_skip_encoding,
 )
 from cassetter.recording import RecordMode
 
@@ -76,11 +77,11 @@ def test_requests_interceptor_install_uninstall() -> None:
     assert requests.Session.send is original_send
 
 
-def testextract_headers_none() -> None:
+def test_extract_headers_none() -> None:
     assert extract_headers(None) == {}
 
 
-def testextract_headers_dict() -> None:
+def test_extract_headers_dict() -> None:
     headers = {"Content-Type": "application/json", "Accept": "text/html"}
     result = extract_headers(headers)
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
@@ -95,7 +96,7 @@ def test_requests_interceptor_no_match(tmp_path: object) -> None:
             requests.delete("https://example.com/unknown")
 
 
-def testbuild_requests_response_json_body() -> None:
+def test_build_requests_response_json_body() -> None:
     response = build_requests_response(
         requests.Request("GET", "https://example.com").prepare(),
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
@@ -103,7 +104,7 @@ def testbuild_requests_response_json_body() -> None:
     assert response.json() == {"key": "value"}
 
 
-def testbuild_requests_response_text_body() -> None:
+def test_build_requests_response_text_body() -> None:
     response = build_requests_response(
         requests.Request("GET", "https://example.com").prepare(),
         HttpResponse(200, body=Body("text", "hello world")),
@@ -111,7 +112,7 @@ def testbuild_requests_response_text_body() -> None:
     assert response.text == "hello world"
 
 
-def testbuild_requests_response_binary_body() -> None:
+def test_build_requests_response_binary_body() -> None:
     response = build_requests_response(
         requests.Request("GET", "https://example.com").prepare(),
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
@@ -119,7 +120,7 @@ def testbuild_requests_response_binary_body() -> None:
     assert response.content == b"\x00\x01\x02"
 
 
-def testbuild_requests_response_none_body() -> None:
+def test_build_requests_response_none_body() -> None:
     response = build_requests_response(
         requests.Request("GET", "https://example.com").prepare(),
         HttpResponse(200, body=Body("none")),
@@ -128,7 +129,6 @@ def testbuild_requests_response_none_body() -> None:
 
 
 def test_recorded_response_headers_drop_content_encoding() -> None:
-    from cassetter.intercept._requests import extract_headers_skip_encoding
 
     result = extract_headers_skip_encoding({"Content-Encoding": "gzip", "Content-Type": "text/html"})
     assert "content-encoding" not in result

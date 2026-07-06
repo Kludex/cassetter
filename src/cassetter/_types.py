@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, TypedDict
+from typing import TypedDict
 
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse
 
@@ -23,29 +23,3 @@ class CassetteConfig(TypedDict, total=False):
     ignore_hosts: list[str]
     before_record_request: BeforeRecordRequest
     before_record_response: BeforeRecordResponse
-
-
-class Interceptor(Protocol):
-    """Protocol for HTTP library interceptors."""
-
-    def install(self) -> None: ...
-    def uninstall(self) -> None: ...
-
-
-class AsyncInterceptor(Protocol):
-    """Protocol for async HTTP library interceptors."""
-
-    async def install(self) -> None: ...
-    async def uninstall(self) -> None: ...
-
-
-class RequestCallback(Protocol):
-    """Called when an interceptor captures an outgoing request."""
-
-    def __call__(
-        self,
-        method: str,
-        uri: str,
-        headers: dict[str, list[str]],
-        body: bytes | None,
-    ) -> Any: ...

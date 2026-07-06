@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from unittest.mock import patch
 
 import pyreqwest_impersonate as pri
 import pytest
@@ -73,30 +74,30 @@ def test_interceptor_install_uninstall() -> None:
     assert pri.Client.get is original_get
 
 
-def testextract_headers_none() -> None:
+def test_extract_headers_none() -> None:
     assert extract_headers(None) == {}
 
 
-def testextract_headers_dict() -> None:
+def test_extract_headers_dict() -> None:
     headers = {"Content-Type": "application/json", "Accept": "text/html"}
     result = extract_headers(headers)
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def testextract_body_content_bytes() -> None:
+def test_extract_body_content_bytes() -> None:
     assert extract_body(content=b"raw", data=None, json_payload=None) == b"raw"
 
 
-def testextract_body_data_string() -> None:
+def test_extract_body_data_string() -> None:
     assert extract_body(content=None, data="form=data", json_payload=None) == b"form=data"
 
 
-def testextract_body_json_payload() -> None:
+def test_extract_body_json_payload() -> None:
     result = extract_body(content=None, data=None, json_payload={"key": "val"})
     assert json.loads(result) == {"key": "val"}  # type: ignore[arg-type]
 
 
-def testextract_body_none() -> None:
+def test_extract_body_none() -> None:
     assert extract_body(content=None, data=None, json_payload=None) is None
 
 
@@ -112,7 +113,7 @@ def test_replay_response_json() -> None:
     assert r.json() == {"a": 1}
 
 
-def testbuild_replay_response_json_body() -> None:
+def test_build_replay_response_json_body() -> None:
     resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
@@ -121,7 +122,7 @@ def testbuild_replay_response_json_body() -> None:
     assert resp.status_code == 200
 
 
-def testbuild_replay_response_text_body() -> None:
+def test_build_replay_response_text_body() -> None:
     resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, body=Body("text", "hello world")),
@@ -129,7 +130,7 @@ def testbuild_replay_response_text_body() -> None:
     assert resp.text == "hello world"
 
 
-def testbuild_replay_response_binary_body() -> None:
+def test_build_replay_response_binary_body() -> None:
     resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
@@ -137,7 +138,7 @@ def testbuild_replay_response_binary_body() -> None:
     assert resp.content == b"\x00\x01\x02"
 
 
-def testbuild_replay_response_none_body() -> None:
+def test_build_replay_response_none_body() -> None:
     resp = build_replay_response(
         "https://example.com",
         HttpResponse(200, body=Body("none")),
@@ -148,7 +149,6 @@ def testbuild_replay_response_none_body() -> None:
 def test_record_uses_request_url_not_response_url(tmp_path: object) -> None:
     """Recording must store the request URL: responses carry post-redirect URLs
     that would never match on replay."""
-    from unittest.mock import patch
 
     path = os.path.join(str(tmp_path), "redirect.yaml")
 

@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 
 import aiohttp
 import pytest
+from multidict import (
+    CIMultiDict,
+    CIMultiDictProxy,
+)
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import NoMatchError
 from cassetter.context import use_cassette
 from cassetter.intercept._aiohttp import (
     AiohttpInterceptor,
+    _build_full_url,
     build_aiohttp_response,
     extract_request_body,
     extract_request_headers,
@@ -63,7 +69,6 @@ async def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_interceptor_record(tmp_path: object) -> None:
-    from unittest.mock import patch
 
     path = os.path.join(str(tmp_path), "test.yaml")
 
@@ -103,39 +108,38 @@ def test_interceptor_install_uninstall() -> None:
     assert aiohttp.ClientSession._request is original_request
 
 
-def testextract_request_headers_from_dict() -> None:
+def test_extract_request_headers_from_dict() -> None:
     headers = extract_request_headers({"Content-Type": "application/json", "Accept": "text/html"})
     assert headers == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def testextract_request_headers_none() -> None:
+def test_extract_request_headers_none() -> None:
     assert extract_request_headers(None) == {}
 
 
-def testextract_request_body_bytes_data() -> None:
+def test_extract_request_body_bytes_data() -> None:
     assert extract_request_body({"data": b"hello"}) == b"hello"
 
 
-def testextract_request_body_str_data() -> None:
+def test_extract_request_body_str_data() -> None:
     assert extract_request_body({"data": "hello"}) == b"hello"
 
 
-def testextract_request_body_json_data() -> None:
+def test_extract_request_body_json_data() -> None:
     result = extract_request_body({"json": {"key": "value"}})
     assert result is not None
     assert b"key" in result
 
 
-def testextract_request_body_no_body() -> None:
+def test_extract_request_body_no_body() -> None:
     assert extract_request_body({}) is None
 
 
-def testextract_request_body_none_data() -> None:
+def test_extract_request_body_none_data() -> None:
     assert extract_request_body({"data": None}) is None
 
 
-def testextract_response_headers_multidict() -> None:
-    from multidict import CIMultiDict, CIMultiDictProxy
+def test_extract_response_headers_multidict() -> None:
 
     headers = CIMultiDictProxy(CIMultiDict([("Content-Type", "application/json"), ("X-Custom", "value")]))
     result = extract_response_headers(headers)
@@ -184,7 +188,6 @@ async def testbuild_aiohttp_response_none_body() -> None:
 
 @pytest.mark.anyio
 async def test_build_full_url_resolves_base_url_and_params() -> None:
-    from cassetter.intercept._aiohttp import _build_full_url
 
     async with aiohttp.ClientSession(base_url="https://api.example.com") as session:
         url = _build_full_url(session, "/v1/items", {"page": "2", "q": "x"})
@@ -192,16 +195,12 @@ async def test_build_full_url_resolves_base_url_and_params() -> None:
 
 
 def test_extract_request_body_dict_form() -> None:
-    from cassetter.intercept._aiohttp import extract_request_body
 
     body = extract_request_body({"data": {"grant_type": "password", "user": "alice"}})
     assert body == b"grant_type=password&user=alice"
 
 
 def test_response_headers_drop_content_encoding() -> None:
-    from multidict import CIMultiDict, CIMultiDictProxy
-
-    from cassetter.intercept._aiohttp import extract_response_headers
 
     headers = CIMultiDictProxy(CIMultiDict({"Content-Encoding": "gzip", "Content-Type": "application/json"}))
     result = extract_response_headers(headers)

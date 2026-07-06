@@ -3,7 +3,12 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 
+import grpc
+import grpc.aio
 import pytest
+import websockets.asyncio.client
+import websockets.exceptions
+from websockets.exceptions import ConnectionClosedOK
 
 from cassetter._core import (
     Body,
@@ -21,6 +26,30 @@ from cassetter._core import (
 )
 from cassetter._state import current_cassette
 from cassetter.cassette import Cassette, NoMatchError
+from cassetter.intercept._grpc import (
+    GrpcInterceptor,
+    VCRChannel,
+    VCRStreamStreamCallable,
+    VCRStreamUnaryCallable,
+    VCRUnaryStreamCallable,
+    VCRUnaryUnaryCallable,
+    async_iter,
+    build_json_debug,
+    decode_chunks,
+    encode_chunks,
+    iter_bytes,
+    metadata_to_dict,
+    raise_for_status,
+    replay_stream,
+)
+from cassetter.intercept._websockets import (
+    VCRWebSocket,
+    VCRWebSocketReplay,
+    WebSocketInterceptor,
+    _PatchedConnect,
+    extract_ws_headers,
+    frame_to_data,
+)
 from cassetter.recording import RecordMode
 
 # --- gRPC types ---
@@ -532,7 +561,6 @@ def test_record_ws_before_load() -> None:
 
 
 def test_grpc_chunk_encode_decode_roundtrip() -> None:
-    from cassetter.intercept._grpc import decode_chunks, encode_chunks
 
     chunks = [b"hello", b"world", b"\x00\x01\x02"]
     encoded = encode_chunks(chunks)
@@ -540,14 +568,12 @@ def test_grpc_chunk_encode_decode_roundtrip() -> None:
 
 
 def test_grpc_chunk_encode_empty() -> None:
-    from cassetter.intercept._grpc import decode_chunks, encode_chunks
 
     assert encode_chunks([]) == b""
     assert decode_chunks(b"") == []
 
 
 def test_grpc_chunk_encode_single() -> None:
-    from cassetter.intercept._grpc import decode_chunks, encode_chunks
 
     chunks = [b"\x0a\x0b"]
     encoded = encode_chunks(chunks)
@@ -555,7 +581,6 @@ def test_grpc_chunk_encode_single() -> None:
 
 
 def test_grpc_chunk_decode_truncated() -> None:
-    from cassetter.intercept._grpc import decode_chunks
 
     # Less than 4 bytes - can't read length
     assert decode_chunks(b"\x00\x01") == []
@@ -564,38 +589,33 @@ def test_grpc_chunk_decode_truncated() -> None:
 # --- gRPC interceptor helpers ---
 
 
-def testmetadata_to_dict_none() -> None:
-    from cassetter.intercept._grpc import metadata_to_dict
+def test_metadata_to_dict_none() -> None:
 
     assert metadata_to_dict(None) == {}
 
 
-def testmetadata_to_dict_str_values() -> None:
-    from cassetter.intercept._grpc import metadata_to_dict
+def test_metadata_to_dict_str_values() -> None:
 
     md = [("key1", "val1"), ("key2", "val2"), ("key1", "val1b")]
     result = metadata_to_dict(md)
     assert result == {"key1": ["val1", "val1b"], "key2": ["val2"]}
 
 
-def testmetadata_to_dict_bytes_values() -> None:
-    from cassetter.intercept._grpc import metadata_to_dict
+def test_metadata_to_dict_bytes_values() -> None:
 
     md = [("key", b"binary-val")]
     result = metadata_to_dict(md)
     assert result == {"key": ["binary-val"]}
 
 
-def testbuild_json_debug_no_protobuf() -> None:
-    from cassetter.intercept._grpc import build_json_debug
+def test_build_json_debug_no_protobuf() -> None:
 
     # Objects without MessageToDict support return None
     result = build_json_debug("req", "resp")
     assert result is None
 
 
-def testbuild_json_debug_none_request() -> None:
-    from cassetter.intercept._grpc import build_json_debug
+def test_build_json_debug_none_request() -> None:
 
     result = build_json_debug(None, "resp")
     assert result is None
@@ -603,7 +623,6 @@ def testbuild_json_debug_none_request() -> None:
 
 @pytest.mark.anyio
 async def testreplay_stream_chunked() -> None:
-    from cassetter.intercept._grpc import encode_chunks, replay_stream
 
     chunks = [b"\x01", b"\x02\x03"]
     encoded = encode_chunks(chunks)
@@ -616,7 +635,6 @@ async def testreplay_stream_chunked() -> None:
 
 @pytest.mark.anyio
 async def testreplay_stream_single_fallback() -> None:
-    from cassetter.intercept._grpc import replay_stream
 
     # Non-chunked data: falls back to treating entire body as single message
     resp = GrpcResponse(0, "OK", {}, Body("binary", b"\x01\x02"))
@@ -628,7 +646,6 @@ async def testreplay_stream_single_fallback() -> None:
 
 @pytest.mark.anyio
 async def testreplay_stream_empty_body() -> None:
-    from cassetter.intercept._grpc import replay_stream
 
     resp = GrpcResponse(0, "OK", {}, Body("none", b""))
     results = []
@@ -638,9 +655,6 @@ async def testreplay_stream_empty_body() -> None:
 
 
 def test_grpc_interceptor_install_uninstall() -> None:
-    import grpc.aio
-
-    from cassetter.intercept._grpc import GrpcInterceptor
 
     original_insecure = grpc.aio.insecure_channel
     original_secure = grpc.aio.secure_channel
@@ -658,7 +672,6 @@ def test_grpc_interceptor_install_uninstall() -> None:
 
 @pytest.mark.anyio
 async def test_unary_unary_replay(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryUnaryCallable
 
     path = os.path.join(str(tmp_path), "grpc_replay.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -687,7 +700,6 @@ async def test_unary_unary_replay(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_unary_unary_no_match_raises(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryUnaryCallable
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -709,7 +721,6 @@ async def test_unary_unary_no_match_raises(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_unary_stream_replay(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryStreamCallable, encode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_stream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -741,7 +752,6 @@ async def test_unary_stream_replay(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryStreamCallable
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -759,7 +769,6 @@ async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_stream_unary_replay(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamUnaryCallable
 
     path = os.path.join(str(tmp_path), "grpc_cstream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -792,7 +801,6 @@ async def test_stream_unary_replay(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamUnaryCallable
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -812,7 +820,6 @@ async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_stream_stream_replay(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamStreamCallable, encode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_bidi.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -847,7 +854,6 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamStreamCallable
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -869,42 +875,36 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
 # --- WebSocket interceptor helpers ---
 
 
-def testframe_to_data_text() -> None:
-    from cassetter.intercept._websockets import frame_to_data
+def test_frame_to_data_text() -> None:
 
     frame = WsFrame("recv", "text", Body("text", "hello"), 0)
     assert frame_to_data(frame) == "hello"
 
 
-def testframe_to_data_binary() -> None:
-    from cassetter.intercept._websockets import frame_to_data
+def test_frame_to_data_binary() -> None:
 
     frame = WsFrame("recv", "binary", Body("binary", b"\x01\x02"), 0)
     assert frame_to_data(frame) == b"\x01\x02"
 
 
-def testframe_to_data_none_body() -> None:
-    from cassetter.intercept._websockets import frame_to_data
+def test_frame_to_data_none_body() -> None:
 
     frame = WsFrame("recv", "text", Body("none", b""), 0)
     assert frame_to_data(frame) == ""
 
 
-def testextract_ws_headers_empty() -> None:
-    from cassetter.intercept._websockets import extract_ws_headers
+def test_extract_ws_headers_empty() -> None:
 
     assert extract_ws_headers({}) == {}
 
 
-def testextract_ws_headers_additional() -> None:
-    from cassetter.intercept._websockets import extract_ws_headers
+def test_extract_ws_headers_additional() -> None:
 
     result = extract_ws_headers({"additional_headers": {"Authorization": "Bearer tok"}})
     assert result == {"authorization": ["Bearer tok"]}
 
 
-def testextract_ws_headers_extra() -> None:
-    from cassetter.intercept._websockets import extract_ws_headers
+def test_extract_ws_headers_extra() -> None:
 
     result = extract_ws_headers({"extra_headers": {"X-Key": "val"}})
     assert result == {"x-key": ["val"]}
@@ -912,7 +912,6 @@ def testextract_ws_headers_extra() -> None:
 
 @pytest.mark.anyio
 async def test_replay_ws_recv() -> None:
-    from cassetter.intercept._websockets import VCRWebSocketReplay
 
     interaction = WsInteraction(
         "wss://ws.example.com",
@@ -927,7 +926,6 @@ async def test_replay_ws_recv() -> None:
     assert await ws.recv() == "pong"
     assert await ws.recv() == "data"
     # Exhausted replay signals a clean close, like a real connection at EOF
-    from websockets.exceptions import ConnectionClosedOK
 
     with pytest.raises(ConnectionClosedOK):
         await ws.recv()
@@ -935,7 +933,6 @@ async def test_replay_ws_recv() -> None:
 
 @pytest.mark.anyio
 async def test_replay_ws_send_is_noop() -> None:
-    from cassetter.intercept._websockets import VCRWebSocketReplay
 
     interaction = WsInteraction("wss://ws.example.com", {}, [])
     ws = VCRWebSocketReplay(interaction)
@@ -944,7 +941,6 @@ async def test_replay_ws_send_is_noop() -> None:
 
 @pytest.mark.anyio
 async def test_replay_ws_close_is_noop() -> None:
-    from cassetter.intercept._websockets import VCRWebSocketReplay
 
     interaction = WsInteraction("wss://ws.example.com", {}, [])
     ws = VCRWebSocketReplay(interaction)
@@ -953,7 +949,6 @@ async def test_replay_ws_close_is_noop() -> None:
 
 @pytest.mark.anyio
 async def test_replay_ws_context_manager() -> None:
-    from cassetter.intercept._websockets import VCRWebSocketReplay
 
     interaction = WsInteraction(
         "wss://ws.example.com",
@@ -967,7 +962,6 @@ async def test_replay_ws_context_manager() -> None:
 
 @pytest.mark.anyio
 async def test_replay_wsasync_iter() -> None:
-    from cassetter.intercept._websockets import VCRWebSocketReplay
 
     interaction = WsInteraction(
         "wss://ws.example.com",
@@ -984,7 +978,6 @@ async def test_replay_wsasync_iter() -> None:
 
 @pytest.mark.anyio
 async def test_record_ws_frames(tmp_path: object) -> None:
-    from cassetter.intercept._websockets import VCRWebSocket
 
     path = os.path.join(str(tmp_path), "ws_record.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1019,7 +1012,6 @@ async def test_record_ws_frames(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_record_ws_context_manager(tmp_path: object) -> None:
-    from cassetter.intercept._websockets import VCRWebSocket
 
     path = os.path.join(str(tmp_path), "ws_ctx.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1049,7 +1041,6 @@ async def test_record_ws_context_manager(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_record_ws_binary_frames(tmp_path: object) -> None:
-    from cassetter.intercept._websockets import VCRWebSocket
 
     path = os.path.join(str(tmp_path), "ws_binary.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1082,7 +1073,6 @@ async def test_record_ws_binary_frames(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_record_wsasync_iter(tmp_path: object) -> None:
-    from cassetter.intercept._websockets import VCRWebSocket
 
     path = os.path.join(str(tmp_path), "ws_iter.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1098,8 +1088,6 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
 
         async def recv(self) -> str:
             if self._idx >= len(self._msgs):
-                import websockets.exceptions
-
                 raise websockets.exceptions.ConnectionClosed(None, None)
             msg = self._msgs[self._idx]
             self._idx += 1
@@ -1120,7 +1108,6 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_patched_connect_replay(tmp_path: object) -> None:
-    from cassetter.intercept._websockets import WebSocketInterceptor
 
     path = os.path.join(str(tmp_path), "ws_connect.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1133,8 +1120,6 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
     interceptor.install()
     token = current_cassette.set(cassette)
     try:
-        import websockets.asyncio.client
-
         async with websockets.asyncio.client.connect("wss://ws.example.com/path") as ws:
             data = await ws.recv()
             assert data == "hello"
@@ -1145,7 +1130,6 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
-    from cassetter.intercept._websockets import WebSocketInterceptor
 
     path = os.path.join(str(tmp_path), "ws_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -1155,8 +1139,6 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
     interceptor.install()
     token = current_cassette.set(cassette)
     try:
-        import websockets.asyncio.client
-
         with pytest.raises(NoMatchError):
             async with websockets.asyncio.client.connect("wss://ws.example.com/unknown"):
                 pass  # pragma: no cover
@@ -1166,9 +1148,6 @@ async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
 
 
 def test_websocket_interceptor_install_uninstall() -> None:
-    import websockets.asyncio.client
-
-    from cassetter.intercept._websockets import WebSocketInterceptor
 
     original = websockets.asyncio.client.connect
 
@@ -1186,7 +1165,6 @@ def test_websocket_interceptor_install_uninstall() -> None:
 
 @pytest.mark.anyio
 async def test_unary_unary_record(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryUnaryCallable
 
     path = os.path.join(str(tmp_path), "grpc_rec.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1217,7 +1195,6 @@ async def test_unary_unary_record(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_unary_stream_record(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRUnaryStreamCallable, decode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_rec_stream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1258,7 +1235,6 @@ async def test_unary_stream_record(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_stream_unary_record(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamUnaryCallable
 
     path = os.path.join(str(tmp_path), "grpc_rec_cstream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1292,7 +1268,6 @@ async def test_stream_unary_record(tmp_path: object) -> None:
 
 @pytest.mark.anyio
 async def test_stream_stream_record(tmp_path: object) -> None:
-    from cassetter.intercept._grpc import VCRStreamStreamCallable, decode_chunks
 
     path = os.path.join(str(tmp_path), "grpc_rec_bidi.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1337,13 +1312,6 @@ async def test_stream_stream_record(tmp_path: object) -> None:
 
 
 def test_vcr_channel_wraps_methods() -> None:
-    from cassetter.intercept._grpc import (
-        VCRChannel,
-        VCRStreamStreamCallable,
-        VCRStreamUnaryCallable,
-        VCRUnaryStreamCallable,
-        VCRUnaryUnaryCallable,
-    )
 
     class FakeChannel:
         def unary_unary(self, method: str, *args: object) -> str:
@@ -1374,7 +1342,6 @@ def test_vcr_channel_wraps_methods() -> None:
 
 @pytest.mark.anyio
 async def test_vcr_channel_close() -> None:
-    from cassetter.intercept._grpc import VCRChannel
 
     class FakeChannel:
         closed = False
@@ -1390,7 +1357,6 @@ async def test_vcr_channel_close() -> None:
 
 @pytest.mark.anyio
 async def test_vcr_channel_context_manager() -> None:
-    from cassetter.intercept._grpc import VCRChannel
 
     class FakeChannel:
         entered = False
@@ -1419,7 +1385,6 @@ async def test_vcr_channel_context_manager() -> None:
 
 
 def test_patched_channels_create_vcr_channels() -> None:
-    from cassetter.intercept._grpc import GrpcInterceptor
 
     cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
     cassette.load()
@@ -1428,7 +1393,6 @@ def test_patched_channels_create_vcr_channels() -> None:
     interceptor.install()
     try:
         # Verify the patched function returns VCRChannel
-        import grpc.aio
 
         patched_fn = grpc.aio.insecure_channel
         assert patched_fn is not interceptor._original_insecure
@@ -1441,14 +1405,12 @@ def test_patched_channels_create_vcr_channels() -> None:
 
 @pytest.mark.anyio
 async def test_grpcasync_iter() -> None:
-    from cassetter.intercept._grpc import async_iter
 
     results = [item async for item in async_iter([b"\x01", b"\x02"])]
     assert results == [b"\x01", b"\x02"]
 
 
 def test_grpciter_bytes() -> None:
-    from cassetter.intercept._grpc import iter_bytes
 
     result = iter_bytes([b"\x01"], lambda b: b)
     assert result is not None
@@ -1457,9 +1419,6 @@ def test_grpciter_bytes() -> None:
 @pytest.mark.anyio
 async def test_grpc_replay_error_status_raises() -> None:
     """A recorded non-OK gRPC status must replay as AioRpcError, not a success."""
-    import grpc
-
-    from cassetter.intercept._grpc import raise_for_status
 
     resp = GrpcResponse(5, "not found", {}, Body("binary", b""))
     with pytest.raises(grpc.aio.AioRpcError) as exc_info:
@@ -1470,16 +1429,12 @@ async def test_grpc_replay_error_status_raises() -> None:
 
 @pytest.mark.anyio
 async def test_grpc_replay_ok_status_does_not_raise() -> None:
-    from cassetter.intercept._grpc import raise_for_status
 
     raise_for_status(GrpcResponse(0, "OK", {}, Body("binary", b"")))
 
 
 @pytest.mark.anyio
 async def test_grpc_replay_stream_error_status_raises() -> None:
-    import grpc
-
-    from cassetter.intercept._grpc import replay_stream
 
     resp = GrpcResponse(7, "permission denied", {}, Body("binary", b""))
     with pytest.raises(grpc.aio.AioRpcError) as exc_info:
@@ -1490,9 +1445,6 @@ async def test_grpc_replay_stream_error_status_raises() -> None:
 
 @pytest.mark.anyio
 async def test_grpc_replay_unknown_status_code_maps_to_unknown() -> None:
-    import grpc
-
-    from cassetter.intercept._grpc import raise_for_status
 
     resp = GrpcResponse(999, "weird", {}, Body("binary", b""))
     with pytest.raises(grpc.aio.AioRpcError) as exc_info:
@@ -1503,7 +1455,6 @@ async def test_grpc_replay_unknown_status_code_maps_to_unknown() -> None:
 @pytest.mark.anyio
 async def test_patched_connect_await_form(tmp_path: object) -> None:
     """`ws = await websockets.connect(uri)` (not just `async with`) must work."""
-    from cassetter.intercept._websockets import WebSocketInterceptor
 
     path = os.path.join(str(tmp_path), "ws_await.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1514,8 +1465,6 @@ async def test_patched_connect_await_form(tmp_path: object) -> None:
     interceptor.install()
     token = current_cassette.set(cassette)
     try:
-        import websockets.asyncio.client
-
         ws = await websockets.asyncio.client.connect("wss://ws.example.com/p")
         assert await ws.recv() == "hi"
     finally:
@@ -1526,7 +1475,6 @@ async def test_patched_connect_await_form(tmp_path: object) -> None:
 @pytest.mark.anyio
 async def test_patched_connect_async_for_form(tmp_path: object) -> None:
     """`async for ws in connect(...)` reconnect loop yields one connection."""
-    from cassetter.intercept._websockets import WebSocketInterceptor
 
     path = os.path.join(str(tmp_path), "ws_for.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1537,8 +1485,6 @@ async def test_patched_connect_async_for_form(tmp_path: object) -> None:
     interceptor.install()
     token = current_cassette.set(cassette)
     try:
-        import websockets.asyncio.client
-
         seen = []
         # Loop to completion (no break) so the reconnect iterator raises
         # StopAsyncIteration after yielding its single connection.
@@ -1553,7 +1499,6 @@ async def test_patched_connect_async_for_form(tmp_path: object) -> None:
 @pytest.mark.anyio
 async def test_ws_bypass_ignores_localhost(tmp_path: object) -> None:
     """A bypassed WS URI must not consult the cassette (would raise NoMatch here)."""
-    from cassetter.intercept._websockets import WebSocketInterceptor, _PatchedConnect
 
     path = os.path.join(str(tmp_path), "ws_bypass.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE, ignore_localhost=True)
@@ -1577,7 +1522,6 @@ async def test_ws_bypass_ignores_localhost(tmp_path: object) -> None:
 
 
 def test_extract_ws_headers_list_of_tuples() -> None:
-    from cassetter.intercept._websockets import extract_ws_headers
 
     headers = extract_ws_headers({"additional_headers": [("Authorization", "Bearer x"), ("X-Trace", "1")]})
     assert headers == {"authorization": ["Bearer x"], "x-trace": ["1"]}
