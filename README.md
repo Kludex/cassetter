@@ -517,7 +517,7 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 | `before_playback_response` | _(not supported)_ | VCR hook to modify/filter responses during playback |
 | `allow_playback_repeats` | _(not supported)_ | VCR can replay the same interaction multiple times |
 | `record_on_exception` | _(not supported)_ | VCR can skip saving when the test raises |
-| Custom matchers | _(not supported)_ | VCR supports `register_matcher` for user-defined matching |
+| Custom matchers | `uri_normalizer` | Callable applied to both recorded and incoming URIs before matching; covers region/account normalization |
 | `@pytest.mark.block_network` | _(not supported)_ | |
 | `--disable-recording` | _(not supported)_ | |
 

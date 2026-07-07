@@ -8,7 +8,13 @@ from typing import Any
 import pytest
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import acquire_patches, current_cassette, release_patches
+from cassetter._state import (
+    acquire_patches,
+    current_cassette,
+    pop_fallback_cassette,
+    push_fallback_cassette,
+    release_patches,
+)
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
 from cassetter.context import resolve_interceptors
@@ -45,6 +51,11 @@ def _resolve_cassette(
     ini_on_expiry: str | None = None,
 ) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
+    # Mirror pytest-recording's filename sanitization so cassettes recorded
+    # under vcrpy resolve: parametrize ids may contain characters that are
+    # forbidden in file names (e.g. ':' from model names).
+    for ch in "<>?%*:|\"'/\\":
+        node_name = node_name.replace(ch, "-")
     cassette_name = node_name + ".yaml"
     record_mode_str = vcr_config.get("record_mode", "none")
 
@@ -101,6 +112,7 @@ def _resolve_cassette(
     ignore_hosts = vcr_config.get("ignore_hosts")
     before_record_request = vcr_config.get("before_record_request")
     before_record_response = vcr_config.get("before_record_response")
+    uri_normalizer = vcr_config.get("uri_normalizer")
 
     cassette = Cassette(
         cassette_path,
@@ -113,6 +125,7 @@ def _resolve_cassette(
         ignore_hosts=ignore_hosts,
         before_record_request=before_record_request,
         before_record_response=before_record_response,
+        uri_normalizer=uri_normalizer,
     )
     cassette.load()
 
@@ -156,11 +169,13 @@ def cassette(
 
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)
+    push_fallback_cassette(cassette)
 
     try:
         yield cassette
     finally:
         # Reset context and release patches even if the test errors out
+        pop_fallback_cassette(cassette)
         current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()

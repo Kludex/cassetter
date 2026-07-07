@@ -46,6 +46,30 @@ Now two bodies that differ only in `request_id` and `timestamp` are considered e
 !!! tip
     Start with the default `["method", "uri"]`. Only add `json_body` when your test makes several requests to the same URI with different payloads and you need to tell them apart.
 
+## Normalize URIs before matching
+
+Some URI differences are noise: an AWS request carries the region in the hostname, an ARN embeds an account ID, and a cassette recorded in one environment should still replay in another. Pass a `uri_normalizer` callable and it is applied to **both** the recorded and the incoming URI before comparison:
+
+```python
+import re
+
+def normalize(uri: str) -> str:
+    return re.sub(r"bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com", "bedrock-runtime.REGION.amazonaws.com", uri)
+
+with use_cassette("cassette.yaml", uri_normalizer=normalize):
+    ...
+```
+
+Now a cassette recorded against `us-east-2` replays for a request to `us-east-1`. Because the normalizer runs on both sides, cassettes on disk are never rewritten — matching just sees the normalized form.
+
+In the pytest plugin, set it in your `vcr_config` fixture:
+
+```python
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"uri_normalizer": normalize}
+```
+
 ## Matching and security filtering
 
 Cassettes are stored with sensitive values filtered, so the live request is passed through the same filters before matching. A request recorded as `?api_key=[FILTERED]` matches the real request carrying the actual key, and a scrubbed `password` field in a stored JSON body matches the real payload. Filtering never breaks replay.

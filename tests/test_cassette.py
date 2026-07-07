@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 import sys
 from datetime import timedelta
@@ -969,3 +970,77 @@ def test_save_preserves_file_permissions(tmp_path: object) -> None:
 
     mode = stat.S_IMODE(os.stat(path).st_mode)
     assert mode == 0o600
+
+
+def _save_interaction(path: str, method: str, uri: str, body_text: str) -> None:
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            request=HttpRequest(method, uri),
+            response=HttpResponse(200, body=Body("text", body_text)),
+            recorded_at="2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(path)
+
+
+def test_uri_normalizer_matches_normalized_equivalent(tmp_path: object) -> None:
+    """A normalizer applied to both sides lets region-variant URIs replay."""
+    path = os.path.join(str(tmp_path), "regions.yaml")
+    _save_interaction(path, "POST", "https://svc.us-east-2.example.com/model/m:0/run", "east-2")
+
+    cassette = Cassette(
+        path,
+        record_mode=RecordMode.NONE,
+        uri_normalizer=lambda uri: uri.replace("us-east-1", "REGION").replace("us-east-2", "REGION"),
+    )
+    cassette.load()
+
+    response = cassette.play("POST", "https://svc.us-east-1.example.com/model/m:0/run", {}, None)
+    assert response.body.content == "east-2"
+    assert cassette.play_count == 1
+
+
+def test_uri_normalizer_still_rejects_distinct_uris(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "distinct.yaml")
+    _save_interaction(path, "GET", "https://svc.us-east-2.example.com/a", "a")
+
+    cassette = Cassette(path, record_mode=RecordMode.NONE, uri_normalizer=lambda uri: uri.replace("us-east-2", "R"))
+    cassette.load()
+
+    with pytest.raises(NoMatchError):
+        cassette.play("GET", "https://svc.us-east-2.example.com/other", {}, None)
+
+
+def test_uri_normalizer_applies_to_recorded_interactions(tmp_path: object) -> None:
+    """An interaction recorded in this session is matchable through the normalizer."""
+    path = os.path.join(str(tmp_path), "recorded.yaml")
+    cassette = Cassette(
+        path,
+        record_mode=RecordMode.ALL,
+        uri_normalizer=lambda uri: re.sub(r"account-\d+", "account-X", uri),
+    )
+    cassette.load()
+    cassette.record(
+        method="GET",
+        uri="https://api.example.com/account-12345/items",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"items",
+    )
+
+    response = cassette.play("GET", "https://api.example.com/account-99999/items", {}, None)
+    assert response.body.content == "items"
+
+
+def test_without_uri_normalizer_region_variant_does_not_match(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "no-normalizer.yaml")
+    _save_interaction(path, "POST", "https://svc.us-east-2.example.com/run", "east-2")
+
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
+
+    with pytest.raises(NoMatchError):
+        cassette.play("POST", "https://svc.us-east-1.example.com/run", {}, None)

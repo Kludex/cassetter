@@ -77,6 +77,7 @@ class RawResponse:
 
 BeforeRecordRequest = Callable[[RawRequest], RawRequest]
 BeforeRecordResponse = Callable[[RawResponse], RawResponse]
+UriNormalizer = Callable[[str], str]
 
 
 _DURATION_RE = re.compile(r"^(\d+)([dhw])$")
@@ -108,6 +109,7 @@ class Cassette:
         ignore_hosts: list[str] | None = None,
         before_record_request: BeforeRecordRequest | None = None,
         before_record_response: BeforeRecordResponse | None = None,
+        uri_normalizer: UriNormalizer | None = None,
     ) -> None:
         self._path = os.fspath(path)
         self._record_mode = record_mode
@@ -121,6 +123,10 @@ class Cassette:
         self._ignore_hosts = ignore_hosts or []
         self._before_record_request = before_record_request
         self._before_record_response = before_record_response
+        self._uri_normalizer = uri_normalizer
+        # Parallel to the inner interactions, holding copies with normalized
+        # URIs so matching stays on the Rust path. None when no normalizer.
+        self._match_interactions: list[HttpInteraction] | None = None
         self._inner: _RustCassette | None = None
         self._dirty = False
         self._once_replay_only = False
@@ -207,6 +213,7 @@ class Cassette:
 
         if self._record_mode == RecordMode.ALL or not exists:
             self._inner = _RustCassette()
+            self._rebuild_match_interactions()
             if self._record_mode == RecordMode.ALL:
                 self._dirty = True
             return
@@ -215,6 +222,19 @@ class Cassette:
         self._once_replay_only = True
         self._play_counter = Counter()
         self._check_expiry()
+        self._rebuild_match_interactions()
+
+    def _rebuild_match_interactions(self) -> None:
+        if self._uri_normalizer is None or self._inner is None:
+            self._match_interactions = None
+            return
+        self._match_interactions = [self._normalized_copy(i) for i in self._inner.interactions]
+
+    def _normalized_copy(self, interaction: HttpInteraction) -> HttpInteraction:
+        assert self._uri_normalizer is not None  # caller guards this
+        request = interaction.request
+        normalized = HttpRequest(request.method, self._uri_normalizer(request.uri), request.headers, request.body)
+        return HttpInteraction(normalized, interaction.response, interaction.recorded_at)
 
     def _check_expiry(self) -> None:
         """Check if the cassette is expired based on max_age, and apply on_expiry action."""
@@ -298,7 +318,16 @@ class Cassette:
         # api_key=[FILTERED] would otherwise never match the real query string.
         probe = HttpInteraction(request, HttpResponse(0), "")
         request = scrub_interaction(probe, self._security_config).request
-        result = find_match(request, self._inner.interactions, self._inner.played_indices, self._match_config)
+
+        # The normalizer applies symmetrically: recorded URIs were normalized
+        # into `_match_interactions`, so the incoming URI gets the same
+        # treatment before comparison.
+        interactions = self._inner.interactions
+        if self._match_interactions is not None:
+            assert self._uri_normalizer is not None
+            interactions = self._match_interactions
+            request = HttpRequest(request.method, self._uri_normalizer(request.uri), request.headers, request.body)
+        result = find_match(request, interactions, self._inner.played_indices, self._match_config)
 
         if result is None:
             raise NoMatchError(f"no matching interaction for {method} {uri}")
@@ -354,8 +383,11 @@ class Cassette:
 
         if self._inner is None:
             self._inner = _RustCassette()
+            self._rebuild_match_interactions()
 
         self._inner.add_interaction(interaction)
+        if self._match_interactions is not None:
+            self._match_interactions.append(self._normalized_copy(interaction))
         self._dirty = True
         return interaction.response
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse
+from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, UriNormalizer
 
 
 class CassetteConfig(TypedDict, total=False):
@@ -23,3 +23,4 @@ class CassetteConfig(TypedDict, total=False):
     ignore_hosts: list[str]
     before_record_request: BeforeRecordRequest
     before_record_response: BeforeRecordResponse
+    uri_normalizer: UriNormalizer

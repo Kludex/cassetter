@@ -6,8 +6,14 @@ from collections.abc import Iterator
 from typing import Any
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import acquire_patches, current_cassette, release_patches
-from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
+from cassetter._state import (
+    acquire_patches,
+    current_cassette,
+    pop_fallback_cassette,
+    push_fallback_cassette,
+    release_patches,
+)
+from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette, UriNormalizer
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.recording import RecordMode
 
@@ -87,6 +93,7 @@ def use_cassette(
     ignore_hosts: list[str] | None = None,
     before_record_request: BeforeRecordRequest | None = None,
     before_record_response: BeforeRecordResponse | None = None,
+    uri_normalizer: UriNormalizer | None = None,
 ) -> Iterator[Cassette]:
     """Context manager for recording/replaying HTTP interactions.
 
@@ -95,6 +102,8 @@ def use_cassette(
         record_mode: Controls recording behavior.
         match_on: Fields to match on (default: ["method", "uri"]).
         ignore_json_paths: JSON paths to ignore during matching.
+        uri_normalizer: Callable applied to both recorded and incoming URIs
+            before comparison, e.g. to erase region or account differences.
         filter_headers: Headers to filter from cassettes.
         filter_query_parameters: Query params to filter.
         body_scrub_patterns: Body patterns to scrub.
@@ -128,6 +137,7 @@ def use_cassette(
         ignore_hosts=ignore_hosts,
         before_record_request=before_record_request,
         before_record_response=before_record_response,
+        uri_normalizer=uri_normalizer,
     )
     cassette.load()
 
@@ -135,10 +145,12 @@ def use_cassette(
 
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)
+    push_fallback_cassette(cassette)
 
     try:
         yield cassette
     finally:
+        pop_fallback_cassette(cassette)
         current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()

@@ -345,3 +345,71 @@ def test_patch_refcounting() -> None:
     # Now unpatched (refcount=0)
     assert httpx.AsyncHTTPTransport.handle_async_request is original_handle
     assert httpx.AsyncClient.__init__ is original_init
+
+
+def test_thread_without_context_falls_back_to_active_cassette(tmp_path: object) -> None:
+    """Threads with no propagated context see the active cassette.
+
+    Libraries like Temporal and DBOS run workflow code on worker threads
+    created outside the test's context; requests made there must still replay.
+    """
+    dir_path = str(tmp_path)
+    path = _make_cassette(os.path.join(dir_path, "fallback.yaml"), "https://api.example.com/data", {"fallback": "hit"})
+
+    with use_cassette(path, record_mode="none", intercept=["httpx"]):
+
+        def work() -> dict[str, object]:
+            with httpx.Client() as client:
+                resp = client.get("https://api.example.com/data")
+                return resp.json()  # type: ignore[no-any-return]
+
+        # No copy_context: the worker thread has an empty context.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            result = pool.submit(work).result()
+
+    assert result == {"fallback": "hit"}
+
+
+def test_thread_context_cassette_wins_over_fallback(tmp_path: object) -> None:
+    """A cassette set in the thread's own context takes priority over the fallback."""
+    dir_path = str(tmp_path)
+    path_outer = _make_cassette(os.path.join(dir_path, "f-outer.yaml"), "https://api.example.com/data", {"c": "outer"})
+    path_own = _make_cassette(os.path.join(dir_path, "f-own.yaml"), "https://api.example.com/data", {"c": "own"})
+
+    with use_cassette(path_outer, record_mode="none", intercept=["httpx"]):
+
+        def work() -> dict[str, object]:
+            own = Cassette(path_own, record_mode=RecordMode.NONE)
+            own.load()
+            token = current_cassette.set(own)
+            try:
+                with httpx.Client() as client:
+                    return client.get("https://api.example.com/data").json()  # type: ignore[no-any-return]
+            finally:
+                current_cassette.reset(token)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            result = pool.submit(work).result()
+
+    assert result == {"c": "own"}
+
+
+def test_fallback_removed_out_of_order(tmp_path: object) -> None:
+    """Exiting an earlier cassette leaves a later still-active one as the fallback."""
+    from cassetter._state import get_current_cassette, pop_fallback_cassette, push_fallback_cassette
+
+    dir_path = str(tmp_path)
+    path_a = _make_cassette(os.path.join(dir_path, "ooo-a.yaml"), "https://api.example.com/data", {"c": "a"})
+    path_b = _make_cassette(os.path.join(dir_path, "ooo-b.yaml"), "https://api.example.com/data", {"c": "b"})
+
+    cassette_a = Cassette(path_a, record_mode=RecordMode.NONE)
+    cassette_a.load()
+    cassette_b = Cassette(path_b, record_mode=RecordMode.NONE)
+    cassette_b.load()
+
+    push_fallback_cassette(cassette_a)
+    push_fallback_cassette(cassette_b)
+    pop_fallback_cassette(cassette_a)
+    assert get_current_cassette() is cassette_b
+    pop_fallback_cassette(cassette_b)
+    assert get_current_cassette() is None
