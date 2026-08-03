@@ -6,12 +6,13 @@ use std::path::Path;
 
 use pyo3::prelude::*;
 
+use crate::matching::config::MatchConfig;
 use crate::protocol::grpc::GrpcInteraction;
-use crate::protocol::http::HttpInteraction;
+use crate::protocol::http::{HttpInteraction, HttpRequest};
 use crate::protocol::ws::WsInteraction;
 
-#[pyclass(from_py_object)]
-#[derive(Clone, Debug)]
+#[pyclass(skip_from_py_object, module = "cassetter._core")]
+#[derive(Clone, Debug, Default)]
 pub struct Cassette {
     #[pyo3(get, set)]
     pub version: u32,
@@ -21,6 +22,8 @@ pub struct Cassette {
     pub grpc_played: Vec<bool>,
     pub ws_interactions: Vec<WsInteraction>,
     pub ws_played: Vec<bool>,
+    /// Cached method+URI index, invalidated whenever `interactions` changes.
+    index: Option<index::CassetteIndex>,
 }
 
 #[pymethods]
@@ -29,18 +32,66 @@ impl Cassette {
     fn new() -> Self {
         Cassette {
             version: 1,
-            interactions: Vec::new(),
-            played_indices: Vec::new(),
-            grpc_interactions: Vec::new(),
-            grpc_played: Vec::new(),
-            ws_interactions: Vec::new(),
-            ws_played: Vec::new(),
+            ..Cassette::default()
         }
     }
 
     #[getter]
     fn interactions(&self) -> Vec<HttpInteraction> {
         self.interactions.clone()
+    }
+
+    /// Find a matching interaction and mark it played, in one step.
+    ///
+    /// Matching against the interactions already held here avoids marshalling
+    /// the whole cassette across the FFI boundary on every request, and makes
+    /// find-then-mark atomic so two threads cannot consume the same
+    /// interaction.
+    fn take_match(
+        &mut self,
+        request: &HttpRequest,
+        config: &MatchConfig,
+    ) -> Option<(usize, HttpInteraction)> {
+        if config.uses_method_uri_index() && self.index.is_none() {
+            self.index = Some(index::CassetteIndex::build(&self.interactions));
+        }
+        let idx = crate::matching::find_match_index(
+            request,
+            &self.interactions,
+            &self.played_indices,
+            config,
+            config
+                .uses_method_uri_index()
+                .then_some(self.index.as_ref())
+                .flatten(),
+        )?;
+        if let Some(played) = self.played_indices.get_mut(idx) {
+            *played = true;
+        }
+        Some((idx, self.interactions[idx].clone()))
+    }
+
+    /// Find a matching gRPC interaction and mark it played, in one step.
+    fn take_grpc_match(&mut self, method: &str) -> Option<(usize, GrpcInteraction)> {
+        let idx = crate::matching::find_grpc_match_index(
+            method,
+            &self.grpc_interactions,
+            &self.grpc_played,
+        )?;
+        if let Some(played) = self.grpc_played.get_mut(idx) {
+            *played = true;
+        }
+        Some((idx, self.grpc_interactions[idx].clone()))
+    }
+
+    /// Find a matching WebSocket interaction and mark it played, in one step.
+    fn take_ws_match(&mut self, uri: &str) -> Option<(usize, WsInteraction)> {
+        let idx =
+            crate::matching::find_ws_match_index(uri, &self.ws_interactions, &self.ws_played)?;
+        if let Some(played) = self.ws_played.get_mut(idx) {
+            *played = true;
+        }
+        Some((idx, self.ws_interactions[idx].clone()))
     }
 
     #[getter]
@@ -52,11 +103,13 @@ impl Cassette {
     fn set_interactions(&mut self, interactions: Vec<HttpInteraction>) {
         self.played_indices = vec![false; interactions.len()];
         self.interactions = interactions;
+        self.index = None;
     }
 
     fn add_interaction(&mut self, interaction: HttpInteraction) {
         self.interactions.push(interaction);
         self.played_indices.push(false);
+        self.index = None;
     }
 
     fn mark_played(&mut self, index: usize) -> PyResult<()> {
@@ -140,8 +193,37 @@ impl Cassette {
         Ok(())
     }
 
+    /// Load a cassette from disk.
+    ///
+    /// The GIL is released for the whole parse: a multi-megabyte cassette
+    /// would otherwise freeze every other thread in the interpreter.
     #[staticmethod]
-    fn load(path: &str) -> PyResult<Cassette> {
+    fn load(py: Python<'_>, path: &str) -> PyResult<Cassette> {
+        py.detach(|| Cassette::load_impl(path))
+    }
+
+    /// Save the cassette to disk, releasing the GIL for serialization and I/O.
+    fn save(&self, py: Python<'_>, path: &str) -> PyResult<()> {
+        py.detach(|| self.save_impl(path))
+    }
+
+    fn __len__(&self) -> usize {
+        self.interactions.len() + self.grpc_interactions.len() + self.ws_interactions.len()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Cassette(version={}, http={}, grpc={}, ws={})",
+            self.version,
+            self.interactions.len(),
+            self.grpc_interactions.len(),
+            self.ws_interactions.len(),
+        )
+    }
+}
+
+impl Cassette {
+    fn load_impl(path: &str) -> PyResult<Cassette> {
         let p = Path::new(path);
         if !p.exists() {
             return Err(pyo3::exceptions::PyFileNotFoundError::new_err(format!(
@@ -170,7 +252,7 @@ impl Cassette {
         format::from_raw(raw, &binaries)
     }
 
-    fn save(&self, path: &str) -> PyResult<()> {
+    fn save_impl(&self, path: &str) -> PyResult<()> {
         // Ensure parent directory exists
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
@@ -216,20 +298,6 @@ impl Cassette {
         std::fs::rename(&tmp, p)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("rename error: {e}")))?;
         Ok(())
-    }
-
-    fn __len__(&self) -> usize {
-        self.interactions.len() + self.grpc_interactions.len() + self.ws_interactions.len()
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "Cassette(version={}, http={}, grpc={}, ws={})",
-            self.version,
-            self.interactions.len(),
-            self.grpc_interactions.len(),
-            self.ws_interactions.len(),
-        )
     }
 }
 

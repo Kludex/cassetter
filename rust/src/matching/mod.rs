@@ -9,9 +9,63 @@ use crate::protocol::http::{HttpInteraction, HttpRequest};
 use crate::protocol::ws::WsInteraction;
 use config::MatchConfig;
 
+/// Find the index of a matching interaction.
+///
+/// Prefers unplayed interactions; falls back to already-played ones. `index`
+/// is an optional prebuilt method+URI index; when absent every interaction is
+/// a candidate.
+pub(crate) fn find_match_index(
+    request: &HttpRequest,
+    interactions: &[HttpInteraction],
+    played: &[bool],
+    config: &MatchConfig,
+    index: Option<&CassetteIndex>,
+) -> Option<usize> {
+    match index {
+        Some(index) => scan(
+            index.lookup(&request.method, &request.uri).iter().copied(),
+            request,
+            interactions,
+            played,
+            config,
+        ),
+        None => scan(0..interactions.len(), request, interactions, played, config),
+    }
+}
+
+fn scan<I: Iterator<Item = usize>>(
+    candidates: I,
+    request: &HttpRequest,
+    interactions: &[HttpInteraction],
+    played: &[bool],
+    config: &MatchConfig,
+) -> Option<usize> {
+    let mut fallback = None;
+    for idx in candidates {
+        let Some(interaction) = interactions.get(idx) else {
+            continue;
+        };
+        if !matches_all(request, &interaction.request, config) {
+            continue;
+        }
+        if !played.get(idx).copied().unwrap_or(false) {
+            return Some(idx);
+        }
+        if fallback.is_none() {
+            fallback = Some(idx);
+        }
+    }
+    fallback
+}
+
 /// Find a matching interaction for the given request.
+///
 /// Prefers unplayed interactions; falls back to already-played ones.
 /// Returns (index, interaction) if found.
+///
+/// Prefer [`crate::cassette::Cassette::take_match`], which matches against the
+/// interactions already held in Rust instead of marshalling them across the
+/// FFI boundary on every call.
 #[pyfunction]
 pub fn find_match(
     request: &HttpRequest,
@@ -19,36 +73,12 @@ pub fn find_match(
     played: Vec<bool>,
     config: &MatchConfig,
 ) -> Option<(usize, HttpInteraction)> {
-    let match_fields = &config.match_on;
-
-    // Use index for fast method+URI lookup if matching on those fields
-    let use_index =
-        match_fields.iter().any(|f| f == "method") && match_fields.iter().any(|f| f == "uri");
-
-    let candidates: Vec<usize> = if use_index {
-        let index = CassetteIndex::build(&interactions);
-        index.lookup(&request.method, &request.uri)
-    } else {
-        (0..interactions.len()).collect()
-    };
-
-    // First pass: prefer unplayed interactions
-    let mut fallback: Option<(usize, HttpInteraction)> = None;
-    for &idx in &candidates {
-        let interaction = &interactions[idx];
-        if matches_all(request, &interaction.request, config) {
-            let is_played = idx < played.len() && played[idx];
-            if !is_played {
-                return Some((idx, interaction.clone()));
-            }
-            if fallback.is_none() {
-                fallback = Some((idx, interaction.clone()));
-            }
-        }
-    }
-
-    // Fall back to first matching played interaction
-    fallback
+    let index = config
+        .uses_method_uri_index()
+        .then(|| CassetteIndex::build(&interactions));
+    let idx = find_match_index(request, &interactions, &played, config, index.as_ref())?;
+    let interaction = interactions[idx].clone();
+    Some((idx, interaction))
 }
 
 /// Find a matching gRPC interaction by method string.
@@ -59,16 +89,25 @@ pub fn find_grpc_match(
     interactions: Vec<GrpcInteraction>,
     played: Vec<bool>,
 ) -> Option<(usize, GrpcInteraction)> {
-    let mut fallback: Option<(usize, GrpcInteraction)> = None;
+    let idx = find_grpc_match_index(method, &interactions, &played)?;
+    Some((idx, interactions[idx].clone()))
+}
+
+pub(crate) fn find_grpc_match_index(
+    method: &str,
+    interactions: &[GrpcInteraction],
+    played: &[bool],
+) -> Option<usize> {
+    let mut fallback = None;
     for (idx, interaction) in interactions.iter().enumerate() {
-        if interaction.request.method == method {
-            let is_played = idx < played.len() && played[idx];
-            if !is_played {
-                return Some((idx, interaction.clone()));
-            }
-            if fallback.is_none() {
-                fallback = Some((idx, interaction.clone()));
-            }
+        if interaction.request.method != method {
+            continue;
+        }
+        if !played.get(idx).copied().unwrap_or(false) {
+            return Some(idx);
+        }
+        if fallback.is_none() {
+            fallback = Some(idx);
         }
     }
     fallback
@@ -82,16 +121,25 @@ pub fn find_ws_match(
     interactions: Vec<WsInteraction>,
     played: Vec<bool>,
 ) -> Option<(usize, WsInteraction)> {
-    let mut fallback: Option<(usize, WsInteraction)> = None;
+    let idx = find_ws_match_index(uri, &interactions, &played)?;
+    Some((idx, interactions[idx].clone()))
+}
+
+pub(crate) fn find_ws_match_index(
+    uri: &str,
+    interactions: &[WsInteraction],
+    played: &[bool],
+) -> Option<usize> {
+    let mut fallback = None;
     for (idx, interaction) in interactions.iter().enumerate() {
-        if interaction.uri == uri {
-            let is_played = idx < played.len() && played[idx];
-            if !is_played {
-                return Some((idx, interaction.clone()));
-            }
-            if fallback.is_none() {
-                fallback = Some((idx, interaction.clone()));
-            }
+        if interaction.uri != uri {
+            continue;
+        }
+        if !played.get(idx).copied().unwrap_or(false) {
+            return Some(idx);
+        }
+        if fallback.is_none() {
+            fallback = Some(idx);
         }
     }
     fallback
@@ -105,11 +153,78 @@ fn matches_all(incoming: &HttpRequest, recorded: &HttpRequest, config: &MatchCon
             "headers" => matchers::match_headers(incoming, recorded),
             "body" => matchers::match_body(incoming, recorded),
             "json_body" => matchers::match_json_body(incoming, recorded, &config.ignore_json_paths),
-            _ => true,
+            // Unreachable via the validated constructor and setter. Failing
+            // closed keeps an unknown matcher from silently matching every
+            // request and serving the wrong recorded response.
+            _ => false,
         };
         if !matched {
             return false;
         }
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::http::{Body, HttpResponse};
+
+    fn interaction(method: &str, uri: &str) -> HttpInteraction {
+        HttpInteraction {
+            request: HttpRequest {
+                method: method.to_string(),
+                uri: uri.to_string(),
+                headers: Default::default(),
+                body: Body::none(),
+            },
+            response: HttpResponse {
+                status: 200,
+                headers: Default::default(),
+                body: Body::none(),
+            },
+            recorded_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    fn request(method: &str, uri: &str) -> HttpRequest {
+        HttpRequest {
+            method: method.to_string(),
+            uri: uri.to_string(),
+            headers: Default::default(),
+            body: Body::none(),
+        }
+    }
+
+    #[test]
+    fn test_unknown_matcher_fails_closed() {
+        let config = MatchConfig {
+            match_on: vec!["bogus".to_string()],
+            ignore_json_paths: Vec::new(),
+        };
+        let interactions = vec![interaction("GET", "/a")];
+        assert!(find_match(
+            &request("DELETE", "/nowhere"),
+            interactions,
+            vec![false],
+            &config
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn test_method_uri_match_still_works() {
+        let config = MatchConfig {
+            match_on: vec!["method".to_string(), "uri".to_string()],
+            ignore_json_paths: Vec::new(),
+        };
+        let interactions = vec![interaction("GET", "/a"), interaction("POST", "/b")];
+        let hit = find_match(
+            &request("POST", "/b"),
+            interactions,
+            vec![false, false],
+            &config,
+        );
+        assert_eq!(hit.map(|(idx, _)| idx), Some(1));
+    }
 }

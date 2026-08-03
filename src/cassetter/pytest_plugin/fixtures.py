@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, cast
 
 import pytest
 
@@ -13,7 +13,17 @@ from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
 from cassetter.context import resolve_interceptors
 from cassetter.intercept._base import InterceptorProtocol
+from cassetter.pytest_plugin.orphans import loaded_cassettes
 from cassetter.recording import RecordMode
+
+
+class SecurityKwargs(TypedDict, total=False):
+    """Keyword arguments forwarded to `SecurityConfig`."""
+
+    filter_headers: list[str]
+    filter_query_parameters: list[str]
+    body_scrub_patterns: list[str]
+    replacement: str
 
 
 @pytest.fixture(scope="module")
@@ -35,8 +45,8 @@ def vcr_cassette_dir(request: pytest.FixtureRequest) -> str:
 
 def _resolve_cassette(
     node_name: str,
-    marker_args: tuple[Any, ...],
-    marker_kwargs: dict[str, Any],
+    marker_args: tuple[str, ...],
+    marker_kwargs: CassetteConfig,
     vcr_config: CassetteConfig,
     cli_record_mode: str | None,
     test_fspath: str,
@@ -83,7 +93,7 @@ def _resolve_cassette(
         ignore_json_paths=vcr_config.get("ignore_json_paths"),
     )
 
-    security_kwargs: dict[str, Any] = {}
+    security_kwargs: SecurityKwargs = {}
     if "filter_headers" in vcr_config:
         security_kwargs["filter_headers"] = vcr_config["filter_headers"]
     if "filter_query_parameters" in vcr_config:
@@ -140,7 +150,7 @@ def cassette(
     cassette, interceptor_classes = _resolve_cassette(
         node_name=node_name,
         marker_args=marker.args,
-        marker_kwargs=dict(marker.kwargs),
+        marker_kwargs=cast(CassetteConfig, marker.kwargs),
         vcr_config=vcr_config,
         cli_record_mode=cli_record_mode,
         test_fspath=str(request.path),
@@ -150,9 +160,7 @@ def cassette(
     )
 
     # Track loaded cassette paths for orphan detection
-    _loaded_cassettes = getattr(request.config, "_vcr_loaded_cassettes", None)
-    if _loaded_cassettes is not None:
-        _loaded_cassettes.add(os.path.abspath(cassette.path))
+    loaded_cassettes(request.config).add(os.path.abspath(cassette.path))
 
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)

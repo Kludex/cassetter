@@ -23,9 +23,6 @@ from cassetter._core import (
     SecurityConfig,
     WsFrame,
     WsInteraction,
-    find_grpc_match,
-    find_match,
-    find_ws_match,
     process_body,
     scrub_grpc_interaction,
     scrub_interaction,
@@ -38,6 +35,10 @@ from cassetter.recording import RecordMode
 
 class CassetteNotFoundError(Exception):
     """Raised when a cassette file is not found and record mode doesn't allow recording."""
+
+
+class CassetteLoadError(Exception):
+    """Raised when a cassette file exists but cannot be parsed."""
 
 
 class CassetteExpiredWarning(UserWarning):
@@ -211,7 +212,10 @@ class Cassette:
                 self._dirty = True
             return
 
-        self._inner = _RustCassette.load(self._path)
+        try:
+            self._inner = _RustCassette.load(self._path)
+        except ValueError as exc:
+            raise CassetteLoadError(f"could not parse cassette {self._path}: {exc}") from exc
         self._once_replay_only = True
         self._play_counter = Counter()
         self._check_expiry()
@@ -298,13 +302,12 @@ class Cassette:
         # api_key=[FILTERED] would otherwise never match the real query string.
         probe = HttpInteraction(request, HttpResponse(0), "")
         request = scrub_interaction(probe, self._security_config).request
-        result = find_match(request, self._inner.interactions, self._inner.played_indices, self._match_config)
+        result = self._inner.take_match(request, self._match_config)
 
         if result is None:
             raise NoMatchError(f"no matching interaction for {method} {uri}")
 
         idx, interaction = result
-        self._inner.mark_played(idx)
         self._play_counter[idx] += 1
         return interaction.response
 
@@ -366,12 +369,11 @@ class Cassette:
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = find_grpc_match(method, self._inner.grpc_interactions, self._inner.grpc_played)
+        result = self._inner.take_grpc_match(method)
         if result is None:
             raise NoMatchError(f"no matching gRPC interaction for {method}")
 
-        idx, interaction = result
-        self._inner.mark_grpc_played(idx)
+        _, interaction = result
         return interaction.response
 
     def record_grpc(
@@ -408,12 +410,11 @@ class Cassette:
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = find_ws_match(uri, self._inner.ws_interactions, self._inner.ws_played)
+        result = self._inner.take_ws_match(uri)
         if result is None:
             raise NoMatchError(f"no matching WebSocket interaction for {uri}")
 
-        idx, interaction = result
-        self._inner.mark_ws_played(idx)
+        _, interaction = result
         return interaction
 
     def record_ws(

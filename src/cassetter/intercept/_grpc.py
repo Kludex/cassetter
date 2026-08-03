@@ -71,7 +71,8 @@ class VCRUnaryUnaryCallable:
         try:
             grpc_resp = cassette.play_grpc(self._method)
             raise_for_status(grpc_resp)
-            content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
+            payload = grpc_resp.body.content
+            content = payload if isinstance(payload, bytes) else b""
             return self._response_deserializer(content)
         except NoMatchError:
             if not cassette.can_record:
@@ -243,7 +244,8 @@ class VCRStreamUnaryCallable:
         try:
             grpc_resp = cassette.play_grpc(self._method)
             raise_for_status(grpc_resp)
-            content = grpc_resp.body.content if isinstance(grpc_resp.body.content, bytes) else b""
+            payload = grpc_resp.body.content
+            content = payload if isinstance(payload, bytes) else b""
             return self._response_deserializer(content)
         except NoMatchError:
             if not cassette.can_record:
@@ -494,8 +496,8 @@ def metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
 
 async def replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIterator[Any]:
     raise_for_status(grpc_resp)
-    body = grpc_resp.body
-    data = body.content if isinstance(body.content, bytes) else b""
+    payload = grpc_resp.body.content
+    data = payload if isinstance(payload, bytes) else b""
     chunks = decode_chunks(data)
     if chunks:
         for chunk in chunks:

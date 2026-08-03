@@ -6,9 +6,9 @@ Run locally: uv run pytest benchmarks/test_bench.py --codspeed
 from __future__ import annotations
 
 import tempfile
-from typing import Any
 
 import pytest
+from pytest_codspeed import BenchmarkFixture
 
 from cassetter._core import (
     Body,
@@ -18,9 +18,10 @@ from cassetter._core import (
     HttpResponse,
     MatchConfig,
     SecurityConfig,
-    find_match,
     scrub_interaction,
 )
+from cassetter.cassette import Cassette as PyCassette
+from cassetter.recording import RecordMode
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -160,35 +161,35 @@ def toml_file_1000(cassette_1000: Cassette) -> str:
 
 
 @pytest.mark.benchmark
-def test_load_yaml_100(yaml_file_100: str, benchmark: Any) -> None:
+def test_load_yaml_100(yaml_file_100: str, benchmark: BenchmarkFixture) -> None:
     @benchmark
     def _() -> None:
         Cassette.load(yaml_file_100)
 
 
 @pytest.mark.benchmark
-def test_load_yaml_1000(yaml_file_1000: str, benchmark: Any) -> None:
+def test_load_yaml_1000(yaml_file_1000: str, benchmark: BenchmarkFixture) -> None:
     @benchmark
     def _() -> None:
         Cassette.load(yaml_file_1000)
 
 
 @pytest.mark.benchmark
-def test_load_yaml_llm_bodies(llm_yaml_file: str, benchmark: Any) -> None:
+def test_load_yaml_llm_bodies(llm_yaml_file: str, benchmark: BenchmarkFixture) -> None:
     @benchmark
     def _() -> None:
         Cassette.load(llm_yaml_file)
 
 
 @pytest.mark.benchmark
-def test_load_toml_100(toml_file_100: str, benchmark: Any) -> None:
+def test_load_toml_100(toml_file_100: str, benchmark: BenchmarkFixture) -> None:
     @benchmark
     def _() -> None:
         Cassette.load(toml_file_100)
 
 
 @pytest.mark.benchmark
-def test_load_toml_1000(toml_file_1000: str, benchmark: Any) -> None:
+def test_load_toml_1000(toml_file_1000: str, benchmark: BenchmarkFixture) -> None:
     @benchmark
     def _() -> None:
         Cassette.load(toml_file_1000)
@@ -200,7 +201,7 @@ def test_load_toml_1000(toml_file_1000: str, benchmark: Any) -> None:
 
 
 @pytest.mark.benchmark
-def test_save_yaml_100(cassette_100: Cassette, benchmark: Any) -> None:
+def test_save_yaml_100(cassette_100: Cassette, benchmark: BenchmarkFixture) -> None:
     path = tempfile.mktemp(suffix=".yaml")
 
     @benchmark
@@ -209,7 +210,7 @@ def test_save_yaml_100(cassette_100: Cassette, benchmark: Any) -> None:
 
 
 @pytest.mark.benchmark
-def test_save_yaml_1000(cassette_1000: Cassette, benchmark: Any) -> None:
+def test_save_yaml_1000(cassette_1000: Cassette, benchmark: BenchmarkFixture) -> None:
     path = tempfile.mktemp(suffix=".yaml")
 
     @benchmark
@@ -218,7 +219,7 @@ def test_save_yaml_1000(cassette_1000: Cassette, benchmark: Any) -> None:
 
 
 @pytest.mark.benchmark
-def test_save_toml_100(cassette_100: Cassette, benchmark: Any) -> None:
+def test_save_toml_100(cassette_100: Cassette, benchmark: BenchmarkFixture) -> None:
     path = tempfile.mktemp(suffix=".toml")
 
     @benchmark
@@ -227,7 +228,7 @@ def test_save_toml_100(cassette_100: Cassette, benchmark: Any) -> None:
 
 
 @pytest.mark.benchmark
-def test_save_toml_1000(cassette_1000: Cassette, benchmark: Any) -> None:
+def test_save_toml_1000(cassette_1000: Cassette, benchmark: BenchmarkFixture) -> None:
     path = tempfile.mktemp(suffix=".toml")
 
     @benchmark
@@ -241,42 +242,33 @@ def test_save_toml_1000(cassette_1000: Cassette, benchmark: Any) -> None:
 
 
 @pytest.mark.benchmark
-def test_match_first_100(cassette_100: Cassette, benchmark: Any) -> None:
-    interactions = cassette_100.interactions
-    played = [False] * len(interactions)
+def test_match_first_100(cassette_100: Cassette, benchmark: BenchmarkFixture) -> None:
     config = MatchConfig()
     req = HttpRequest("POST", "https://api.example.com/v1/items/0")
 
     @benchmark
     def _() -> None:
-        find_match(req, interactions, played, config)
+        cassette_100.take_match(req, config)
 
 
 @pytest.mark.benchmark
-def test_match_last_1000(cassette_1000: Cassette, benchmark: Any) -> None:
-    interactions = cassette_1000.interactions
-    played = [False] * len(interactions)
+def test_match_last_1000(cassette_1000: Cassette, benchmark: BenchmarkFixture) -> None:
     config = MatchConfig()
     req = HttpRequest("POST", "https://api.example.com/v1/items/999")
 
     @benchmark
     def _() -> None:
-        find_match(req, interactions, played, config)
+        cassette_1000.take_match(req, config)
 
 
 @pytest.mark.benchmark
-def test_match_miss_1000(cassette_1000: Cassette, benchmark: Any) -> None:
-    interactions = cassette_1000.interactions
-    played = [False] * len(interactions)
+def test_match_miss_1000(cassette_1000: Cassette, benchmark: BenchmarkFixture) -> None:
     config = MatchConfig()
     req = HttpRequest("POST", "https://api.example.com/v1/items/99999")
 
     @benchmark
     def _() -> None:
-        try:
-            find_match(req, interactions, played, config)
-        except Exception:
-            pass
+        cassette_1000.take_match(req, config)
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +277,7 @@ def test_match_miss_1000(cassette_1000: Cassette, benchmark: Any) -> None:
 
 
 @pytest.mark.benchmark
-def test_scrub_interaction(benchmark: Any) -> None:
+def test_scrub_interaction(benchmark: BenchmarkFixture) -> None:
     interaction = HttpInteraction(
         request=HttpRequest(
             "POST",
@@ -300,6 +292,73 @@ def test_scrub_interaction(benchmark: Any) -> None:
         ),
         recorded_at="2026-01-01T00:00:00Z",
     )
+    config = SecurityConfig()
+
+    @benchmark
+    def _() -> None:
+        scrub_interaction(interaction, config)
+
+
+# ---------------------------------------------------------------------------
+# Full replay path
+# ---------------------------------------------------------------------------
+#
+# This is the function every interceptor calls, so it is the number a test
+# suite actually feels. Benchmarking the raw matcher alone hid the cost of
+# everything around it.
+
+
+@pytest.fixture
+def replay_cassette_100(yaml_file_100: str) -> PyCassette:
+    cassette = PyCassette(yaml_file_100, record_mode=RecordMode.NONE)
+    cassette.load()
+    return cassette
+
+
+@pytest.mark.benchmark
+def test_replay_via_play_100(replay_cassette_100: PyCassette, benchmark: BenchmarkFixture) -> None:
+    headers = {"accept": ["application/json"]}
+
+    @benchmark
+    def _() -> None:
+        replay_cassette_100.play("POST", "https://api.example.com/v1/items/99", headers, None)
+
+
+# ---------------------------------------------------------------------------
+# Text and SSE scrubbing
+# ---------------------------------------------------------------------------
+#
+# The JSON-body benchmark above never exercises the text path, which is where
+# streaming responses land.
+
+
+def _text_interaction(body: str) -> HttpInteraction:
+    return HttpInteraction(
+        request=HttpRequest(
+            "POST",
+            "https://api.example.com/v1/chat",
+            {"content-type": ["application/x-www-form-urlencoded"]},
+            Body("text", "grant_type=password&password=hunter2&client_id=abc"),
+        ),
+        response=HttpResponse(200, {"content-type": ["text/event-stream"]}, Body("text", body)),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+
+
+@pytest.mark.benchmark
+def test_scrub_text_bodies(benchmark: BenchmarkFixture) -> None:
+    interaction = _text_interaction('{"access_token": "tok_abc", "result": "ok"}')
+    config = SecurityConfig()
+
+    @benchmark
+    def _() -> None:
+        scrub_interaction(interaction, config)
+
+
+@pytest.mark.benchmark
+def test_scrub_sse_stream(benchmark: BenchmarkFixture) -> None:
+    chunks = "".join(f'data: {{"i": {i}, "access_token": "tok_{i}"}}\n\n' for i in range(50))
+    interaction = _text_interaction(chunks + "data: [DONE]\n\n")
     config = SecurityConfig()
 
     @benchmark

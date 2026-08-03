@@ -48,7 +48,7 @@ def test_requests_interceptor_record(tmp_path: object, monkeypatch: object) -> N
 
     fake_response = requests.Response()
     fake_response.status_code = 200
-    fake_response._content = b'{"recorded": true}'  # type: ignore[attr-defined]
+    fake_response._content = b'{"recorded": true}'
     fake_response.headers["content-type"] = "application/json"
 
     mp = pytest.MonkeyPatch()

@@ -21,7 +21,7 @@ jobs:
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy src/
+      - run: uv run mypy
 
   rust-test:
     runs-on: ubuntu-latest
@@ -37,6 +37,14 @@ jobs:
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -50,6 +58,12 @@ jobs:
             python-version: "3.13"
           - os: windows-latest
             python-version: "3.13"
+          # The module declares itself free-threading safe (gil_used = false),
+          # so the free-threaded build has to actually be exercised.
+          - os: ubuntu-latest
+            python-version: "3.13t"
+          - os: ubuntu-latest
+            python-version: "3.14t"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -65,13 +79,13 @@ jobs:
       # entries verify platform compatibility, and OS-conditional tests (e.g.
       # POSIX file-permission tests skipped on Windows) would otherwise leave
       # their bodies uncovered there.
-      - if: matrix.os == 'ubuntu-latest'
+      - if: matrix.os == 'ubuntu-latest' && !endsWith(matrix.python-version, 't')
         run: uv run coverage report
 
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:
     if: always()
-    needs: [lint, rust-test, test]
+    needs: [lint, rust-test, audit, test]
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed

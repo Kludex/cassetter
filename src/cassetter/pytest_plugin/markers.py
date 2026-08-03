@@ -1,19 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+import pytest
+
+from cassetter.pytest_plugin.orphans import loaded_cassettes
 
 
-def configure(config: Any) -> None:
-    """Register the @pytest.mark.vcr marker."""
+def configure(config: pytest.Config) -> None:
+    """Register the @pytest.mark.vcr marker and initialize cassette tracking."""
     config.addinivalue_line(
         "markers",
         "vcr(cassette_name, **kwargs): Mark test to use VCR cassette recording/replay.",
     )
-
-    # Initialize cassette tracking set
-    try:
-        config.option
-    except AttributeError:
-        return
-
-    config._vcr_loaded_cassettes = set()
+    loaded_cassettes(config)

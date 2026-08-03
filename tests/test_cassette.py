@@ -26,6 +26,7 @@ from cassetter.cassette import (
     Cassette,
     CassetteExpiredError,
     CassetteExpiredWarning,
+    CassetteLoadError,
     NoMatchError,
     _parse_duration,
 )
@@ -750,7 +751,7 @@ def test_vcr_format_bare_mapping_request_body(tmp_path: object) -> None:
 
 def test_match_config_rejects_unknown_matcher() -> None:
     with pytest.raises(ValueError, match="unknown matcher"):
-        MatchConfig(match_on=["method", "url"])
+        MatchConfig(match_on=["method", "url"])  # type: ignore[list-item]
 
 
 def test_toml_save_refuses_grpc_interactions(tmp_path: object) -> None:
@@ -969,3 +970,14 @@ def test_save_preserves_file_permissions(tmp_path: object) -> None:
 
     mode = stat.S_IMODE(os.stat(path).st_mode)
     assert mode == 0o600
+
+
+def test_corrupt_cassette_raises_cassette_load_error(tmp_path: object) -> None:
+    """A corrupt cassette surfaces as a library error, not a bare Rust ValueError."""
+    path = os.path.join(str(tmp_path), "corrupt.yaml")
+    with open(path, "w") as f:
+        f.write("interactions: [{this is: not, valid: cassette")
+
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    with pytest.raises(CassetteLoadError, match="could not parse cassette"):
+        cassette.load()

@@ -136,11 +136,29 @@ fn line_indent(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
 
+/// Whether a line opens a YAML block scalar (`|` or `>`, with optional
+/// indentation and chomping indicators such as `|2-`).
+///
+/// The indicator must sit in value position - preceded by whitespace - so a
+/// plain scalar that merely ends in `>` is not mistaken for one.
+fn opens_block_scalar(trimmed: &str) -> bool {
+    let rest = trimmed.trim_end_matches(['-', '+']);
+    let rest = rest.trim_end_matches(|c: char| c.is_ascii_digit());
+    match rest.strip_suffix(['|', '>']) {
+        Some(head) => head.is_empty() || head.ends_with([' ', '\t']),
+        None => false,
+    }
+}
+
 /// Extract `!!binary` block scalars from YAML text.
 ///
 /// Returns the rewritten text (each block replaced by a sentinel scalar) and
 /// the decoded payloads. Only the block form PyYAML emits (`... !!binary |`
-/// at end of line) is rewritten, which cannot appear inside a quoted scalar.
+/// at end of line) is rewritten.
+///
+/// Any other block scalar is copied through verbatim without inspecting its
+/// content, because a recorded body can legitimately contain a line ending in
+/// `!!binary |` and scanning into it would replace that line with a sentinel.
 pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
     if !content.contains("!!binary") {
         return (content.to_string(), Vec::new());
@@ -190,6 +208,20 @@ pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
                     continue;
                 }
             }
+        }
+        if opens_block_scalar(trimmed) {
+            // Copy the whole block through untouched: its content is body
+            // data, not YAML structure, so it must never be rewritten.
+            let node_indent = line_indent(line);
+            out.push(line.to_string());
+            i += 1;
+            while i < lines.len()
+                && (lines[i].trim().is_empty() || line_indent(lines[i]) > node_indent)
+            {
+                out.push(lines[i].to_string());
+                i += 1;
+            }
+            continue;
         }
         out.push(line.to_string());
         i += 1;
@@ -638,6 +670,7 @@ pub fn from_raw(raw: RawCassette, binaries: &[Vec<u8>]) -> pyo3::PyResult<Casset
         grpc_played,
         ws_interactions,
         ws_played,
+        ..Cassette::default()
     })
 }
 
@@ -1023,10 +1056,7 @@ interactions:
                 recorded_at: String::new(),
             }],
             played_indices: vec![false],
-            grpc_interactions: vec![],
-            grpc_played: vec![],
-            ws_interactions: vec![],
-            ws_played: vec![],
+            ..Cassette::default()
         };
         cassette.played_indices = vec![false];
         let yaml = serde_saphyr::to_string(&to_raw(&cassette)).unwrap();
@@ -1061,10 +1091,7 @@ interactions:
                 recorded_at: String::new(),
             }],
             played_indices: vec![false],
-            grpc_interactions: vec![],
-            grpc_played: vec![],
-            ws_interactions: vec![],
-            ws_played: vec![],
+            ..Cassette::default()
         };
         cassette.played_indices = vec![false];
         let yaml = serde_saphyr::to_string(&to_raw(&cassette)).unwrap();

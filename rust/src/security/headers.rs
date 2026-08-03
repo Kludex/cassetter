@@ -9,40 +9,78 @@ pub fn filter_headers(headers: &mut HashMap<String, Vec<String>>, filtered: &[St
 /// Replace filtered query parameter values in a URI.
 /// Returns None if no changes were made.
 ///
-/// Operates on the raw query string to preserve the original encoding of
+/// Both the query string and the fragment are scrubbed: the OAuth implicit
+/// flow returns `access_token` in the fragment, so scrubbing only the query
+/// would record the credential verbatim.
+///
+/// Operates on the raw segments to preserve the original encoding of
 /// unfiltered parameters (e.g. commas stay as `,` instead of `%2C`).
 pub fn filter_query_params(uri: &str, filtered: &[String], replacement: &str) -> Option<String> {
-    let query_start = uri.find('?')?;
-    let raw_query = &uri[query_start + 1..];
-    if raw_query.is_empty() {
+    let fragment_start = uri.find('#');
+    let query_start = match fragment_start {
+        Some(hash) => uri[..hash].find('?'),
+        None => uri.find('?'),
+    };
+    if query_start.is_none() && fragment_start.is_none() {
         return None;
     }
 
     let filtered_lower: Vec<String> = filtered.iter().map(|p| p.to_lowercase()).collect();
-
     let mut changed = false;
-    let new_query: String = raw_query
-        .split('&')
+
+    let base_end = query_start.or(fragment_start).unwrap_or(uri.len());
+    let mut out = String::with_capacity(uri.len());
+    out.push_str(&uri[..base_end]);
+
+    if let Some(start) = query_start {
+        let end = fragment_start.unwrap_or(uri.len());
+        out.push('?');
+        out.push_str(&filter_pairs(
+            &uri[start + 1..end],
+            &filtered_lower,
+            replacement,
+            &mut changed,
+        ));
+    }
+
+    if let Some(start) = fragment_start {
+        out.push('#');
+        out.push_str(&filter_pairs(
+            &uri[start + 1..],
+            &filtered_lower,
+            replacement,
+            &mut changed,
+        ));
+    }
+
+    changed.then_some(out)
+}
+
+/// Scrub an `a=1&b=2` segment, leaving anything that is not a pair untouched.
+fn filter_pairs(
+    raw: &str,
+    filtered_lower: &[String],
+    replacement: &str,
+    changed: &mut bool,
+) -> String {
+    if raw.is_empty() {
+        return String::new();
+    }
+    raw.split('&')
         .map(|pair| {
             if let Some(eq) = pair.find('=') {
                 let key = &pair[..eq];
                 // Percent-decode the key for case-insensitive comparison
                 let decoded_key = percent_decode(key);
                 if filtered_lower.contains(&decoded_key.to_lowercase()) {
-                    changed = true;
+                    *changed = true;
                     return format!("{key}={replacement}");
                 }
             }
             pair.to_string()
         })
         .collect::<Vec<_>>()
-        .join("&");
-
-    if !changed {
-        return None;
-    }
-
-    Some(format!("{}?{}", &uri[..query_start], new_query))
+        .join("&")
 }
 
 /// Decode percent-encoded bytes in a query key/value.
@@ -120,5 +158,43 @@ mod tests {
         let uri = "https://api.example.com/v1/data";
         let result = filter_query_params(uri, &["api_key".to_string()], "[FILTERED]");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_filter_fragment_params() {
+        // OAuth implicit flow returns the token in the fragment.
+        let uri = "https://app.example.com/callback#access_token=sk-live-DEADBEEF&state=xyz";
+        let result = filter_query_params(uri, &["access_token".to_string()], "[FILTERED]");
+        let new_uri = result.expect("fragment should be scrubbed");
+        assert!(!new_uri.contains("sk-live-DEADBEEF"), "{new_uri}");
+        assert!(new_uri.contains("state=xyz"), "{new_uri}");
+    }
+
+    #[test]
+    fn test_filter_query_and_fragment_together() {
+        let uri = "https://app.example.com/cb?api_key=secret&keep=1#access_token=tok&frag=2";
+        let result = filter_query_params(
+            uri,
+            &["api_key".to_string(), "access_token".to_string()],
+            "[FILTERED]",
+        );
+        let new_uri = result.expect("both segments should be scrubbed");
+        assert!(!new_uri.contains("secret"), "{new_uri}");
+        assert!(!new_uri.contains("=tok"), "{new_uri}");
+        assert!(
+            new_uri.contains("keep=1") && new_uri.contains("frag=2"),
+            "{new_uri}"
+        );
+    }
+
+    #[test]
+    fn test_plain_fragment_is_untouched() {
+        let uri = "https://example.com/docs?api_key=secret#section-3";
+        let new_uri =
+            filter_query_params(uri, &["api_key".to_string()], "[FILTERED]").expect("changed");
+        assert_eq!(
+            new_uri,
+            "https://example.com/docs?api_key=[FILTERED]#section-3"
+        );
     }
 }

@@ -48,7 +48,20 @@ from cassetter import Cassette
 async def test_with_cassette(cassette: Cassette):
     ...
     assert len(cassette.interactions) == 1
+    assert cassette.interactions[0].request.method == "GET"
 ```
+
+Recorded objects (`HttpRequest`, `HttpResponse`, `HttpInteraction`, `Body`, and the gRPC and WebSocket equivalents) are immutable value objects: they compare by value, and attribute assignment raises `AttributeError`. Use `replace()` to derive a modified copy:
+
+```python
+recorded = cassette.interactions[0].request
+probe = recorded.replace(uri="https://api.example.com/other")
+
+assert probe != recorded
+assert probe.method == recorded.method
+```
+
+To rewrite what gets recorded, use the `before_record_request` and `before_record_response` hooks, which receive mutable `RawRequest` and `RawResponse` dataclasses.
 
 ### With the context manager
 
@@ -445,15 +458,22 @@ pytest --vcr-check-orphans=tests/cassettes/
 
 ## Performance
 
-Cassetter's Rust core is faster than vcrpy (compared against vcrpy with libyaml, its fastest configuration) - roughly 2-3x on load and 7-12x on save:
+Cassetter's Rust core is faster than vcrpy (compared against vcrpy with libyaml, its fastest configuration). Matching is the number a test suite actually feels - it runs once per request, while load and save run once per test:
 
 ```
-  1000 interactions
                     cassetter    vcrpy        speedup
-  load              35 ms        96 ms        2.7x
-  match             1.3 ms       1.85 ms      1.4x
-  save              6.5 ms       77 ms        11.8x
+  10 interactions
+  load              205 us       471 us       2.3x
+  match             0.9 us       12.6 us      13.7x
+  save              252 us       456 us       1.8x
+
+  1000 interactions
+  load              18.1 ms      52.8 ms      2.9x
+  match             0.8 us       1.22 ms      1573.7x
+  save              6.5 ms       42.5 ms      6.5x
 ```
+
+Match cost is constant in cassette size: the method+URI index is built once and cached on the cassette, and matching runs against the interactions Rust already owns rather than copying them across the FFI boundary per request. vcrpy's linear scan is why its match column grows with `N` and cassetter's does not.
 
 Absolute timings are machine dependent; the speedup ratios are the portable part. Load speedup also depends on cassette shape: many small interactions (as above) is the hardest case for the parser, while cassettes with large bodies (e.g. LLM/SSE responses) load proportionally faster.
 
