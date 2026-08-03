@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import os
 from contextlib import AbstractContextManager
+from typing import TYPE_CHECKING
 
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
 from cassetter.config import Cassetter
 from cassetter.recording import RecordMode
+
+if TYPE_CHECKING:
+    from cassetter._core import Matcher
 
 
 def use_cassette(
     path: str | os.PathLike[str],
     *,
     record_mode: RecordMode | str = RecordMode.ONCE,
-    match_on: list[str] | None = None,
+    match_on: list[Matcher] | None = None,
     ignore_json_paths: list[str] | None = None,
     filter_headers: list[str] | None = None,
     filter_query_parameters: list[str] | None = None,

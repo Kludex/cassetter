@@ -33,7 +33,7 @@ def test_body_none() -> None:
 
 def test_body_invalid_type() -> None:
     with pytest.raises(ValueError, match="unknown body type"):
-        Body("invalid", "data")
+        Body("invalid", "data")  # type: ignore[arg-type]
 
 
 def test_process_body_empty_bytes() -> None:

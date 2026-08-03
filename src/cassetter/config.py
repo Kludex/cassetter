@@ -4,13 +4,16 @@ import contextlib
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cassetter._core import MatchConfig, SecurityConfig
 from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
 from cassetter.intercept._registry import resolve_interceptors
 from cassetter.recording import RecordMode
+
+if TYPE_CHECKING:
+    from cassetter._core import Matcher
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -32,7 +35,7 @@ class Cassetter:
 
     cassette_library_dir: str | os.PathLike[str] | None = None
     record_mode: RecordMode | str | None = None
-    match_on: list[str] | None = None
+    match_on: list[Matcher] | None = None
     ignore_json_paths: list[str] | None = None
     filter_headers: list[str] | None = None
     filter_query_parameters: list[str] | None = None

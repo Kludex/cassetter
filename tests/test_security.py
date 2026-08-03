@@ -82,8 +82,9 @@ def test_scrub_ws_frame_bodies() -> None:
 
     assert scrubbed.frames[0].body.content["access_token"] == "[FILTERED]"
     assert scrubbed.frames[0].body.content["channel"] == "ticker"
-    assert '"password": "[FILTERED]"' in scrubbed.frames[1].body.content
-    assert '"ok": true' in scrubbed.frames[1].body.content
+    # A text frame that parses as JSON is scrubbed as a tree and re-serialized.
+    assert '"password":"[FILTERED]"' in scrubbed.frames[1].body.content
+    assert '"ok":true' in scrubbed.frames[1].body.content
     assert scrubbed.frames[2].body.content == b"\x01\x02"
 
 

@@ -17,7 +17,7 @@ import pytest
 import requests
 import urllib3
 
-from cassetter import RawRequest, SkipRecording
+from cassetter import BeforeRecordRequest, RawRequest, SkipRecording
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.context import use_cassette
 
@@ -44,7 +44,7 @@ def _preload(path: str, uri: str) -> None:
     c.save(path)
 
 
-def _rewrite_to(target: str) -> object:
+def _rewrite_to(target: str) -> BeforeRecordRequest:
     def hook(request: RawRequest) -> RawRequest:
         request.uri = target
         return request

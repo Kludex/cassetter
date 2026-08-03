@@ -21,7 +21,6 @@ from cassetter._core import (
     HttpRequest,
     HttpResponse,
     MatchConfig,
-    find_match,
 )
 
 ITERATIONS = 20
@@ -130,14 +129,15 @@ def run_scale(n: int, tmpdir: Path) -> list[tuple[str, float, float]]:
     # -- Match (worst-case for linear scan: match the last item) ---------------
     last_uri = f"https://api.example.com/items/{n - 1}"
 
+    # Both sides go through the public replay entry point. Nothing is hoisted
+    # out of the timed region: lookup cost per request is what a test suite
+    # actually pays, and hoisting it hid that cost entirely.
     vbb_cassette = RustCassette.load(vbb_path)
-    vbb_interactions = vbb_cassette.interactions
-    vbb_played = [False] * len(vbb_interactions)
     config = MatchConfig()
     vbb_req = HttpRequest("GET", last_uri)
 
     def match_vbb() -> None:
-        find_match(vbb_req, vbb_interactions, vbb_played, config)
+        vbb_cassette.take_match(vbb_req, config)
 
     vcrpy_cassette = VcrpyCassette.load(path=vcrpy_path, allow_playback_repeats=True)
     vcrpy_req = VcrpyRequest("GET", last_uri, "", {})

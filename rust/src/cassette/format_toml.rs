@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,7 @@ pub struct TomlRequest {
     pub method: String,
     pub uri: String,
     #[serde(default)]
-    pub headers: HashMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub body_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,7 +40,7 @@ pub struct TomlRequest {
 pub struct TomlResponse {
     pub status: u16,
     #[serde(default)]
-    pub headers: HashMap<String, Vec<String>>,
+    pub headers: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub body_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -58,13 +58,13 @@ pub fn to_toml(cassette: &Cassette) -> TomlCassette {
                 request: TomlRequest {
                     method: i.request.method.clone(),
                     uri: i.request.uri.clone(),
-                    headers: i.request.headers.clone(),
+                    headers: sorted(&i.request.headers),
                     body_type: req_type,
                     body_content: req_content,
                 },
                 response: TomlResponse {
                     status: i.response.status,
-                    headers: i.response.headers.clone(),
+                    headers: sorted(&i.response.headers),
                     body_type: resp_type,
                     body_content: resp_content,
                 },
@@ -91,12 +91,12 @@ pub fn from_toml(raw: TomlCassette) -> Cassette {
             let request = HttpRequest {
                 method: i.request.method,
                 uri: i.request.uri,
-                headers: i.request.headers,
+                headers: i.request.headers.into_iter().collect(),
                 body: body_from_toml(&i.request.body_type, i.request.body_content),
             };
             let response = HttpResponse {
                 status: i.response.status,
-                headers: i.response.headers,
+                headers: i.response.headers.into_iter().collect(),
                 body: body_from_toml(&i.response.body_type, i.response.body_content),
             };
             HttpInteraction {
@@ -113,11 +113,18 @@ pub fn from_toml(raw: TomlCassette) -> Cassette {
         version: raw.version,
         interactions,
         played_indices,
-        grpc_interactions: Vec::new(),
-        grpc_played: Vec::new(),
-        ws_interactions: Vec::new(),
-        ws_played: Vec::new(),
+        ..Cassette::default()
     }
+}
+
+/// Order headers deterministically for serialization.
+fn sorted(
+    headers: &std::collections::HashMap<String, Vec<String>>,
+) -> BTreeMap<String, Vec<String>> {
+    headers
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 fn body_to_toml(body: &Body) -> (String, Option<String>) {

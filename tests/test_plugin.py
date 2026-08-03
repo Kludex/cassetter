@@ -12,7 +12,13 @@ from cassetter._types import CassetteConfig
 from cassetter.cassette import CassetteExpiredError, CassetteExpiredWarning
 from cassetter.pytest_plugin.fixtures import _resolve_cassette
 from cassetter.pytest_plugin.markers import configure
-from cassetter.pytest_plugin.orphans import add_options, check_orphans, session_finish
+from cassetter.pytest_plugin.orphans import (
+    LOADED_CASSETTES,
+    add_options,
+    check_orphans,
+    node_down,
+    session_finish,
+)
 from cassetter.recording import RecordMode
 
 
@@ -20,14 +26,6 @@ def test_configure_registers_marker() -> None:
     config = MagicMock()
     configure(config)
     config.addinivalue_line.assert_called_once()
-
-
-def test_configure_no_option_attribute() -> None:
-    class ConfigWithoutOption:
-        def addinivalue_line(self, name: str, line: str) -> None:
-            pass
-
-    configure(ConfigWithoutOption())
 
 
 def test_check_orphans_finds_orphaned_files(tmp_path: object) -> None:
@@ -63,8 +61,16 @@ def test_check_orphans_ignores_non_yaml_files(tmp_path: object) -> None:
     assert orphans == []
 
 
-def test_session_finish_no_orphan_dir() -> None:
+def controller_config() -> MagicMock:
+    """A config mock without `workerinput`, i.e. not an xdist worker."""
     config = MagicMock()
+    del config.workerinput
+    config.stash = pytest.Stash()
+    return config
+
+
+def test_session_finish_no_orphan_dir() -> None:
+    config = controller_config()
     config.getoption.return_value = None
     session = MagicMock()
     session.config = config
@@ -75,9 +81,8 @@ def test_session_finish_warns_on_orphans(tmp_path: object) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.yaml")).write_text("---")
 
-    config = MagicMock()
+    config = controller_config()
     config.getoption.return_value = cassette_dir
-    config._vcr_loaded_cassettes = set()
     session = MagicMock()
     session.config = config
 
@@ -90,9 +95,9 @@ def test_session_finish_no_warning_when_no_orphans(tmp_path: object) -> None:
     yaml_path = os.path.join(cassette_dir, "used.yaml")
     Path(yaml_path).write_text("---")
 
-    config = MagicMock()
+    config = controller_config()
     config.getoption.return_value = cassette_dir
-    config._vcr_loaded_cassettes = {os.path.abspath(yaml_path)}
+    config.stash[LOADED_CASSETTES] = {os.path.abspath(yaml_path)}
     session = MagicMock()
     session.config = config
 
@@ -395,11 +400,17 @@ def test_resolve_cassette_ignores_unknown_vcr_config_keys(tmp_path: object) -> N
     os.makedirs(cassette_dir, exist_ok=True)
     RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
 
+    # An unknown vcrpy-compat key must be tolerated, not rejected.
+    vcr_config: CassetteConfig = {
+        "record_mode": "none",
+        "decode_compressed_response": True,  # type: ignore[typeddict-unknown-key]
+    }
+
     cassette, _ = _resolve_cassette(
         node_name="test_func",
         marker_args=(),
         marker_kwargs={},
-        vcr_config={"record_mode": "none", "decode_compressed_response": True},  # type: ignore[typeddict-unknown-key]
+        vcr_config=vcr_config,
         cli_record_mode=None,
         test_fspath=os.path.join(str(tmp_path), "test_example.py"),
         vcr_cassette_dir=cassette_dir,
@@ -420,3 +431,73 @@ def test_check_orphans_includes_toml(tmp_path: object) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.toml")).write_text("---")
     assert check_orphans(cassette_dir, set()) == ["orphan.toml"]
+
+
+def test_worker_ships_loaded_cassettes_to_controller() -> None:
+    """An xdist worker reports nothing itself; it hands its shard to the controller."""
+    config = MagicMock()
+    config.workerinput = {"workerid": "gw0"}
+    config.workeroutput = {}
+    config.stash = pytest.Stash()
+    config.stash[LOADED_CASSETTES] = {"/cassettes/a.yaml"}
+    session = MagicMock()
+    session.config = config
+
+    session_finish(session)
+
+    assert config.workeroutput["vcr_loaded_cassettes"] == ["/cassettes/a.yaml"]
+
+
+def test_controller_aggregates_worker_shards(tmp_path: object) -> None:
+    """Every worker's cassettes count as used, not just the controller's."""
+    cassette_dir = str(tmp_path)
+    for name in ("a.yaml", "b.yaml"):
+        Path(os.path.join(cassette_dir, name)).write_text("---")
+
+    config = controller_config()
+    config.getoption.return_value = cassette_dir
+
+    for name in ("a.yaml", "b.yaml"):
+        node = MagicMock()
+        node.config = config
+        node.workeroutput = {"vcr_loaded_cassettes": [os.path.abspath(os.path.join(cassette_dir, name))]}
+        node_down(node)
+
+    session = MagicMock()
+    session.config = config
+    session_finish(session)
+
+
+def test_node_down_without_workeroutput_is_ignored() -> None:
+    node = MagicMock()
+    node.workeroutput = {}
+    node_down(node)
+
+
+def test_aggregator_hook_forwards_to_node_down() -> None:
+    """The xdist hook runs in the controller process, which coverage cannot see."""
+    from cassetter.pytest_plugin import _XdistOrphanAggregator
+
+    config = controller_config()
+    node = MagicMock()
+    node.config = config
+    node.workeroutput = {"vcr_loaded_cassettes": ["/cassettes/a.yaml"]}
+
+    _XdistOrphanAggregator().pytest_testnodedown(node, None)
+
+    assert config.stash[LOADED_CASSETTES] == {"/cassettes/a.yaml"}
+
+
+def test_xdist_aggregator_registered_only_with_xdist() -> None:
+    """The xdist hook is registered conditionally, so non-xdist users still load."""
+    from cassetter.pytest_plugin import pytest_configure
+
+    with_xdist = MagicMock()
+    with_xdist.pluginmanager.hasplugin.return_value = True
+    pytest_configure(with_xdist)
+    assert with_xdist.pluginmanager.register.called
+
+    without_xdist = MagicMock()
+    without_xdist.pluginmanager.hasplugin.return_value = False
+    pytest_configure(without_xdist)
+    assert not without_xdist.pluginmanager.register.called

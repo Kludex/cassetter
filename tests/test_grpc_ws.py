@@ -468,7 +468,8 @@ def test_record_ws_scrubs_frame_bodies(tmp_path: object) -> None:
     recorded = cassette.ws_interactions[0]
     assert recorded.frames[0].body.content["access_token"] == "[FILTERED]"
     assert recorded.frames[0].body.content["channel"] == "ticker"
-    assert '"password": "[FILTERED]"' in recorded.frames[1].body.content
+    # A text frame that parses as JSON is scrubbed as a tree and re-serialized.
+    assert '"password":"[FILTERED]"' in recorded.frames[1].body.content
 
 
 def test_record_grpc_scrubs_metadata_and_json_debug(tmp_path: object) -> None:
@@ -782,8 +783,8 @@ async def test_stream_unary_replay(tmp_path: object) -> None:
     )
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
-        yield b"\x02"  # type: ignore[misc]
+        yield b"\x01"
+        yield b"\x02"
 
     callable_ = VCRStreamUnaryCallable(
         "/pkg.Svc/ClientStream",
@@ -807,7 +808,7 @@ async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
     cassette.load()
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
+        yield b"\x01"
 
     callable_ = VCRStreamUnaryCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
     token = current_cassette.set(cassette)
@@ -834,7 +835,7 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
     )
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]  # pragma: no cover
+        yield b"\x01"  # pragma: no cover
 
     callable_ = VCRStreamStreamCallable(
         "/pkg.Svc/Bidi",
@@ -860,7 +861,7 @@ async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
     cassette.load()
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]  # pragma: no cover
+        yield b"\x01"  # pragma: no cover
 
     callable_ = VCRStreamStreamCallable("/pkg.Svc/X", None, lambda x: x, lambda b: b)
     token = current_cassette.set(cassette)
@@ -1179,7 +1180,7 @@ async def test_unary_unary_record(tmp_path: object) -> None:
 
     callable_ = VCRUnaryUnaryCallable(
         "/pkg.Svc/Echo",
-        fake_call,  # type: ignore[arg-type]
+        fake_call,
         lambda x: b"\x01",
         lambda b: b,
     )
@@ -1208,12 +1209,12 @@ async def test_unary_stream_record(tmp_path: object) -> None:
             return self._data
 
     async def fake_stream(*args: object, **kwargs: object) -> AsyncIterator[FakeChunk]:
-        yield FakeChunk(b"\x0a")  # type: ignore[misc]
-        yield FakeChunk(b"\x0b")  # type: ignore[misc]
+        yield FakeChunk(b"\x0a")
+        yield FakeChunk(b"\x0b")
 
     callable_ = VCRUnaryStreamCallable(
         "/pkg.Svc/Stream",
-        fake_stream,  # type: ignore[arg-type]
+        fake_stream,
         lambda x: b"\x01",
         lambda b: b,
     )
@@ -1248,12 +1249,12 @@ async def test_stream_unary_record(tmp_path: object) -> None:
         return FakeResponse()
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
-        yield b"\x02"  # type: ignore[misc]
+        yield b"\x01"
+        yield b"\x02"
 
     callable_ = VCRStreamUnaryCallable(
         "/pkg.Svc/ClientStream",
-        fake_call,  # type: ignore[arg-type]
+        fake_call,
         lambda x: x,
         lambda b: b,
     )
@@ -1281,15 +1282,15 @@ async def test_stream_stream_record(tmp_path: object) -> None:
             return self._data
 
     async def fake_bidi(request_iter: object, **kwargs: object) -> AsyncIterator[FakeChunk]:
-        yield FakeChunk(b"\x0a")  # type: ignore[misc]
-        yield FakeChunk(b"\x0b")  # type: ignore[misc]
+        yield FakeChunk(b"\x0a")
+        yield FakeChunk(b"\x0b")
 
     async def request_iter() -> AsyncIterator[bytes]:
-        yield b"\x01"  # type: ignore[misc]
+        yield b"\x01"
 
     callable_ = VCRStreamStreamCallable(
         "/pkg.Svc/Bidi",
-        fake_bidi,  # type: ignore[arg-type]
+        fake_bidi,
         lambda x: x,
         lambda b: b,
     )
@@ -1332,7 +1333,7 @@ def test_vcr_channel_wraps_methods() -> None:
     cassette = Cassette("/tmp/test.yaml", record_mode=RecordMode.ALL)
     cassette.load()
 
-    channel = VCRChannel(FakeChannel())  # type: ignore[arg-type]
+    channel = VCRChannel(FakeChannel())
     assert isinstance(channel.unary_unary("/m"), VCRUnaryUnaryCallable)
     assert isinstance(channel.unary_stream("/m"), VCRUnaryStreamCallable)
     assert isinstance(channel.stream_unary("/m"), VCRStreamUnaryCallable)
@@ -1350,7 +1351,7 @@ async def test_vcr_channel_close() -> None:
             self.closed = True
 
     fake = FakeChannel()
-    channel = VCRChannel(fake)  # type: ignore[arg-type]
+    channel = VCRChannel(fake)
     await channel.close()
     assert fake.closed
 
@@ -1373,7 +1374,7 @@ async def test_vcr_channel_context_manager() -> None:
             pass  # pragma: no cover
 
     fake = FakeChannel()
-    channel = VCRChannel(fake)  # type: ignore[arg-type]
+    channel = VCRChannel(fake)
 
     async with channel as ch:
         assert ch is channel

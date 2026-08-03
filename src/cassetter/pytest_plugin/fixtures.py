@@ -4,7 +4,7 @@ import os
 from collections.abc import Iterator, Mapping
 from dataclasses import fields, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -14,6 +14,7 @@ from cassetter.cassette import Cassette
 from cassetter.config import Cassetter
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._registry import resolve_interceptors
+from cassetter.pytest_plugin.orphans import loaded_cassettes
 
 _CASSETTER_FIELDS = {field.name for field in fields(Cassetter)}
 
@@ -46,8 +47,8 @@ def _split_config(vcr_config: CassetteConfig | Cassetter) -> tuple[Cassetter, st
 
 def _resolve_cassette(
     node_name: str,
-    marker_args: tuple[Any, ...],
-    marker_kwargs: dict[str, Any],
+    marker_args: tuple[str, ...],
+    marker_kwargs: CassetteConfig,
     vcr_config: CassetteConfig | Cassetter,
     cli_record_mode: str | None,
     test_fspath: str,
@@ -113,7 +114,7 @@ def cassette(
     cassette, interceptor_classes = _resolve_cassette(
         node_name=node_name,
         marker_args=marker.args,
-        marker_kwargs=dict(marker.kwargs),
+        marker_kwargs=cast(CassetteConfig, marker.kwargs),
         vcr_config=vcr_config,
         cli_record_mode=cli_record_mode,
         test_fspath=str(request.path),
@@ -123,9 +124,7 @@ def cassette(
     )
 
     # Track loaded cassette paths for orphan detection
-    _loaded_cassettes = getattr(request.config, "_vcr_loaded_cassettes", None)
-    if _loaded_cassettes is not None:
-        _loaded_cassettes.add(os.path.abspath(cassette.path))
+    loaded_cassettes(request.config).add(os.path.abspath(cassette.path))
 
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)

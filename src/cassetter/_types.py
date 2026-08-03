@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse
+
+if TYPE_CHECKING:
+    from cassetter._core import Matcher
 
 
 class CassetteConfig(TypedDict, total=False):
     """Configuration for a cassette recording/playback session."""
 
     record_mode: str
-    match_on: list[str]
+    match_on: list[Matcher]
     ignore_json_paths: list[str]
     filter_headers: list[str]
     filter_query_parameters: list[str]

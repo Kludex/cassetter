@@ -21,7 +21,7 @@ jobs:
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy src/
+      - run: uv run mypy
 
   rust-test:
     runs-on: ubuntu-latest
@@ -37,6 +37,17 @@ jobs:
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # The manifest and lockfile live in rust/; the action defaults to the
+          # repository root, where there is no Cargo.toml to scan.
+          working-directory: rust
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -50,6 +61,18 @@ jobs:
             python-version: "3.13"
           - os: windows-latest
             python-version: "3.13"
+          # The module declares itself free-threading safe (gil_used = false),
+          # so the free-threaded build has to actually be exercised.
+          #
+          # 3.14t is not viable yet: `python -c "import pyreqwest_impersonate"`
+          # segfaults on free-threaded 3.14 with nothing else imported, while
+          # working on both 3.13t and GIL-enabled 3.14. The rest of the suite
+          # passes there (485 tests with that one extra removed). Add the leg
+          # back once pyreqwest-impersonate ships a working free-threaded 3.14
+          # build - until then it costs ~20 minutes and fails on someone
+          # else's bug.
+          - os: ubuntu-latest
+            python-version: "3.13t"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -65,13 +88,13 @@ jobs:
       # entries verify platform compatibility, and OS-conditional tests (e.g.
       # POSIX file-permission tests skipped on Windows) would otherwise leave
       # their bodies uncovered there.
-      - if: matrix.os == 'ubuntu-latest'
+      - if: matrix.os == 'ubuntu-latest' && !endsWith(matrix.python-version, 't')
         run: uv run coverage report
 
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:
     if: always()
-    needs: [lint, rust-test, test]
+    needs: [lint, rust-test, audit, test]
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed
