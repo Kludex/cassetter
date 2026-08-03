@@ -73,9 +73,13 @@ If you depend on one of these, open an issue and tell us about your use case.
 
 VCR.py patches HTTP clients globally, so requests made from any thread replay
 from the active cassette. Cassetter tracks the active cassette in a
-`ContextVar` for concurrency isolation, and falls back to the most recently
-entered active cassette in threads whose context is empty - e.g. worker
-threads spawned by Temporal or DBOS that don't propagate contextvars. The net
-effect matches VCR.py: while a cassette is active, requests from any thread
-replay from it, and concurrent `use_cassette` blocks in different tasks stay
-isolated.
+`ContextVar` for concurrency isolation, and falls back to the active cassette
+in threads whose context is empty - e.g. worker threads spawned by Temporal or
+DBOS that don't propagate contextvars. The net effect matches VCR.py: while a
+single cassette is active, requests from any thread replay from it.
+
+The fallback applies only when exactly one cassette is active. A thread with an
+empty context cannot say which `use_cassette` block it belongs to, so with
+several active at once - concurrent blocks in different tasks, or a nested one -
+it inherits none and its requests are not replayed. Propagate the context with
+`contextvars.copy_context()` where you need a cassette in those threads.

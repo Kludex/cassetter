@@ -413,3 +413,24 @@ def test_fallback_removed_out_of_order(tmp_path: object) -> None:
     assert get_current_cassette() is cassette_b
     pop_fallback_cassette(cassette_b)
     assert get_current_cassette() is None
+
+
+def test_no_fallback_while_several_cassettes_are_active(tmp_path: object) -> None:
+    """A context-less thread inherits nothing rather than another task's cassette."""
+    from cassetter._state import get_current_cassette, pop_fallback_cassette, push_fallback_cassette
+
+    dir_path = str(tmp_path)
+    path_a = _make_cassette(os.path.join(dir_path, "amb-a.yaml"), "https://api.example.com/data", {"c": "a"})
+    path_b = _make_cassette(os.path.join(dir_path, "amb-b.yaml"), "https://api.example.com/data", {"c": "b"})
+
+    cassette_a = Cassette(path_a, record_mode=RecordMode.NONE)
+    cassette_a.load()
+    cassette_b = Cassette(path_b, record_mode=RecordMode.NONE)
+    cassette_b.load()
+
+    push_fallback_cassette(cassette_a)
+    push_fallback_cassette(cassette_b)
+    assert get_current_cassette() is None
+    pop_fallback_cassette(cassette_b)
+    assert get_current_cassette() is cassette_a
+    pop_fallback_cassette(cassette_a)

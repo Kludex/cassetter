@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -452,6 +453,44 @@ def test_resolve_cassette_sanitizes_forbidden_filename_chars(tmp_path: object) -
 
     assert os.path.basename(cassette.path) == sanitized
     assert os.path.exists(cassette.path)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="':' is not a legal file name character")
+def test_resolve_cassette_keeps_existing_unsanitized_name(tmp_path: object) -> None:
+    """A cassette recorded before names were sanitized keeps replaying."""
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    node_name = "test_func[anthropic:claude-sonnet-4-5]"
+    RustCassette().save(os.path.join(cassette_dir, node_name + ".yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name=node_name,
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert os.path.basename(cassette.path) == node_name + ".yaml"
+    assert os.path.exists(cassette.path)
+
+
+def test_resolve_cassette_records_under_sanitized_name_when_neither_exists(tmp_path: object) -> None:
+    """With nothing on disk, a new cassette takes the sanitized name."""
+    test_dir = str(tmp_path)
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func[anthropic:claude]",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="all", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert os.path.basename(cassette.path) == "test_func[anthropic-claude].yaml"
 
 
 def test_resolve_cassette_passes_uri_normalizer(tmp_path: object) -> None:

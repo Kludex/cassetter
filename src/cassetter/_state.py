@@ -15,8 +15,7 @@ installed: dict[type, tuple[InterceptorProtocol, int]] = {}
 
 # Active cassettes entered via use_cassette or the pytest plugin, in entry
 # order. Threads spawned by libraries that don't propagate contextvars (e.g.
-# Temporal/DBOS worker threads) have an empty context, so they fall back to
-# the most recently entered active cassette.
+# Temporal/DBOS worker threads) have an empty context and fall back to these.
 _fallback_cassettes: list[Cassette] = []
 
 
@@ -25,7 +24,11 @@ def get_current_cassette() -> Cassette | None:
     if cassette is not None:
         return cassette
     with lock:
-        return _fallback_cassettes[-1] if _fallback_cassettes else None
+        # A thread with an empty context cannot say which activation it belongs
+        # to, so it inherits a cassette only when there is nothing to choose
+        # between. Guessing would let one task's worker thread replay from - or
+        # record into - a cassette another task entered.
+        return _fallback_cassettes[0] if len(_fallback_cassettes) == 1 else None
 
 
 def push_fallback_cassette(cassette: Cassette) -> None:
