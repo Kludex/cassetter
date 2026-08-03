@@ -9,7 +9,7 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28" }
+pyo3 = { version = "0.29" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde-saphyr = "0.0.29"
@@ -18,7 +18,7 @@ brotli = { version = "8", default-features = false, features = ["std"] }
 zstd = { version = "0.13", default-features = false }
 regex = "1"
 unicode-normalization = "0.1"
-pythonize = "0.28"
+pythonize = "0.29"
 toml = "0.8"
 base64 = "0.22"
 
