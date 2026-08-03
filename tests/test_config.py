@@ -34,8 +34,9 @@ def test_defaults_match_use_cassette() -> None:
 
 
 def test_cassette_library_dir_is_joined() -> None:
-    cassette = Cassetter(cassette_library_dir="tests/cassettes").cassette("openai.yaml")
-    assert cassette.path == os.path.join("tests", "cassettes", "openai.yaml")
+    library_dir = os.path.join("tests", "cassettes")
+    cassette = Cassetter(cassette_library_dir=library_dir).cassette("openai.yaml")
+    assert cassette.path == os.path.join(library_dir, "openai.yaml")
 
 
 def test_cassette_library_dir_accepts_path_like(tmp_path: Path) -> None:
