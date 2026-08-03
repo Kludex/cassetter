@@ -38,7 +38,7 @@ jobs:
       # its own interpreters. macOS and Windows run it natively, where only one
       # Python exists unless it is installed first.
       - if: matrix.os != 'ubuntu-latest'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: |
             3.10
@@ -65,7 +65,7 @@ jobs:
       # order - which would leave the release with no cp314 wheel. 3.13t is not
       # shipped at all: PyO3 refuses the free-threaded build below 3.14.
       - if: matrix.os != 'ubuntu-latest'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14t"
           allow-prereleases: true
