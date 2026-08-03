@@ -37,6 +37,7 @@ $ pytest
 | pytest-recording / VCR.py | Cassetter | Notes |
 |---|---|---|
 | `vcr` fixture | `cassette` fixture | `vcr` still works as an alias |
+| `vcr.VCR(...)` | [`Cassetter(...)`](tutorial/configuration.md) | Same idea, same `cassette_library_dir`, and it can be returned from `vcr_config` |
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `before_record_request` | `before_record_request` | Same name, same behavior |

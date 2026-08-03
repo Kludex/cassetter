@@ -1,33 +1,26 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from dataclasses import fields, replace
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Any, cast
 
 import pytest
 
-from cassetter._core import MatchConfig, SecurityConfig
 from cassetter._state import acquire_patches, current_cassette, release_patches
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
-from cassetter.context import resolve_interceptors
+from cassetter.config import Cassetter
 from cassetter.intercept._base import InterceptorProtocol
+from cassetter.intercept._registry import resolve_interceptors
 from cassetter.pytest_plugin.orphans import loaded_cassettes
-from cassetter.recording import RecordMode
 
-
-class SecurityKwargs(TypedDict, total=False):
-    """Keyword arguments forwarded to `SecurityConfig`."""
-
-    filter_headers: list[str]
-    filter_query_parameters: list[str]
-    body_scrub_patterns: list[str]
-    replacement: str
+_CASSETTER_FIELDS = {field.name for field in fields(Cassetter)}
 
 
 @pytest.fixture(scope="module")
-def vcr_config() -> CassetteConfig:
+def vcr_config() -> CassetteConfig | Cassetter:
     """Override this fixture to provide default VCR configuration."""
     return CassetteConfig()
 
@@ -43,11 +36,20 @@ def vcr_cassette_dir(request: pytest.FixtureRequest) -> str:
     return str(test_file.parent / "cassettes" / test_file.stem)
 
 
+def _split_config(vcr_config: CassetteConfig | Cassetter) -> tuple[Cassetter, str | None]:
+    """Split a `vcr_config` value into a configuration and the test-relative `cassette_dir`."""
+    if isinstance(vcr_config, Cassetter):
+        return vcr_config, None
+    options: Mapping[str, Any] = vcr_config
+    known = {name: value for name, value in options.items() if name in _CASSETTER_FIELDS}
+    return Cassetter(**known), options.get("cassette_dir")
+
+
 def _resolve_cassette(
     node_name: str,
     marker_args: tuple[str, ...],
     marker_kwargs: CassetteConfig,
-    vcr_config: CassetteConfig,
+    vcr_config: CassetteConfig | Cassetter,
     cli_record_mode: str | None,
     test_fspath: str,
     vcr_cassette_dir: str | None = None,
@@ -55,85 +57,47 @@ def _resolve_cassette(
     ini_on_expiry: str | None = None,
 ) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
-    cassette_name = node_name + ".yaml"
-    record_mode_str = vcr_config.get("record_mode", "none")
+    config, config_cassette_dir = _split_config(vcr_config)
 
-    # Marker can override
-    if marker_args:
-        cassette_name = marker_args[0]
+    cassette_name = marker_args[0] if marker_args else node_name + ".yaml"
+
+    record_mode = config.record_mode or "none"
     if "record_mode" in marker_kwargs:
-        record_mode_str = marker_kwargs["record_mode"]
-
-    # CLI override
+        record_mode = marker_kwargs["record_mode"]
     if cli_record_mode is not None:
-        record_mode_str = cli_record_mode
+        record_mode = cli_record_mode
 
-    record_mode = RecordMode.from_str(record_mode_str)
+    test_file = Path(test_fspath)
+    test_dir = str(test_file.parent)
 
-    # Resolve cassette directory: vcr_cassette_dir fixture > marker > vcr_config > default
+    # marker > cassette_library_dir > vcr_cassette_dir fixture > vcr_config > default
     if "cassette_dir" in marker_kwargs:
-        test_file = Path(test_fspath)
-        test_dir = str(test_file.parent)
         cassette_dir = os.path.join(test_dir, marker_kwargs["cassette_dir"], test_file.stem)
+    elif config.cassette_library_dir is not None:
+        cassette_dir = os.fspath(config.cassette_library_dir)
     elif vcr_cassette_dir is not None:
         cassette_dir = vcr_cassette_dir
-    elif "cassette_dir" in vcr_config:
-        test_file = Path(test_fspath)
-        test_dir = str(test_file.parent)
-        cassette_dir = os.path.join(test_dir, vcr_config["cassette_dir"], test_file.stem)
+    elif config_cassette_dir is not None:
+        cassette_dir = os.path.join(test_dir, config_cassette_dir, test_file.stem)
     else:  # pragma: no cover - the vcr_cassette_dir fixture always supplies a directory
-        test_file = Path(test_fspath)
-        test_dir = str(test_file.parent)
         cassette_dir = os.path.join(test_dir, "cassettes", test_file.stem)
 
-    cassette_path = os.path.join(cassette_dir, cassette_name)
-
-    match_config = MatchConfig(
-        match_on=vcr_config.get("match_on"),
-        ignore_json_paths=vcr_config.get("ignore_json_paths"),
-    )
-
-    security_kwargs: SecurityKwargs = {}
-    if "filter_headers" in vcr_config:
-        security_kwargs["filter_headers"] = vcr_config["filter_headers"]
-    if "filter_query_parameters" in vcr_config:
-        security_kwargs["filter_query_parameters"] = vcr_config["filter_query_parameters"]
-    if "body_scrub_patterns" in vcr_config:
-        security_kwargs["body_scrub_patterns"] = vcr_config["body_scrub_patterns"]
-    if "filter_replacement" in vcr_config:
-        security_kwargs["replacement"] = vcr_config["filter_replacement"]
-    security_config = SecurityConfig(**security_kwargs)
-
-    max_age = marker_kwargs.get("max_age", vcr_config.get("max_age", ini_max_age))
-    on_expiry = marker_kwargs.get("on_expiry", vcr_config.get("on_expiry", ini_on_expiry or "warn"))
-
-    ignore_localhost = vcr_config.get("ignore_localhost", False)
-    ignore_hosts = vcr_config.get("ignore_hosts")
-    before_record_request = vcr_config.get("before_record_request")
-    before_record_response = vcr_config.get("before_record_response")
-
-    cassette = Cassette(
-        cassette_path,
+    resolved = replace(
+        config,
+        cassette_library_dir=cassette_dir,
         record_mode=record_mode,
-        match_config=match_config,
-        security_config=security_config,
-        max_age=max_age,
-        on_expiry=on_expiry,
-        ignore_localhost=ignore_localhost,
-        ignore_hosts=ignore_hosts,
-        before_record_request=before_record_request,
-        before_record_response=before_record_response,
+        max_age=marker_kwargs.get("max_age", config.max_age or ini_max_age),
+        on_expiry=marker_kwargs.get("on_expiry", config.on_expiry or ini_on_expiry or "warn"),
     )
+    cassette = resolved.cassette(cassette_name)
     cassette.load()
 
-    intercept_names = vcr_config.get("intercept")
-    interceptor_classes = resolve_interceptors(intercept_names)
-    return cassette, interceptor_classes
+    return cassette, resolve_interceptors(config.intercept)
 
 
 @pytest.fixture(autouse=True)
 def cassette(
-    request: pytest.FixtureRequest, vcr_config: CassetteConfig, vcr_cassette_dir: str
+    request: pytest.FixtureRequest, vcr_config: CassetteConfig | Cassetter, vcr_cassette_dir: str
 ) -> Iterator[Cassette | None]:
     """Activates cassette recording/replay for tests marked with @pytest.mark.vcr."""
     marker = request.node.get_closest_marker("vcr")

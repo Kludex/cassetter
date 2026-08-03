@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from cassetter import Cassetter
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter._types import CassetteConfig
 from cassetter.cassette import CassetteExpiredError, CassetteExpiredWarning
@@ -310,6 +311,112 @@ def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
     )
 
     assert cassette is not None
+
+
+def test_resolve_cassette_from_cassetter(tmp_path: object) -> None:
+    library_dir = os.path.join(str(tmp_path), "shared_cassettes")
+    os.makedirs(library_dir, exist_ok=True)
+    RustCassette().save(os.path.join(library_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=Cassetter(cassette_library_dir=library_dir),
+        cli_record_mode=None,
+        test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+        vcr_cassette_dir=os.path.join(str(tmp_path), "fixture_dir"),
+    )
+
+    assert cassette.path == os.path.join(library_dir, "test_func.yaml")
+
+
+def test_resolve_cassette_from_cassetter_defaults_to_none_record_mode(tmp_path: object) -> None:
+    """An unset record mode means `none` under pytest, even though `use_cassette` defaults to `once`."""
+    cassette_dir = os.path.join(str(tmp_path), "cassettes")
+    os.makedirs(cassette_dir, exist_ok=True)
+    RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=Cassetter(),
+        cli_record_mode=None,
+        test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+        vcr_cassette_dir=cassette_dir,
+    )
+
+    assert cassette.record_mode == RecordMode.NONE
+
+
+def test_resolve_cassette_marker_dir_overrides_cassette_library_dir(tmp_path: object) -> None:
+    marker_dir = os.path.join(str(tmp_path), "marker_dir", "test_example")
+    os.makedirs(marker_dir, exist_ok=True)
+    RustCassette().save(os.path.join(marker_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={"cassette_dir": "marker_dir"},
+        vcr_config=Cassetter(cassette_library_dir=os.path.join(str(tmp_path), "shared")),
+        cli_record_mode=None,
+        test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+    )
+
+    assert cassette.path == os.path.join(marker_dir, "test_func.yaml")
+
+
+def test_resolve_cassette_ini_on_expiry(tmp_path: object) -> None:
+    cassette_dir = os.path.join(str(tmp_path), "cassettes")
+    os.makedirs(cassette_dir, exist_ok=True)
+    path = os.path.join(cassette_dir, "test_func.yaml")
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            request=HttpRequest("GET", "https://example.com/"),
+            response=HttpResponse(200, body=Body("text", "ok")),
+            recorded_at="2020-01-01T00:00:00Z",
+        )
+    )
+    c.save(path)
+
+    with pytest.raises(CassetteExpiredError):
+        _resolve_cassette(
+            node_name="test_func",
+            marker_args=(),
+            marker_kwargs={},
+            vcr_config=Cassetter(max_age="1d"),
+            cli_record_mode=None,
+            test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+            vcr_cassette_dir=cassette_dir,
+            ini_on_expiry="fail",
+        )
+
+
+def test_resolve_cassette_ignores_unknown_vcr_config_keys(tmp_path: object) -> None:
+    """Keys VCR.py supports but cassetter handles automatically are no-ops, not errors."""
+    cassette_dir = os.path.join(str(tmp_path), "cassettes")
+    os.makedirs(cassette_dir, exist_ok=True)
+    RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
+
+    # An unknown vcrpy-compat key must be tolerated, not rejected.
+    vcr_config: CassetteConfig = {
+        "record_mode": "none",
+        "decode_compressed_response": True,  # type: ignore[typeddict-unknown-key]
+    }
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=vcr_config,
+        cli_record_mode=None,
+        test_fspath=os.path.join(str(tmp_path), "test_example.py"),
+        vcr_cassette_dir=cassette_dir,
+    )
+
+    assert cassette.record_mode == RecordMode.NONE
 
 
 def test_ini_options_registered() -> None:

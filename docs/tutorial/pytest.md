@@ -100,6 +100,7 @@ The supported keys are the same options accepted by `use_cassette()`:
 | `body_scrub_patterns` | Body field patterns scrubbed from cassettes |
 | `filter_replacement` | Replacement string for filtered values |
 | `cassette_dir` | Cassette directory, relative to the test file |
+| `cassette_library_dir` | Cassette directory, used as is |
 | `intercept` | Libraries to intercept |
 | `max_age` | Cassette expiry, e.g. `"30d"` |
 | `on_expiry` | What to do with expired cassettes |
@@ -107,6 +108,17 @@ The supported keys are the same options accepted by `use_cassette()`:
 | `ignore_hosts` | Bypass requests to matching hosts |
 | `before_record_request` | Hook to modify or skip requests |
 | `before_record_response` | Hook to modify or skip responses |
+
+The fixture can also return a [`Cassetter`](configuration.md), which is the same set of options as an object, shareable with code that calls `use_cassette()` directly:
+
+```python
+from cassetter import Cassetter
+
+
+@pytest.fixture(scope="module")
+def vcr_config() -> Cassetter:
+    return Cassetter(record_mode="once", filter_headers=["x-custom-secret"])
+```
 
 ## Configure per test
 
