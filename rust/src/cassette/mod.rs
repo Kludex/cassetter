@@ -1,6 +1,7 @@
 pub mod format;
 pub mod format_toml;
 pub mod index;
+pub mod ordering;
 
 use std::path::Path;
 
@@ -203,8 +204,24 @@ impl Cassette {
     }
 
     /// Save the cassette to disk, releasing the GIL for serialization and I/O.
-    fn save(&self, py: Python<'_>, path: &str) -> PyResult<()> {
-        py.detach(|| self.save_impl(path))
+    ///
+    /// `sort_config` writes interactions in a canonical order instead of the
+    /// order their responses arrived in; `record_order` breaks ties between
+    /// interactions the matcher cannot tell apart. See [`ordering`].
+    #[pyo3(signature = (path, sort_config=None, record_order=None))]
+    fn save(
+        &self,
+        py: Python<'_>,
+        path: &str,
+        sort_config: Option<&MatchConfig>,
+        record_order: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        let order = ordering::output_order(
+            &self.interactions,
+            sort_config,
+            record_order.as_deref().unwrap_or(&[]),
+        );
+        py.detach(|| self.save_impl(path, &order))
     }
 
     fn __len__(&self) -> usize {
@@ -252,7 +269,7 @@ impl Cassette {
         format::from_raw(raw, &binaries)
     }
 
-    fn save_impl(&self, path: &str) -> PyResult<()> {
+    fn save_impl(&self, path: &str, order: &[usize]) -> PyResult<()> {
         // Ensure parent directory exists
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
@@ -266,12 +283,12 @@ impl Cassette {
                     "TOML cassettes cannot store gRPC or WebSocket interactions; use YAML",
                 ));
             }
-            let raw = format_toml::to_toml(self);
+            let raw = format_toml::to_toml(self, order);
             toml::to_string_pretty(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("TOML serialize error: {e}"))
             })?
         } else {
-            let raw = format::to_raw(self);
+            let raw = format::to_raw(self, order);
             serde_saphyr::to_string(&raw).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("YAML serialize error: {e}"))
             })?

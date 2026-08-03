@@ -434,3 +434,68 @@ def test_no_fallback_while_several_cassettes_are_active(tmp_path: object) -> Non
     pop_fallback_cassette(cassette_b)
     assert get_current_cassette() is cassette_a
     pop_fallback_cassette(cassette_a)
+
+
+async def _record_concurrently(path: str, requests: list[tuple[str, dict[str, str]]], delays: list[float]) -> None:
+    """Issue `requests` concurrently, with each response delayed by `delays`."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        index = int(request.url.params["i"])
+        await anyio.sleep(delays[index])
+        return httpx.Response(200, json={"i": index})
+
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+
+            def issue(index: int, uri: str, body: dict[str, str]) -> Any:
+                async def send() -> None:
+                    await client.post(f"{uri}?i={index}", json=body)
+
+                return send
+
+            await _gather(*[issue(i, uri, body) for i, (uri, body) in enumerate(requests)])
+
+
+def _recorded_uris(path: str) -> list[str]:
+    return [i.request.uri for i in RustCassette.load(path).interactions]
+
+
+@pytest.mark.anyio
+async def test_saved_order_does_not_depend_on_response_order(tmp_path: object) -> None:
+    """Two runs of the same concurrent suite write the same cassette."""
+    dir_path = str(tmp_path)
+    requests: list[tuple[str, dict[str, str]]] = [
+        ("https://api.example.com/b", {}),
+        ("https://api.example.com/a", {}),
+    ]
+
+    first = os.path.join(dir_path, "first.yaml")
+    second = os.path.join(dir_path, "second.yaml")
+    await _record_concurrently(first, requests, delays=[0.01, 0.05])
+    await _record_concurrently(second, requests, delays=[0.05, 0.01])
+
+    assert _recorded_uris(first) == _recorded_uris(second)
+    # Canonical order, not the order either run happened to finish in.
+    assert _recorded_uris(first) == ["https://api.example.com/a?i=1", "https://api.example.com/b?i=0"]
+
+
+@pytest.mark.anyio
+async def test_indistinguishable_interactions_keep_request_order(tmp_path: object) -> None:
+    """What the matcher cannot tell apart is written in the order it was sent.
+
+    Sorting must leave these alone - their order is what picks the response -
+    so the tie is broken by when the request went out, not when it came back.
+    """
+    dir_path = str(tmp_path)
+    uri = "https://api.example.com/chat"
+    requests = [(uri, {"n": "first"}), (uri, {"n": "second"})]
+
+    fast_second = os.path.join(dir_path, "fast-second.yaml")
+    fast_first = os.path.join(dir_path, "fast-first.yaml")
+    await _record_concurrently(fast_second, requests, delays=[0.05, 0.01])
+    await _record_concurrently(fast_first, requests, delays=[0.01, 0.05])
+
+    order = [i.request.body.content["n"] for i in RustCassette.load(fast_second).interactions]
+    assert order == ["first", "second"]
+    assert [i.request.body.content["n"] for i in RustCassette.load(fast_first).interactions] == order

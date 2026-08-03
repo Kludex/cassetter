@@ -58,3 +58,12 @@ with use_cassette("cassette.yaml", record_mode="none"):
 ```
 
 The key part is `ctx.run(work)`: the thread executes `work` inside the copied context, where the cassette is active.
+
+## Recorded order is stable
+
+Concurrent requests come back in whatever order the network decides, so recording them in arrival order would rewrite the cassette every time the timings shift. Cassettes are written in a canonical order instead: interactions are sorted by the fields you [match on](matching.md), and re-recording a suite produces the same file whichever response happened to land first.
+
+Interactions the matcher cannot tell apart are left alone, because their order is what decides which one replays: with the default `["method", "uri"]`, two calls to the same URL replay in the order they appear. Those keep the order their requests were *sent* in, which is stable across runs even when completion order is not.
+
+!!! note
+    The order is canonical for the `match_on` in force while recording. Narrowing `match_on` afterwards - say from `["method", "uri", "json_body"]` to `["method", "uri"]` - can make interactions that used to be distinct interchangeable, and the file is no longer ordered for the new matcher. Re-record after changing it.

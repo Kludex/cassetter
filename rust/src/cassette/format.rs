@@ -675,10 +675,10 @@ pub fn from_raw(raw: RawCassette, binaries: &[Vec<u8>]) -> pyo3::PyResult<Casset
 }
 
 /// Convert internal Cassette to raw YAML format.
-pub fn to_raw(cassette: &Cassette) -> RawCassette {
-    let interactions = cassette
-        .interactions
+pub fn to_raw(cassette: &Cassette, order: &[usize]) -> RawCassette {
+    let interactions = order
         .iter()
+        .filter_map(|&idx| cassette.interactions.get(idx))
         .map(|i| RawInteraction {
             request: RawRequest {
                 method: i.request.method.clone(),
@@ -1059,7 +1059,7 @@ interactions:
             ..Cassette::default()
         };
         cassette.played_indices = vec![false];
-        let yaml = serde_saphyr::to_string(&to_raw(&cassette)).unwrap();
+        let yaml = serde_saphyr::to_string(&to_raw(&cassette, &[0])).unwrap();
         let reloaded = load_yaml(&yaml);
         match &reloaded.interactions[0].response.body.inner {
             BodyContent::Json(v) => {
@@ -1094,7 +1094,7 @@ interactions:
             ..Cassette::default()
         };
         cassette.played_indices = vec![false];
-        let yaml = serde_saphyr::to_string(&to_raw(&cassette)).unwrap();
+        let yaml = serde_saphyr::to_string(&to_raw(&cassette, &[0])).unwrap();
         let reloaded = load_yaml(&yaml);
         match &reloaded.interactions[0].response.body.inner {
             BodyContent::Text(s) => assert_eq!(s, "data: x\n\ndata: [DONE]\n\n"),

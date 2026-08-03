@@ -47,10 +47,10 @@ pub struct TomlResponse {
     pub body_content: Option<String>,
 }
 
-pub fn to_toml(cassette: &Cassette) -> TomlCassette {
-    let interactions = cassette
-        .interactions
+pub fn to_toml(cassette: &Cassette, order: &[usize]) -> TomlCassette {
+    let interactions = order
         .iter()
+        .filter_map(|&idx| cassette.interactions.get(idx))
         .map(|i| {
             let (req_type, req_content) = body_to_toml(&i.request.body);
             let (resp_type, resp_content) = body_to_toml(&i.response.body);
