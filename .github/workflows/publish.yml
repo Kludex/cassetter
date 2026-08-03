@@ -33,7 +33,7 @@ jobs:
           - os: windows-latest
             target: x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The Linux legs run maturin inside the manylinux container, which ships
       # its own interpreters. macOS and Windows run it natively, where only one
       # Python exists unless it is installed first.
@@ -82,7 +82,7 @@ jobs:
   build-sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set version from tag
         if: github.event_name == 'release'
         shell: bash
