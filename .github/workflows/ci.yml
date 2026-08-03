@@ -63,10 +63,16 @@ jobs:
             python-version: "3.13"
           # The module declares itself free-threading safe (gil_used = false),
           # so the free-threaded build has to actually be exercised.
+          #
+          # 3.14t is not viable yet: `python -c "import pyreqwest_impersonate"`
+          # segfaults on free-threaded 3.14 with nothing else imported, while
+          # working on both 3.13t and GIL-enabled 3.14. The rest of the suite
+          # passes there (485 tests with that one extra removed). Add the leg
+          # back once pyreqwest-impersonate ships a working free-threaded 3.14
+          # build - until then it costs ~20 minutes and fails on someone
+          # else's bug.
           - os: ubuntu-latest
             python-version: "3.13t"
-          - os: ubuntu-latest
-            python-version: "3.14t"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
