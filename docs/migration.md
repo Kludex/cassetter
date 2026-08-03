@@ -61,7 +61,25 @@ Some VCR.py features have no Cassetter equivalent yet:
 * `before_playback_response`: modifying responses during playback.
 * `allow_playback_repeats`: replaying the same interaction multiple times.
 * `record_on_exception`: skipping the save when the test raises.
-* Custom matchers via `register_matcher`.
+* Custom matchers via `register_matcher`. The most common use case - erasing
+  URI differences such as regions or account IDs - is covered by
+  `uri_normalizer`, a callable applied to both recorded and incoming URIs
+  before comparison.
 * `@pytest.mark.block_network` and `--disable-recording`.
 
 If you depend on one of these, open an issue and tell us about your use case.
+
+## Threads
+
+VCR.py patches HTTP clients globally, so requests made from any thread replay
+from the active cassette. Cassetter tracks the active cassette in a
+`ContextVar` for concurrency isolation, and falls back to the active cassette
+in threads whose context is empty - e.g. worker threads spawned by Temporal or
+DBOS that don't propagate contextvars. The net effect matches VCR.py: while a
+single cassette is active, requests from any thread replay from it.
+
+The fallback applies only when exactly one cassette is active. A thread with an
+empty context cannot say which `use_cassette` block it belongs to, so with
+several active at once - concurrent blocks in different tasks, or a nested one -
+it inherits none and its requests are not replayed. Propagate the context with
+`contextvars.copy_context()` where you need a cassette in those threads.

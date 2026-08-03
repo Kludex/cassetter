@@ -25,6 +25,7 @@ from cassetter.cassette import (
     RawRequest,
     RawResponse,
     SkipRecording,
+    UriNormalizer,
 )
 from cassetter.config import Cassetter
 from cassetter.context import use_cassette
@@ -55,6 +56,7 @@ __all__ = [
     "RecordMode",
     "SkipRecording",
     "SecurityConfig",
+    "UriNormalizer",
     "WsFrame",
     "WsInteraction",
     "use_cassette",

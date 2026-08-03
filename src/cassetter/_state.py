@@ -13,9 +13,37 @@ current_cassette: ContextVar[Cassette | None] = ContextVar("current_cassette", d
 lock = threading.Lock()
 installed: dict[type, tuple[InterceptorProtocol, int]] = {}
 
+# Active cassettes entered via use_cassette or the pytest plugin, in entry
+# order. Threads spawned by libraries that don't propagate contextvars (e.g.
+# Temporal/DBOS worker threads) have an empty context and fall back to these.
+_fallback_cassettes: list[Cassette] = []
+
 
 def get_current_cassette() -> Cassette | None:
-    return current_cassette.get()
+    cassette = current_cassette.get()
+    if cassette is not None:
+        return cassette
+    with lock:
+        # A thread with an empty context cannot say which activation it belongs
+        # to, so it inherits a cassette only when there is nothing to choose
+        # between. Guessing would let one task's worker thread replay from - or
+        # record into - a cassette another task entered.
+        return _fallback_cassettes[0] if len(_fallback_cassettes) == 1 else None
+
+
+def push_fallback_cassette(cassette: Cassette) -> None:
+    with lock:
+        _fallback_cassettes.append(cassette)
+
+
+def pop_fallback_cassette(cassette: Cassette) -> None:
+    with lock:
+        # Remove by identity so out-of-order exits of concurrent cassettes
+        # never clobber one another.
+        for i in range(len(_fallback_cassettes) - 1, -1, -1):
+            if _fallback_cassettes[i] is cassette:
+                del _fallback_cassettes[i]
+                break
 
 
 def acquire_patches(interceptor_classes: list[type[InterceptorProtocol]]) -> None:

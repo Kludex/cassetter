@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -431,6 +432,96 @@ def test_check_orphans_includes_toml(tmp_path: object) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.toml")).write_text("---")
     assert check_orphans(cassette_dir, set()) == ["orphan.toml"]
+
+
+def test_resolve_cassette_sanitizes_forbidden_filename_chars(tmp_path: object) -> None:
+    """Node names keep pytest-recording's sanitization so vcrpy-recorded cassettes resolve."""
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    sanitized = "test_func[anthropic-claude-sonnet-4-5-openai-responses-gpt-5.4].yaml"
+    RustCassette().save(os.path.join(cassette_dir, sanitized))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func[anthropic:claude-sonnet-4-5-openai-responses:gpt-5.4]",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert os.path.basename(cassette.path) == sanitized
+    assert os.path.exists(cassette.path)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="':' is not a legal file name character")
+def test_resolve_cassette_keeps_existing_unsanitized_name(tmp_path: object) -> None:
+    """A cassette recorded before names were sanitized keeps replaying."""
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    node_name = "test_func[anthropic:claude-sonnet-4-5]"
+    RustCassette().save(os.path.join(cassette_dir, node_name + ".yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name=node_name,
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert os.path.basename(cassette.path) == node_name + ".yaml"
+    assert os.path.exists(cassette.path)
+
+
+def test_resolve_cassette_records_under_sanitized_name_when_neither_exists(tmp_path: object) -> None:
+    """With nothing on disk, a new cassette takes the sanitized name."""
+    test_dir = str(tmp_path)
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func[anthropic:claude]",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="all", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert os.path.basename(cassette.path) == "test_func[anthropic-claude].yaml"
+
+
+def test_resolve_cassette_passes_uri_normalizer(tmp_path: object) -> None:
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            request=HttpRequest("GET", "https://svc.us-east-2.example.com/run"),
+            response=HttpResponse(200, body=Body("text", "ok")),
+            recorded_at="2026-01-01T00:00:00Z",
+        )
+    )
+    c.save(os.path.join(cassette_dir, "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(
+            record_mode="none",
+            cassette_dir="cassettes",
+            uri_normalizer=lambda uri: uri.replace("us-east-1", "R").replace("us-east-2", "R"),
+        ),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    response = cassette.play("GET", "https://svc.us-east-1.example.com/run", {}, None)
+    assert response.body.content == "ok"
 
 
 def test_worker_ships_loaded_cassettes_to_controller() -> None:

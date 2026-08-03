@@ -7,8 +7,14 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from cassetter._core import MatchConfig, SecurityConfig
-from cassetter._state import acquire_patches, current_cassette, release_patches
-from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette
+from cassetter._state import (
+    acquire_patches,
+    current_cassette,
+    pop_fallback_cassette,
+    push_fallback_cassette,
+    release_patches,
+)
+from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, Cassette, UriNormalizer
 from cassetter.intercept._registry import resolve_interceptors
 from cassetter.recording import RecordMode
 
@@ -48,6 +54,7 @@ class Cassetter:
     ignore_hosts: list[str] | None = None
     before_record_request: BeforeRecordRequest | None = None
     before_record_response: BeforeRecordResponse | None = None
+    uri_normalizer: UriNormalizer | None = None
 
     def cassette(self, name: str | os.PathLike[str]) -> Cassette:
         """Build an unloaded cassette for `name`, resolved against `cassette_library_dir`.
@@ -77,6 +84,7 @@ class Cassetter:
             ignore_hosts=self.ignore_hosts,
             before_record_request=self.before_record_request,
             before_record_response=self.before_record_response,
+            uri_normalizer=self.uri_normalizer,
         )
 
     @contextlib.contextmanager
@@ -95,10 +103,12 @@ class Cassetter:
 
         acquire_patches(interceptor_classes)
         token = current_cassette.set(cassette)
+        push_fallback_cassette(cassette)
 
         try:
             yield cassette
         finally:
+            pop_fallback_cassette(cassette)
             current_cassette.reset(token)
             release_patches(interceptor_classes)
             cassette.save()

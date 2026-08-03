@@ -8,7 +8,13 @@ from typing import Any, cast
 
 import pytest
 
-from cassetter._state import acquire_patches, current_cassette, release_patches
+from cassetter._state import (
+    acquire_patches,
+    current_cassette,
+    pop_fallback_cassette,
+    push_fallback_cassette,
+    release_patches,
+)
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
 from cassetter.config import Cassetter
@@ -45,6 +51,30 @@ def _split_config(vcr_config: CassetteConfig | Cassetter) -> tuple[Cassetter, st
     return Cassetter(**known), options.get("cassette_dir")
 
 
+def _sanitized_file_name(node_name: str) -> str:
+    """The cassette file name pytest-recording derives from `node_name`.
+
+    Parametrize ids may contain characters that are forbidden in file names
+    (e.g. ':' from model names), so cassettes recorded under vcrpy only resolve
+    when they are replaced the same way.
+    """
+    for ch in "<>?%*:|\"'/\\":
+        node_name = node_name.replace(ch, "-")
+    return node_name + ".yaml"
+
+
+def _existing_file_name(cassette_dir: str, name: str, legacy_name: str) -> str:
+    """Prefer `legacy_name` when it is the only one on disk.
+
+    Cassetter recorded under the raw node name before it sanitized them, and
+    POSIX accepts those names, so such a cassette must keep replaying instead
+    of being silently replaced by an empty one.
+    """
+    if name == legacy_name or os.path.exists(os.path.join(cassette_dir, name)):
+        return name
+    return legacy_name if os.path.exists(os.path.join(cassette_dir, legacy_name)) else name
+
+
 def _resolve_cassette(
     node_name: str,
     marker_args: tuple[str, ...],
@@ -59,7 +89,7 @@ def _resolve_cassette(
     """Resolve cassette configuration and create a Cassette instance."""
     config, config_cassette_dir = _split_config(vcr_config)
 
-    cassette_name = marker_args[0] if marker_args else node_name + ".yaml"
+    cassette_name = marker_args[0] if marker_args else _sanitized_file_name(node_name)
 
     record_mode = config.record_mode or "none"
     if "record_mode" in marker_kwargs:
@@ -81,6 +111,9 @@ def _resolve_cassette(
         cassette_dir = os.path.join(test_dir, config_cassette_dir, test_file.stem)
     else:  # pragma: no cover - the vcr_cassette_dir fixture always supplies a directory
         cassette_dir = os.path.join(test_dir, "cassettes", test_file.stem)
+
+    if not marker_args:
+        cassette_name = _existing_file_name(cassette_dir, cassette_name, node_name + ".yaml")
 
     resolved = replace(
         config,
@@ -128,11 +161,13 @@ def cassette(
 
     acquire_patches(interceptor_classes)
     token = current_cassette.set(cassette)
+    push_fallback_cassette(cassette)
 
     try:
         yield cassette
     finally:
         # Reset context and release patches even if the test errors out
+        pop_fallback_cassette(cassette)
         current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()
