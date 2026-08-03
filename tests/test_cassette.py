@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
@@ -21,6 +22,7 @@ from cassetter._core import (
     MatchConfig,
     SecurityConfig,
     WsInteraction,
+    process_body,
     scrub_interaction,
 )
 from cassetter.cassette import (
@@ -100,6 +102,32 @@ def test_rust_cassette_save_and_load(tmp_path: object) -> None:
     assert len(c2) == 1
     assert c2.interactions[0].request.method == "POST"
     assert c2.interactions[0].response.status == 200
+
+
+def test_rust_cassette_preserves_json_key_order(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "key-order.yaml")
+    raw = b'{"id":"chatcmpl-abc","choices":[],"created":1,"usage":{"total_tokens":3,"prompt_tokens":1}}'
+
+    c = RustCassette()
+    c.add_interaction(
+        HttpInteraction(
+            request=HttpRequest("POST", "https://api.example.com/chat", {}, Body("none")),
+            response=HttpResponse(
+                200,
+                {"content-type": ["application/json"]},
+                process_body(raw, "application/json"),
+            ),
+            recorded_at="2026-02-20T10:30:01Z",
+        )
+    )
+    c.save(path)
+
+    with open(path) as f:
+        content = f.read()
+    assert content.index("id: chatcmpl-abc") < content.index("choices: []")
+
+    replayed = RustCassette.load(path).interactions[0].response.body.content
+    assert json.dumps(replayed, separators=(",", ":")).encode() == raw
 
 
 def test_rust_cassette_load_nonexistent() -> None:

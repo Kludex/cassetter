@@ -11,7 +11,9 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.29" }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `preserve_order` keeps a recorded JSON body in the order the server sent it, so a
+# cassette stays a faithful recording rather than an alphabetized rewrite of one.
+serde_json = { version = "1", features = ["preserve_order"] }
 serde-saphyr = "0.0.29"
 flate2 = "1"
 brotli = { version = "8", default-features = false, features = ["std"] }
