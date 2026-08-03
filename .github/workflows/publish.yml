@@ -40,12 +40,7 @@ jobs:
       - if: matrix.os != 'ubuntu-latest'
         uses: actions/setup-python@v5
         with:
-          # Each version is prepended to PATH in turn, so the last one listed
-          # owns the plain `python3.X` name. The free-threaded install ships a
-          # `python3.14` of its own, so it goes first or it shadows the GIL
-          # build and 3.14t gets packaged twice under both tags.
           python-version: |
-            3.14t
             3.10
             3.11
             3.12
@@ -61,11 +56,23 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          # Free-threaded CPython uses its own ABI tag (cp314t), so a normal
-          # cp314 wheel will not install there and the module declares
-          # gil_used = false. 3.13t is not shipped: PyO3 refuses to build for
-          # the free-threaded build of CPython below 3.14.
-          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14 python3.14t
+          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+      # Free-threaded CPython uses its own ABI tag, so a cp314 wheel will not
+      # install there and the module declares gil_used = false. It is installed
+      # only now because a free-threaded 3.14 answers to `python3.14` as well,
+      # and maturin picks it over the GIL build - on Windows whatever the PATH
+      # order - which would leave the release with no cp314 wheel. 3.13t is not
+      # shipped at all: PyO3 refuses the free-threaded build below 3.14.
+      - if: matrix.os != 'ubuntu-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14t"
+          allow-prereleases: true
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.14t
           manylinux: ${{ matrix.manylinux || 'auto' }}
       - uses: actions/upload-artifact@v4
         with:
