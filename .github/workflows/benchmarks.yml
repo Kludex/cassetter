@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
       - run: uv sync
       - run: uv run maturin develop --release
-      - uses: CodSpeedHQ/action@v3
+      - uses: CodSpeedHQ/action@v4.19.1
         with:
           run: uv run pytest benchmarks/test_bench.py --codspeed
