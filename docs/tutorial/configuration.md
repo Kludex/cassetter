@@ -47,7 +47,7 @@ with recorder.use_cassette("openai.yaml", record_mode="all"):
     ...  # re-records this one cassette
 ```
 
-`Cassetter` is immutable, so a configuration shared between tests can never be modified by one of them. To derive a new configuration instead of overriding a single call, use `dataclasses.replace`:
+`Cassetter` is frozen, so no test can reassign an option on a configuration another test shares. To derive a new configuration instead of overriding a single call, use `dataclasses.replace`:
 
 ```python
 from dataclasses import replace

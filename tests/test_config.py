@@ -105,7 +105,7 @@ def test_unknown_override_is_rejected(tmp_path: Path) -> None:
             pass  # pragma: no cover
 
 
-def test_configuration_is_immutable() -> None:
+def test_configuration_is_frozen() -> None:
     recorder = Cassetter(record_mode="none")
     with pytest.raises(AttributeError):
         recorder.record_mode = "all"  # type: ignore[misc]

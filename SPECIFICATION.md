@@ -238,7 +238,9 @@ Both entry points build cassettes through it: `use_cassette()` is a thin wrapper
 
 - **Turning the `CassetteConfig` TypedDict into the object.** `vcr_config` already returns a dictionary in existing suites and in pytest-recording, so the mapping form has to keep working regardless. Keeping the TypedDict for the mapping and adding a separate class avoids breaking those fixtures. Rejected because it renames a working type for no gain.
 
-- **Mutable configuration.** A configuration shared across a test suite is exactly the kind of object one test mutates and another test pays for. Frozen plus per-call `**overrides` (and `dataclasses.replace` for a derived configuration) covers the same use cases without the failure mode. Rejected because shared mutable defaults are a known source of test-order bugs.
+- **Mutable configuration.** A configuration shared across a test suite is exactly the kind of object one test mutates and another test pays for. Frozen plus per-call `**overrides` (and `dataclasses.replace` for a derived configuration) covers the same use cases without an API that invites it. Rejected because shared mutable defaults are a known source of test-order bugs.
+
+  Frozen is shallow, as everywhere else in Python: the option lists themselves are still lists, and mutating one in place is visible to cassettes built afterwards. Normalizing them to tuples was considered and rejected - it would hand back a tuple for a list the caller passed, breaking equality against the value they wrote, in exchange for closing a hole nobody reaches into.
 
 **Why this choice:** Configuration is data, so it gets a value object rather than a builder or a factory function. Options unset on the object fall back to the same defaults as `use_cassette()`, which keeps one set of defaults in the library. The one deliberate exception is `record_mode`, which is stored as "unset" rather than `once`: the pytest plugin defaults to `none` for safety, and an object that silently flipped a suite to `once` would defeat that.
 

@@ -82,7 +82,7 @@ with recorder.use_cassette("openai.yaml", record_mode="all"):
     ...
 ```
 
-It takes every option `use_cassette()` takes, plus `cassette_library_dir` - the directory cassette names are resolved against. The object is immutable and callable, so `recorder("openai.yaml")` works too.
+It takes every option `use_cassette()` takes, plus `cassette_library_dir` - the directory cassette names are resolved against. The object is frozen and callable, so `recorder("openai.yaml")` works too.
 
 The `vcr_config` fixture accepts a `Cassetter`, so one object can configure both the pytest suite and direct `use_cassette()` calls:
 
