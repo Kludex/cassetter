@@ -21,7 +21,6 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://kludex.github.io/cassetter/"
-Documentation = "https://kludex.github.io/cassetter/"
 Repository = "https://github.com/Kludex/cassetter"
 Issues = "https://github.com/Kludex/cassetter/issues"
 Changelog = "https://github.com/Kludex/cassetter/releases"
