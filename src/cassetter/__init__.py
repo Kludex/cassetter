@@ -25,6 +25,7 @@ from cassetter.cassette import (
     RawResponse,
     SkipRecording,
 )
+from cassetter.config import Cassetter
 from cassetter.context import use_cassette
 from cassetter.introspection import RecordedRequest
 from cassetter.recording import RecordMode
@@ -37,6 +38,7 @@ __all__ = [
     "CassetteExpiredError",
     "CassetteExpiredWarning",
     "CassetteNotFoundError",
+    "Cassetter",
     "GrpcInteraction",
     "GrpcRequest",
     "GrpcResponse",

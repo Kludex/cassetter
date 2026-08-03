@@ -217,7 +217,32 @@ When `record_mode=none` and a cassette file doesn't exist, the fixture creates a
 
 **Why this choice:** Module-level VCR markers are convenient for test files where most-but-not-all tests need recording. Non-recording tests shouldn't be forced to have empty cassette files.
 
-## 7. Scope and non-goals
+## 7. Configuration object
+
+`Cassetter` is a frozen dataclass holding the options shared by a group of cassettes. It exposes `use_cassette(name, **overrides)`, and `cassette_library_dir` - the directory cassette names are resolved against.
+
+```python
+recorder = Cassetter(cassette_library_dir="tests/cassettes", record_mode="none")
+
+with recorder.use_cassette("openai.yaml"):
+    ...
+```
+
+Both entry points build cassettes through it: `use_cassette()` is a thin wrapper that constructs one, and the pytest plugin converts a `vcr_config` dictionary into one. There is a single place where options become a `Cassette`.
+
+**Alternatives considered:**
+
+- **A `VCR`-named class (VCR.py's `vcr.VCR(...)`).** Maximum familiarity, but cassetter is positioned as a replacement for VCR.py - reusing the name makes documentation and stack traces ambiguous about which library is in play. Rejected because the cost outlives the migration.
+
+- **Making `use_cassette()` itself the factory** (`my_vcr = use_cassette(...)`, then `with my_vcr(...)`). One name for two roles: called with a path it records, called without one it configures. The return type depends on the arguments, which neither type checkers nor readers handle well. Rejected because the overload is not worth the saved name.
+
+- **Turning the `CassetteConfig` TypedDict into the object.** `vcr_config` already returns a dictionary in existing suites and in pytest-recording, so the mapping form has to keep working regardless. Keeping the TypedDict for the mapping and adding a separate class avoids breaking those fixtures. Rejected because it renames a working type for no gain.
+
+- **Mutable configuration.** A configuration shared across a test suite is exactly the kind of object one test mutates and another test pays for. Frozen plus per-call `**overrides` (and `dataclasses.replace` for a derived configuration) covers the same use cases without the failure mode. Rejected because shared mutable defaults are a known source of test-order bugs.
+
+**Why this choice:** Configuration is data, so it gets a value object rather than a builder or a factory function. Options unset on the object fall back to the same defaults as `use_cassette()`, which keeps one set of defaults in the library. The one deliberate exception is `record_mode`, which is stored as "unset" rather than `once`: the pytest plugin defaults to `none` for safety, and an object that silently flipped a suite to `once` would defeat that.
+
+## 8. Scope and non-goals
 
 ### Implemented
 - HTTP recording/replay for httpx, aiohttp, requests, urllib3

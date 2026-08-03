@@ -60,6 +60,38 @@ with use_cassette("tests/cassettes/my_test.yaml", record_mode="once"):
         response = await client.get("https://api.example.com/users")
 ```
 
+### With a reusable configuration
+
+`Cassetter` holds the options shared by a group of cassettes, so they are declared once instead of on every call:
+
+```python
+from cassetter import Cassetter
+
+recorder = Cassetter(
+    cassette_library_dir="tests/cassettes",
+    record_mode="none",
+    filter_headers=["x-gateway-apikey"],
+    before_record_request=my_request_hook,
+)
+
+with recorder.use_cassette("openai.yaml"):
+    ...
+
+# override any option for a single cassette
+with recorder.use_cassette("openai.yaml", record_mode="all"):
+    ...
+```
+
+It takes every option `use_cassette()` takes, plus `cassette_library_dir` - the directory cassette names are resolved against. The object is immutable and callable, so `recorder("openai.yaml")` works too.
+
+The `vcr_config` fixture accepts a `Cassetter`, so one object can configure both the pytest suite and direct `use_cassette()` calls:
+
+```python
+@pytest.fixture(scope="module")
+def vcr_config() -> Cassetter:
+    return recorder
+```
+
 ## Record modes
 
 | Mode | Behavior |
@@ -508,6 +540,7 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 | pytest-recording / VCR.py | cassetter | Notes |
 |---|---|---|
 | `vcr` fixture | `cassette` fixture | `vcr` is available as an alias |
+| `vcr.VCR(...)` | `Cassetter(...)` | Same idea, same `cassette_library_dir` |
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `decode_compressed_response` | _(automatic)_ | Always decompresses - no config needed |
