@@ -44,6 +44,9 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # The manifest and lockfile live in rust/; the action defaults to the
+          # repository root, where there is no Cargo.toml to scan.
+          working-directory: rust
 
   test:
     runs-on: ${{ matrix.os }}

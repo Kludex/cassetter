@@ -46,6 +46,8 @@ jobs:
             3.12
             3.13
             3.14
+            3.13t
+            3.14t
           allow-prereleases: true
       - name: Set version from tag
         if: github.event_name == 'release'
@@ -56,7 +58,10 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
+          # Free-threaded CPython uses its own ABI tags (cp313t, cp314t), so a
+          # normal cp313 wheel will not install there. The module declares
+          # gil_used = false and CI tests 3.13t/3.14t, so ship wheels for them.
+          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14 python3.13t python3.14t
           manylinux: ${{ matrix.manylinux || 'auto' }}
       - uses: actions/upload-artifact@v4
         with:
