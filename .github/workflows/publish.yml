@@ -40,14 +40,17 @@ jobs:
       - if: matrix.os != 'ubuntu-latest'
         uses: actions/setup-python@v5
         with:
+          # Each version is prepended to PATH in turn, so the last one listed
+          # owns the plain `python3.X` name. The free-threaded install ships a
+          # `python3.14` of its own, so it goes first or it shadows the GIL
+          # build and 3.14t gets packaged twice under both tags.
           python-version: |
+            3.14t
             3.10
             3.11
             3.12
             3.13
             3.14
-            3.13t
-            3.14t
           allow-prereleases: true
       - name: Set version from tag
         if: github.event_name == 'release'
@@ -58,10 +61,11 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          # Free-threaded CPython uses its own ABI tags (cp313t, cp314t), so a
-          # normal cp313 wheel will not install there. The module declares
-          # gil_used = false and CI tests 3.13t/3.14t, so ship wheels for them.
-          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14 python3.13t python3.14t
+          # Free-threaded CPython uses its own ABI tag (cp314t), so a normal
+          # cp314 wheel will not install there and the module declares
+          # gil_used = false. 3.13t is not shipped: PyO3 refuses to build for
+          # the free-threaded build of CPython below 3.14.
+          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14 python3.14t
           manylinux: ${{ matrix.manylinux || 'auto' }}
       - uses: actions/upload-artifact@v4
         with:
