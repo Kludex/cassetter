@@ -19,6 +19,12 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://kludex.github.io/cassetter/"
+Repository = "https://github.com/Kludex/cassetter"
+Issues = "https://github.com/Kludex/cassetter/issues"
+Changelog = "https://github.com/Kludex/cassetter/releases"
+
 [project.optional-dependencies]
 httpx = ["httpx>=0.24"]
 aiohttp = ["aiohttp>=3.9"]
