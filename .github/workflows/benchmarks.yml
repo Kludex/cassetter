@@ -25,6 +25,6 @@ jobs:
           python-version: "3.13"
       - run: uv sync
       - run: uv run maturin develop --release
-      - uses: CodSpeedHQ/action@v3
+      - uses: CodSpeedHQ/action@v5.0.1
         with:
           run: uv run pytest benchmarks/test_bench.py --codspeed
