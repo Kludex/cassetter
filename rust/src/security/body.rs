@@ -55,27 +55,41 @@ impl Scrubber {
         value: &serde_json::Value,
         replacement: &str,
     ) -> serde_json::Value {
+        let mut scrubbed = value.clone();
+        self.scrub_json_in_place(&mut scrubbed, replacement);
+        scrubbed
+    }
+
+    /// Scrub a parsed tree in place, reporting whether anything was replaced.
+    ///
+    /// A caller that owns its tree walks it once instead of rebuilding it into a
+    /// fresh map and deep-comparing the two, which is the difference between one
+    /// allocation per object and three on a streaming body with a `data:` payload
+    /// per chunk.
+    fn scrub_json_in_place(&self, value: &mut serde_json::Value, replacement: &str) -> bool {
         match value {
             serde_json::Value::Object(map) => {
-                let mut new_map = serde_json::Map::new();
-                for (key, val) in map {
-                    if self.matches_key(key) {
-                        new_map.insert(
-                            key.clone(),
-                            serde_json::Value::String(replacement.to_string()),
-                        );
-                    } else {
-                        new_map.insert(key.clone(), self.scrub_json_value(val, replacement));
+                let mut scrubbed = false;
+                for (key, val) in map.iter_mut() {
+                    if !self.matches_key(key) {
+                        scrubbed |= self.scrub_json_in_place(val, replacement);
+                    } else if val.as_str() != Some(replacement) {
+                        // A value already holding the replacement is left alone, so a
+                        // re-scrub reports no change and the body is not reformatted.
+                        *val = serde_json::Value::String(replacement.to_string());
+                        scrubbed = true;
                     }
                 }
-                serde_json::Value::Object(new_map)
+                scrubbed
             }
-            serde_json::Value::Array(arr) => serde_json::Value::Array(
-                arr.iter()
-                    .map(|v| self.scrub_json_value(v, replacement))
-                    .collect(),
-            ),
-            _ => value.clone(),
+            serde_json::Value::Array(arr) => {
+                let mut scrubbed = false;
+                for val in arr.iter_mut() {
+                    scrubbed |= self.scrub_json_in_place(val, replacement);
+                }
+                scrubbed
+            }
+            _ => false,
         }
     }
 
@@ -101,12 +115,11 @@ impl Scrubber {
     /// unchanged when nothing matched, so bodies without secrets are never
     /// reformatted.
     fn scrub_json_text(&self, text: &str, replacement: &str) -> Option<String> {
-        let parsed: serde_json::Value = serde_json::from_str(text).ok()?;
-        let scrubbed = self.scrub_json_value(&parsed, replacement);
-        if scrubbed == parsed {
+        let mut parsed: serde_json::Value = serde_json::from_str(text).ok()?;
+        if !self.scrub_json_in_place(&mut parsed, replacement) {
             return Some(text.to_string());
         }
-        serde_json::to_string(&scrubbed).ok()
+        serde_json::to_string(&parsed).ok()
     }
 
     /// Scrub `data:` payloads of a Server-Sent Events stream.
