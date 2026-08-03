@@ -63,7 +63,9 @@ The key part is `ctx.run(work)`: the thread executes `work` inside the copied co
 
 Concurrent requests come back in whatever order the network decides, so recording them in arrival order would rewrite the cassette every time the timings shift. Cassettes are written in a canonical order instead: interactions are sorted by the fields you [match on](matching.md), and re-recording a suite produces the same file whichever response happened to land first.
 
-Interactions the matcher cannot tell apart are left alone, because their order is what decides which one replays: with the default `["method", "uri"]`, two calls to the same URL replay in the order they appear. Those keep the order their requests were *sent* in, which is stable across runs even when completion order is not.
+Interactions the matcher cannot tell apart are left alone, because their order is what decides which one replays: with the default `["method", "uri"]`, two calls to the same URL replay in the order they appear. Those keep the order their requests were *sent* in rather than the order the responses came back, so a slow reply no longer moves an interaction up or down the file.
+
+Send order still comes from the event loop. `asyncio.gather` starts tasks in the order you pass them, so the file is stable; trio deliberately randomizes task startup, and there the order is whatever it picked. Match on the request body when two calls to the same URL need to be told apart for certain.
 
 !!! note
     The order is canonical for the `match_on` in force while recording. Narrowing `match_on` afterwards - say from `["method", "uri", "json_body"]` to `["method", "uri"]` - can make interactions that used to be distinct interchangeable, and the file is no longer ordered for the new matcher. Re-record after changing it.
