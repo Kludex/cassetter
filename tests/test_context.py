@@ -6,7 +6,8 @@ import pytest
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter._state import acquire_patches, installed
 from cassetter.cassette import CassetteExpiredWarning
-from cassetter.context import _AUTO_DETECT_ORDER, _INTERCEPTOR_MAP, resolve_interceptors, use_cassette
+from cassetter.context import use_cassette
+from cassetter.intercept._registry import _AUTO_DETECT_ORDER, _INTERCEPTOR_MAP, resolve_interceptors
 from cassetter.recording import RecordMode
 
 pytest_plugins = ("anyio",)

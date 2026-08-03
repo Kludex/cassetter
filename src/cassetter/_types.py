@@ -16,6 +16,7 @@ class CassetteConfig(TypedDict, total=False):
     body_scrub_patterns: list[str]
     filter_replacement: str
     cassette_dir: str
+    cassette_library_dir: str
     intercept: list[str]
     max_age: str
     on_expiry: str
