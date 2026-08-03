@@ -4,6 +4,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString};
 use serde::{Deserialize, Serialize};
 
+use super::depythonize_checked;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "content")]
 pub enum BodyContent {
@@ -17,7 +19,15 @@ pub enum BodyContent {
     None,
 }
 
-#[pyclass(from_py_object)]
+/// Trim a string to at most `max` characters, on a character boundary.
+fn preview(s: &str, max: usize) -> (&str, bool) {
+    match s.char_indices().nth(max) {
+        Some((idx, _)) => (&s[..idx], true),
+        None => (s, false),
+    }
+}
+
+#[pyclass(frozen, eq, from_py_object, module = "cassetter._core")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Body {
     #[pyo3(get)]
@@ -31,28 +41,25 @@ pub struct Body {
 impl Body {
     #[new]
     #[pyo3(signature = (body_type, content=None))]
-    fn new(py: Python<'_>, body_type: String, content: Option<Py<PyAny>>) -> PyResult<Self> {
+    fn new(body_type: String, content: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
         let inner = match body_type.as_str() {
             "json" => {
                 let obj = content.ok_or_else(|| {
                     pyo3::exceptions::PyValueError::new_err("JSON body requires content")
                 })?;
-                let val: serde_json::Value = pythonize::depythonize(obj.bind(py))?;
-                BodyContent::Json(val)
+                BodyContent::Json(depythonize_checked(&obj)?)
             }
             "text" => {
                 let obj = content.ok_or_else(|| {
                     pyo3::exceptions::PyValueError::new_err("text body requires content")
                 })?;
-                let s: String = obj.extract(py)?;
-                BodyContent::Text(s)
+                BodyContent::Text(obj.extract()?)
             }
             "binary" => {
                 let obj = content.ok_or_else(|| {
                     pyo3::exceptions::PyValueError::new_err("binary body requires content")
                 })?;
-                let b: Vec<u8> = obj.extract(py)?;
-                BodyContent::Binary(b)
+                BodyContent::Binary(obj.extract()?)
             }
             "none" => BodyContent::None,
             _ => {
@@ -78,15 +85,9 @@ impl Body {
         match &self.inner {
             BodyContent::Json(_) => "Body(type='json', ...)".to_string(),
             BodyContent::Text(s) => {
-                let boundary = s
-                    .char_indices()
-                    .take_while(|(idx, _)| *idx <= 50)
-                    .last()
-                    .map(|(idx, c)| idx + c.len_utf8())
-                    .unwrap_or(0)
-                    .min(s.len());
-                let preview = &s[..boundary];
-                format!("Body(type='text', content='{preview}...')")
+                let (head, truncated) = preview(s, 50);
+                let ellipsis = if truncated { ", ..." } else { "" };
+                format!("Body(type='text', content={head:?}{ellipsis})")
             }
             BodyContent::Binary(b) => format!("Body(type='binary', len={})", b.len()),
             BodyContent::None => "Body(type='none')".to_string(),
@@ -124,14 +125,14 @@ impl Body {
     }
 }
 
-#[pyclass(from_py_object)]
+#[pyclass(frozen, eq, from_py_object, module = "cassetter._core")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpRequest {
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub method: String,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub uri: String,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub headers: HashMap<String, Vec<String>>,
     pub body: Body,
 }
@@ -159,22 +160,34 @@ impl HttpRequest {
         self.body.clone()
     }
 
-    #[setter]
-    fn set_body(&mut self, body: Body) {
-        self.body = body;
+    /// Return a copy with the given fields replaced.
+    #[pyo3(signature = (*, method=None, uri=None, headers=None, body=None))]
+    fn replace(
+        &self,
+        method: Option<String>,
+        uri: Option<String>,
+        headers: Option<HashMap<String, Vec<String>>>,
+        body: Option<Body>,
+    ) -> Self {
+        HttpRequest {
+            method: method.unwrap_or_else(|| self.method.clone()),
+            uri: uri.unwrap_or_else(|| self.uri.clone()),
+            headers: headers.unwrap_or_else(|| self.headers.clone()),
+            body: body.unwrap_or_else(|| self.body.clone()),
+        }
     }
 
     fn __repr__(&self) -> String {
-        format!("HttpRequest(method='{}', uri='{}')", self.method, self.uri)
+        format!("HttpRequest(method={:?}, uri={:?})", self.method, self.uri)
     }
 }
 
-#[pyclass(from_py_object)]
+#[pyclass(frozen, eq, from_py_object, module = "cassetter._core")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpResponse {
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub status: u16,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub headers: HashMap<String, Vec<String>>,
     pub body: Body,
 }
@@ -196,9 +209,19 @@ impl HttpResponse {
         self.body.clone()
     }
 
-    #[setter]
-    fn set_body(&mut self, body: Body) {
-        self.body = body;
+    /// Return a copy with the given fields replaced.
+    #[pyo3(signature = (*, status=None, headers=None, body=None))]
+    fn replace(
+        &self,
+        status: Option<u16>,
+        headers: Option<HashMap<String, Vec<String>>>,
+        body: Option<Body>,
+    ) -> Self {
+        HttpResponse {
+            status: status.unwrap_or(self.status),
+            headers: headers.unwrap_or_else(|| self.headers.clone()),
+            body: body.unwrap_or_else(|| self.body.clone()),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -206,12 +229,12 @@ impl HttpResponse {
     }
 }
 
-#[pyclass(from_py_object)]
+#[pyclass(frozen, eq, from_py_object, module = "cassetter._core")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct HttpInteraction {
     pub request: HttpRequest,
     pub response: HttpResponse,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     pub recorded_at: String,
 }
 
@@ -231,19 +254,24 @@ impl HttpInteraction {
         self.request.clone()
     }
 
-    #[setter]
-    fn set_request(&mut self, request: HttpRequest) {
-        self.request = request;
-    }
-
     #[getter]
     fn response(&self) -> HttpResponse {
         self.response.clone()
     }
 
-    #[setter]
-    fn set_response(&mut self, response: HttpResponse) {
-        self.response = response;
+    /// Return a copy with the given fields replaced.
+    #[pyo3(signature = (*, request=None, response=None, recorded_at=None))]
+    fn replace(
+        &self,
+        request: Option<HttpRequest>,
+        response: Option<HttpResponse>,
+        recorded_at: Option<String>,
+    ) -> Self {
+        HttpInteraction {
+            request: request.unwrap_or_else(|| self.request.clone()),
+            response: response.unwrap_or_else(|| self.response.clone()),
+            recorded_at: recorded_at.unwrap_or_else(|| self.recorded_at.clone()),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -252,5 +280,39 @@ impl HttpInteraction {
             self.request.__repr__(),
             self.response.__repr__()
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_repr_does_not_append_ellipsis_to_short_text() {
+        let body = Body::text("short".to_string());
+        assert_eq!(body.__repr__(), r#"Body(type='text', content="short")"#);
+    }
+
+    #[test]
+    fn test_repr_escapes_quotes_and_newlines() {
+        let body = Body::text("a\"b\nc".to_string());
+        let repr = body.__repr__();
+        assert!(!repr.contains('\n'), "{repr}");
+        assert!(repr.contains(r#"\"b\nc"#), "{repr}");
+    }
+
+    #[test]
+    fn test_repr_truncates_long_text_on_char_boundary() {
+        let body = Body::text("é".repeat(80));
+        let repr = body.__repr__();
+        assert!(repr.ends_with(", ...)"), "{repr}");
+    }
+
+    #[test]
+    fn test_repr_handles_empty_text() {
+        assert_eq!(
+            Body::text(String::new()).__repr__(),
+            r#"Body(type='text', content="")"#
+        );
     }
 }

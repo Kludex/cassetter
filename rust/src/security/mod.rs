@@ -8,17 +8,24 @@ use crate::protocol::grpc::GrpcInteraction;
 use crate::protocol::http::HttpInteraction;
 use crate::protocol::ws::WsInteraction;
 
-#[pyclass(from_py_object)]
+#[pyclass(skip_from_py_object, module = "cassetter._core")]
 #[derive(Clone, Debug)]
 pub struct SecurityConfig {
     #[pyo3(get, set)]
     pub filter_headers: Vec<String>,
     #[pyo3(get, set)]
     pub filter_query_parameters: Vec<String>,
-    #[pyo3(get, set)]
     pub body_scrub_patterns: Vec<String>,
     #[pyo3(get, set)]
     pub replacement: String,
+    /// Compiled form of `body_scrub_patterns`, rebuilt whenever it is set.
+    pub scrubber: body::Scrubber,
+}
+
+fn compile_scrubber(patterns: &[String]) -> PyResult<body::Scrubber> {
+    body::Scrubber::new(patterns).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("invalid body scrub pattern: {e}"))
+    })
 }
 
 #[pymethods]
@@ -35,8 +42,14 @@ impl SecurityConfig {
         filter_query_parameters: Option<Vec<String>>,
         body_scrub_patterns: Option<Vec<String>>,
         replacement: Option<String>,
-    ) -> Self {
-        SecurityConfig {
+    ) -> PyResult<Self> {
+        let body_scrub_patterns = body_scrub_patterns.unwrap_or_else(|| {
+            defaults::DEFAULT_BODY_SCRUB_PATTERNS
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        });
+        Ok(SecurityConfig {
             filter_headers: filter_headers.unwrap_or_else(|| {
                 defaults::DEFAULT_FILTER_HEADERS
                     .iter()
@@ -49,14 +62,40 @@ impl SecurityConfig {
                     .map(|s| s.to_string())
                     .collect()
             }),
-            body_scrub_patterns: body_scrub_patterns.unwrap_or_else(|| {
-                defaults::DEFAULT_BODY_SCRUB_PATTERNS
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect()
-            }),
+            scrubber: compile_scrubber(&body_scrub_patterns)?,
+            body_scrub_patterns,
             replacement: replacement.unwrap_or_else(|| "[FILTERED]".to_string()),
-        }
+        })
+    }
+
+    #[getter]
+    fn body_scrub_patterns(&self) -> Vec<String> {
+        self.body_scrub_patterns.clone()
+    }
+
+    #[setter]
+    fn set_body_scrub_patterns(&mut self, patterns: Vec<String>) -> PyResult<()> {
+        self.scrubber = compile_scrubber(&patterns)?;
+        self.body_scrub_patterns = patterns;
+        Ok(())
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SecurityConfig(filter_headers={:?}, filter_query_parameters={:?}, body_scrub_patterns={:?}, replacement={:?})",
+            self.filter_headers,
+            self.filter_query_parameters,
+            self.body_scrub_patterns,
+            self.replacement,
+        )
+    }
+}
+
+impl SecurityConfig {
+    /// Build a config from Rust, panicking only on patterns that cannot compile.
+    #[cfg(test)]
+    pub fn with_defaults() -> Self {
+        SecurityConfig::new(None, None, None, None).expect("default patterns compile")
     }
 }
 
@@ -84,18 +123,14 @@ pub fn scrub_interaction(
     }
 
     // Scrub request body
-    scrubbed.request.body = body::scrub_body(
-        &scrubbed.request.body,
-        &config.body_scrub_patterns,
-        &config.replacement,
-    );
+    scrubbed.request.body = config
+        .scrubber
+        .scrub_body(&scrubbed.request.body, &config.replacement);
 
     // Scrub response body
-    scrubbed.response.body = body::scrub_body(
-        &scrubbed.response.body,
-        &config.body_scrub_patterns,
-        &config.replacement,
-    );
+    scrubbed.response.body = config
+        .scrubber
+        .scrub_body(&scrubbed.response.body, &config.replacement);
 
     scrubbed
 }
@@ -107,11 +142,7 @@ pub fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig
     let mut scrubbed = interaction.clone();
     headers::filter_headers(&mut scrubbed.headers, &config.filter_headers);
     for frame in &mut scrubbed.frames {
-        frame.body = body::scrub_body(
-            &frame.body,
-            &config.body_scrub_patterns,
-            &config.replacement,
-        );
+        frame.body = config.scrubber.scrub_body(&frame.body, &config.replacement);
     }
     scrubbed
 }
@@ -128,11 +159,7 @@ pub fn scrub_grpc_interaction(
     headers::filter_headers(&mut scrubbed.request.metadata, &config.filter_headers);
     headers::filter_headers(&mut scrubbed.response.metadata, &config.filter_headers);
     if let Some(debug) = &scrubbed.json_debug {
-        scrubbed.json_debug = Some(body::scrub_json_value(
-            debug,
-            &config.body_scrub_patterns,
-            &config.replacement,
-        ));
+        scrubbed.json_debug = Some(config.scrubber.scrub_json_value(debug, &config.replacement));
     }
     scrubbed
 }
@@ -147,7 +174,7 @@ mod tests {
     use crate::protocol::ws::WsFrame;
 
     fn default_config() -> SecurityConfig {
-        SecurityConfig::new(None, None, None, None)
+        SecurityConfig::with_defaults()
     }
 
     #[test]
@@ -234,8 +261,11 @@ mod tests {
         }
         match &scrubbed.frames[1].body.inner {
             BodyContent::Text(t) => {
-                assert!(t.contains(r#""password": "[FILTERED]""#));
-                assert!(t.contains(r#""ok": true"#));
+                // A text frame that parses as JSON is scrubbed as a tree and
+                // re-serialized, so spacing is serde_json's rather than the
+                // sender's. Only bodies that actually changed are rewritten.
+                assert!(t.contains(r#""password":"[FILTERED]""#), "{t}");
+                assert!(t.contains(r#""ok":true"#), "{t}");
             }
             other => panic!("expected text body, got {other:?}"),
         }

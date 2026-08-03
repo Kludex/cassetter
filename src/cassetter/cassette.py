@@ -23,9 +23,6 @@ from cassetter._core import (
     SecurityConfig,
     WsFrame,
     WsInteraction,
-    find_grpc_match,
-    find_match,
-    find_ws_match,
     process_body,
     scrub_grpc_interaction,
     scrub_interaction,
@@ -38,6 +35,10 @@ from cassetter.recording import RecordMode
 
 class CassetteNotFoundError(Exception):
     """Raised when a cassette file is not found and record mode doesn't allow recording."""
+
+
+class CassetteLoadError(Exception):
+    """Raised when a cassette file exists but cannot be parsed."""
 
 
 class CassetteExpiredWarning(UserWarning):
@@ -124,9 +125,9 @@ class Cassette:
         self._before_record_request = before_record_request
         self._before_record_response = before_record_response
         self._uri_normalizer = uri_normalizer
-        # Parallel to the inner interactions, holding copies with normalized
-        # URIs so matching stays on the Rust path. None when no normalizer.
-        self._match_interactions: list[HttpInteraction] | None = None
+        # Mirror of the inner cassette holding copies with normalized URIs, so
+        # matching stays on the Rust path. None when no normalizer.
+        self._match_inner: _RustCassette | None = None
         self._inner: _RustCassette | None = None
         self._dirty = False
         self._once_replay_only = False
@@ -213,22 +214,27 @@ class Cassette:
 
         if self._record_mode == RecordMode.ALL or not exists:
             self._inner = _RustCassette()
-            self._rebuild_match_interactions()
+            self._rebuild_match_inner()
             if self._record_mode == RecordMode.ALL:
                 self._dirty = True
             return
 
-        self._inner = _RustCassette.load(self._path)
+        try:
+            self._inner = _RustCassette.load(self._path)
+        except ValueError as exc:
+            raise CassetteLoadError(f"could not parse cassette {self._path}: {exc}") from exc
         self._once_replay_only = True
         self._play_counter = Counter()
         self._check_expiry()
-        self._rebuild_match_interactions()
+        self._rebuild_match_inner()
 
-    def _rebuild_match_interactions(self) -> None:
+    def _rebuild_match_inner(self) -> None:
         if self._uri_normalizer is None or self._inner is None:
-            self._match_interactions = None
+            self._match_inner = None
             return
-        self._match_interactions = [self._normalized_copy(i) for i in self._inner.interactions]
+        mirror = _RustCassette()
+        mirror.interactions = [self._normalized_copy(i) for i in self._inner.interactions]
+        self._match_inner = mirror
 
     def _normalized_copy(self, interaction: HttpInteraction) -> HttpInteraction:
         assert self._uri_normalizer is not None  # caller guards this
@@ -318,24 +324,32 @@ class Cassette:
         # api_key=[FILTERED] would otherwise never match the real query string.
         probe = HttpInteraction(request, HttpResponse(0), "")
         request = scrub_interaction(probe, self._security_config).request
-
-        # The normalizer applies symmetrically: recorded URIs were normalized
-        # into `_match_interactions`, so the incoming URI gets the same
-        # treatment before comparison.
-        interactions = self._inner.interactions
-        if self._match_interactions is not None:
-            assert self._uri_normalizer is not None
-            interactions = self._match_interactions
-            request = HttpRequest(request.method, self._uri_normalizer(request.uri), request.headers, request.body)
-        result = find_match(request, interactions, self._inner.played_indices, self._match_config)
+        if self._match_inner is None:
+            result = self._inner.take_match(request, self._match_config)
+        else:
+            result = self._take_normalized_match(request)
 
         if result is None:
             raise NoMatchError(f"no matching interaction for {method} {uri}")
 
         idx, interaction = result
-        self._inner.mark_played(idx)
         self._play_counter[idx] += 1
         return interaction.response
+
+    def _take_normalized_match(self, request: HttpRequest) -> tuple[int, HttpInteraction] | None:
+        """Match against the mirror, whose URIs were normalized at load time.
+
+        The normalizer applies symmetrically, so the incoming URI gets the same
+        treatment before comparison. The mirror shares indices with the inner
+        cassette, whose played state is kept in sync for orphan reporting.
+        """
+        assert self._inner is not None and self._match_inner is not None  # caller guards this
+        assert self._uri_normalizer is not None
+        normalized = HttpRequest(request.method, self._uri_normalizer(request.uri), request.headers, request.body)
+        result = self._match_inner.take_match(normalized, self._match_config)
+        if result is not None:
+            self._inner.mark_played(result[0])
+        return result
 
     def record(
         self,
@@ -383,11 +397,11 @@ class Cassette:
 
         if self._inner is None:
             self._inner = _RustCassette()
-            self._rebuild_match_interactions()
+            self._rebuild_match_inner()
 
         self._inner.add_interaction(interaction)
-        if self._match_interactions is not None:
-            self._match_interactions.append(self._normalized_copy(interaction))
+        if self._match_inner is not None:
+            self._match_inner.add_interaction(self._normalized_copy(interaction))
         self._dirty = True
         return interaction.response
 
@@ -398,12 +412,11 @@ class Cassette:
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = find_grpc_match(method, self._inner.grpc_interactions, self._inner.grpc_played)
+        result = self._inner.take_grpc_match(method)
         if result is None:
             raise NoMatchError(f"no matching gRPC interaction for {method}")
 
-        idx, interaction = result
-        self._inner.mark_grpc_played(idx)
+        _, interaction = result
         return interaction.response
 
     def record_grpc(
@@ -440,12 +453,11 @@ class Cassette:
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = find_ws_match(uri, self._inner.ws_interactions, self._inner.ws_played)
+        result = self._inner.take_ws_match(uri)
         if result is None:
             raise NoMatchError(f"no matching WebSocket interaction for {uri}")
 
-        idx, interaction = result
-        self._inner.mark_ws_played(idx)
+        _, interaction = result
         return interaction
 
     def record_ws(

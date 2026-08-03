@@ -26,24 +26,20 @@ class VCRWebSocket:
     async def send(self, message: str | bytes) -> None:
         offset_ms = int((time.monotonic() - self._start_time) * 1000)
         if isinstance(message, bytes):
-            body = Body("binary", message)
-            frame_type = "binary"
+            frame = WsFrame("send", "binary", Body("binary", message), offset_ms)
         else:
-            body = Body("text", message)
-            frame_type = "text"
-        self._frames.append(WsFrame("send", frame_type, body, offset_ms))
+            frame = WsFrame("send", "text", Body("text", message), offset_ms)
+        self._frames.append(frame)
         await self._real.send(message)
 
     async def recv(self) -> str | bytes:
         data: str | bytes = await self._real.recv()
         offset_ms = int((time.monotonic() - self._start_time) * 1000)
         if isinstance(data, bytes):
-            body = Body("binary", data)
-            frame_type = "binary"
+            frame = WsFrame("recv", "binary", Body("binary", data), offset_ms)
         else:
-            body = Body("text", data)
-            frame_type = "text"
-        self._frames.append(WsFrame("recv", frame_type, body, offset_ms))
+            frame = WsFrame("recv", "text", Body("text", data), offset_ms)
+        self._frames.append(frame)
         return data
 
     async def close(self, code: int = 1000, reason: str = "") -> None:

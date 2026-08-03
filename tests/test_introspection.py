@@ -48,6 +48,7 @@ def test_requests_exposes_vcr_attributes(tmp_path: object) -> None:
     assert first.method == "POST"
     assert first.uri == "https://api.example.com/v1/items?b=2&a=1"
     assert first.headers == {"content-type": ["application/json"]}
+    assert first.body is not None
     assert json.loads(first.body) == {"name": "widget", "tags": ["a", "b"]}
     assert first.scheme == "https"
     assert first.host == "api.example.com"

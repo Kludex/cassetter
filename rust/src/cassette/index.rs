@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
 /// A simple index for fast cassette lookups by method + URI.
+///
+/// Built once per cassette and cached on it, so the cost is amortised across
+/// every lookup rather than paid again on each one.
+#[derive(Clone, Debug, Default)]
 pub struct CassetteIndex {
     /// Maps "METHOD URI" -> list of interaction indices.
     entries: HashMap<String, Vec<usize>>,
@@ -28,9 +32,9 @@ impl CassetteIndex {
     }
 
     /// Lookup candidate indices for a given method + URI.
-    pub fn lookup(&self, method: &str, uri: &str) -> Vec<usize> {
+    pub fn lookup(&self, method: &str, uri: &str) -> &[usize] {
         let key = format!("{} {uri}", method.to_uppercase());
-        self.entries.get(&key).cloned().unwrap_or_default()
+        self.entries.get(&key).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -67,12 +71,9 @@ mod tests {
 
         assert_eq!(
             index.lookup("GET", "https://api.example.com/users"),
-            vec![0, 2]
+            &[0, 2]
         );
-        assert_eq!(
-            index.lookup("POST", "https://api.example.com/users"),
-            vec![1]
-        );
+        assert_eq!(index.lookup("POST", "https://api.example.com/users"), &[1]);
         assert!(index
             .lookup("DELETE", "https://api.example.com/users")
             .is_empty());

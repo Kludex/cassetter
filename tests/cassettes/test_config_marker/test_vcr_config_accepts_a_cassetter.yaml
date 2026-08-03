@@ -1,0 +1,18 @@
+version: 1
+interactions:
+- request:
+    method: GET
+    uri: https://example.com/config-test
+    headers: {}
+    body:
+      type: none
+  response:
+    status: 200
+    headers:
+      content-type:
+      - application/json
+    body:
+      type: json
+      content:
+        config: true
+  recorded_at: 2026-01-01T00:00:00Z

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 
 import httpx
 import httpx2
@@ -182,7 +183,7 @@ def test_httpx_and_httpx2_intercept_independently(cassette_path: str) -> None:
 async def test_replay_streaming_request_body(preloaded_cassette: str) -> None:
     """Streaming request bodies (e.g. file uploads) raise RequestNotRead on .content access."""
 
-    async def body_stream():
+    async def body_stream() -> AsyncIterator[bytes]:
         yield b"chunk1"
         yield b"chunk2"
 

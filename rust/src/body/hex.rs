@@ -7,7 +7,7 @@ pub fn encode(data: &[u8]) -> String {
 
 /// Decode a lowercase/uppercase hex string into bytes.
 pub fn decode(s: &str) -> Result<Vec<u8>, String> {
-    if !s.len().is_multiple_of(2) {
+    if s.len() % 2 != 0 {
         return Err("odd-length hex string".to_string());
     }
     if !s.is_ascii() {

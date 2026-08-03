@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
@@ -169,7 +170,7 @@ def test_install_uninstall() -> None:
 async def test_replay_streaming_request_body(preloaded_cassette: str) -> None:
     """Streaming request bodies (e.g. file uploads) raise RequestNotRead on .content access."""
 
-    async def body_stream():
+    async def body_stream() -> AsyncIterator[bytes]:
         yield b"chunk1"
         yield b"chunk2"
 
@@ -192,7 +193,7 @@ def test_extract_headers_skip_encoding() -> None:
 def test_sync_replay_streaming_request_body(preloaded_cassette: str) -> None:
     """Sync streaming request bodies raise RequestNotRead on .content access."""
 
-    def body_stream():  # type: ignore[no-untyped-def]
+    def body_stream() -> Iterator[bytes]:
         yield b"chunk1"
         yield b"chunk2"
 

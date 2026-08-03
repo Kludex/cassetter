@@ -6,7 +6,11 @@ mod security;
 
 use pyo3::prelude::*;
 
-#[pymodule]
+// Declared free-threading safe deliberately, not by inheriting PyO3 0.28's
+// default: the crate has no `unsafe`, no mutable statics, and the only shared
+// mutable state is `Cassette`, whose match-and-mark step is a single atomic
+// call guarded by PyO3's borrow checker.
+#[pymodule(gil_used = false)]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // HTTP protocol types
     m.add_class::<protocol::http::Body>()?;

@@ -60,7 +60,7 @@ with use_cassette("cassette.yaml", uri_normalizer=normalize):
     ...
 ```
 
-Now a cassette recorded against `us-east-2` replays for a request to `us-east-1`. Because the normalizer runs on both sides, cassettes on disk are never rewritten — matching just sees the normalized form.
+Now a cassette recorded against `us-east-2` replays for a request to `us-east-1`. Because the normalizer runs on both sides, cassettes on disk are never rewritten - matching just sees the normalized form.
 
 In the pytest plugin, set it in your `vcr_config` fixture:
 

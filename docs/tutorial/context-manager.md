@@ -50,6 +50,9 @@ with use_cassette(
 
 Each option has its own section in this tutorial. The important thing to remember: **you only need the path**. Everything else has safe defaults.
 
+!!! tip
+    To declare these options once and reuse them across many cassettes, see [Reuse a configuration](configuration.md).
+
 ## Select the intercepted libraries
 
 By default, Cassetter detects which HTTP libraries are installed and intercepts all of them. To limit interception to specific libraries, pass `intercept`:

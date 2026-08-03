@@ -68,6 +68,8 @@ dev = [
     "vcrpy>=8.1.1",
     "pytest-codspeed>=3.2",
     "httpx2>=2.0",
+    "pytest-xdist>=3.8.0",
+    "types-pyyaml>=6.0.12.20260724",
 ]
 docs = [
     "zensical>=0.0.46",
@@ -85,6 +87,7 @@ combine-as-imports = true
 
 [tool.mypy]
 strict = true
+files = ["src", "tests", "benchmarks"]
 
 [[tool.mypy.overrides]]
 module = ["grpc", "grpc.*", "google.protobuf.*"]
@@ -92,6 +95,12 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["pyreqwest_impersonate", "pyreqwest_impersonate.*"]
+ignore_missing_imports = true
+
+# vcrpy is installed but ships no py.typed; it is only used by the comparison
+# benchmarks.
+[[tool.mypy.overrides]]
+module = ["vcr", "vcr.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -14,6 +14,7 @@ nav = [
     { "Tutorial" = [
         { "Use it with pytest" = "tutorial/pytest.md" },
         { "Use the context manager" = "tutorial/context-manager.md" },
+        { "Reuse a configuration" = "tutorial/configuration.md" },
         { "Record modes" = "tutorial/record-modes.md" },
         { "Request matching" = "tutorial/matching.md" },
         { "Safe by default" = "tutorial/security.md" },
