@@ -58,6 +58,7 @@ class Urllib3Interceptor:
                 if not cassette.can_record:
                     raise
 
+            order = cassette.reserve_record_order()
             real_response = original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)
             resp_body = real_response.data
             resp_headers = extract_headers(real_response.headers)
@@ -70,6 +71,7 @@ class Urllib3Interceptor:
                 status=real_response.status,
                 response_headers=resp_headers,
                 response_body=resp_body,
+                order=order,
             )
 
             record_headers = urllib3._collections.HTTPHeaderDict(real_response.headers)

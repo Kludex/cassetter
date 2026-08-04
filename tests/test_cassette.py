@@ -1084,3 +1084,111 @@ def test_corrupt_cassette_raises_cassette_load_error(tmp_path: object) -> None:
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     with pytest.raises(CassetteLoadError, match="could not parse cassette"):
         cassette.load()
+
+
+def _record(cassette: Cassette, method: str, uri: str, body: bytes | None, reply: str) -> None:
+    cassette.record(
+        method=method,
+        uri=uri,
+        request_headers={"content-type": ["application/json"]},
+        request_body=body,
+        status=200,
+        response_headers={},
+        response_body=reply.encode(),
+    )
+
+
+def test_save_writes_interactions_in_canonical_order(tmp_path: object) -> None:
+    path = os.path.join(str(tmp_path), "canonical.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+    _record(cassette, "GET", "https://api.example.com/b", None, "b")
+    _record(cassette, "GET", "https://api.example.com/a", None, "a")
+    cassette.save()
+
+    saved = RustCassette.load(path)
+    assert [i.request.uri for i in saved.interactions] == [
+        "https://api.example.com/a",
+        "https://api.example.com/b",
+    ]
+
+
+def test_save_keeps_order_the_matcher_relies_on(tmp_path: object) -> None:
+    """Interactions the matcher cannot tell apart must not be reordered.
+
+    Replay takes the first unplayed match, so their order is what decides which
+    response each request gets.
+    """
+    path = os.path.join(str(tmp_path), "ambiguous.yaml")
+    uri = "https://api.example.com/chat"
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+    _record(cassette, "POST", uri, b'{"q": "zebra"}', "first")
+    _record(cassette, "POST", uri, b'{"q": "aardvark"}', "second")
+    cassette.save()
+
+    replayed = Cassette(path, record_mode=RecordMode.NONE)
+    replayed.load()
+    assert replayed.play("POST", uri, {}, b'{"q": "zebra"}').body.content == "first"
+
+
+def test_save_sorts_by_body_when_it_is_matched_on(tmp_path: object) -> None:
+    """Matching on the body makes it safe to order by, so it is used."""
+    path = os.path.join(str(tmp_path), "by-body.yaml")
+    uri = "https://api.example.com/chat"
+    cassette = Cassette(
+        path,
+        record_mode=RecordMode.ALL,
+        match_config=MatchConfig(match_on=["method", "uri", "json_body"]),
+    )
+    cassette.load()
+    _record(cassette, "POST", uri, b'{"q": "zebra"}', "zebra")
+    _record(cassette, "POST", uri, b'{"q": "aardvark"}', "aardvark")
+    cassette.save()
+
+    saved = RustCassette.load(path)
+    assert [i.response.body.content for i in saved.interactions] == ["aardvark", "zebra"]
+
+
+def test_newly_recorded_interactions_follow_loaded_ones(tmp_path: object) -> None:
+    """An appended interaction sorts after the loaded one it ties with."""
+    path = os.path.join(str(tmp_path), "appended.yaml")
+    uri = "https://api.example.com/poll"
+    seed = RustCassette()
+    seed.add_interaction(
+        HttpInteraction(HttpRequest("GET", uri), HttpResponse(200, body=Body("text", "loaded")), "2026-01-01T00:00:00Z")
+    )
+    seed.save(path)
+
+    cassette = Cassette(path, record_mode=RecordMode.NEW_EPISODES)
+    cassette.load()
+    _record(cassette, "GET", uri, None, "appended")
+    cassette.save()
+
+    saved = RustCassette.load(path)
+    assert [i.response.body.content for i in saved.interactions] == ["loaded", "appended"]
+
+
+def test_uri_normalizer_collisions_keep_request_order(tmp_path: object) -> None:
+    """URIs the normalizer collapses into one must not be split by the sort.
+
+    Matching compares the normalized URI, so these two are interchangeable at
+    replay and their order is what picks the response - ordering by the raw URI
+    they were recorded with would swap them.
+    """
+    path = os.path.join(str(tmp_path), "regions.yaml")
+
+    def normalize(uri: str) -> str:
+        return re.sub(r"us-east-\d", "REGION", uri)
+
+    cassette = Cassette(path, record_mode=RecordMode.ALL, uri_normalizer=normalize)
+    cassette.load()
+    for region, reply in (("us-east-2", "sent-first"), ("us-east-1", "sent-second")):
+        _record(cassette, "GET", f"https://svc.{region}.example.com/run", None, reply)
+    cassette.save()
+
+    assert [i.response.body.content for i in RustCassette.load(path).interactions] == ["sent-first", "sent-second"]
+
+    replayed = Cassette(path, record_mode=RecordMode.NONE, uri_normalizer=normalize)
+    replayed.load()
+    assert replayed.play("GET", "https://svc.us-east-1.example.com/run", {}, None).body.content == "sent-first"

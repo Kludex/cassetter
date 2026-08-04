@@ -123,6 +123,7 @@ def intercept(
         if not cassette.can_record:
             raise
 
+    order = cassette.reserve_record_order()
     real_response = original(client, *original_args, **kwargs)
     # pyreqwest decompresses the body, so drop content-encoding to prevent
     # double-decompression when recording
@@ -139,6 +140,7 @@ def intercept(
         status=real_response.status_code,
         response_headers=resp_headers,
         response_body=real_response.content,
+        order=order,
     )
     return real_response
 
