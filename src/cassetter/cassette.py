@@ -137,7 +137,7 @@ class Cassette:
         # which is stable across runs where completion order is not.
         self._record_orders: list[int] = []
         self._next_record_order = 0
-        self._order_lock = threading.Lock()
+        self._record_lock = threading.Lock()
 
     @property
     def path(self) -> str:
@@ -245,7 +245,7 @@ class Cassette:
         cassette would otherwise be written in whatever order responses arrived
         in - different on every run.
         """
-        with self._order_lock:
+        with self._record_lock:
             order = self._next_record_order
             self._next_record_order += 1
             return order
@@ -319,7 +319,11 @@ class Cassette:
         if self._inner is None or not self._dirty:
             return
         if len(self._inner) > 0 or os.path.exists(self._path):
-            self._inner.save(self._path, self._match_config, self._record_orders)
+            # The order comes from whichever cassette the matcher compares, so
+            # that URIs a normalizer collapses into one stay interchangeable
+            # instead of being separated by the raw URI they were recorded with.
+            matched = self._inner if self._match_inner is None else self._match_inner
+            self._inner.save(self._path, matched.output_order(self._match_config, self._record_orders))
             self._dirty = False
 
     @property
@@ -433,10 +437,16 @@ class Cassette:
             self._inner = _RustCassette()
             self._rebuild_match_inner()
 
-        self._inner.add_interaction(interaction)
-        self._record_orders.append(self.reserve_record_order() if order is None else order)
-        if self._match_inner is not None:
-            self._match_inner.add_interaction(self._normalized_copy(interaction))
+        if order is None:
+            order = self.reserve_record_order()
+        # One lock over all three, or a concurrent recorder can interleave its
+        # own append between them and leave an interaction paired with another
+        # request's position.
+        with self._record_lock:
+            self._inner.add_interaction(interaction)
+            self._record_orders.append(order)
+            if self._match_inner is not None:
+                self._match_inner.add_interaction(self._normalized_copy(interaction))
         self._dirty = True
         return interaction.response
 

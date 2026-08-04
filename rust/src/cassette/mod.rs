@@ -203,24 +203,32 @@ impl Cassette {
         py.detach(|| Cassette::load_impl(path))
     }
 
-    /// Save the cassette to disk, releasing the GIL for serialization and I/O.
+    /// The order these interactions should be written in.
     ///
-    /// `sort_config` writes interactions in a canonical order instead of the
-    /// order their responses arrived in; `record_order` breaks ties between
-    /// interactions the matcher cannot tell apart. See [`ordering`].
-    #[pyo3(signature = (path, sort_config=None, record_order=None))]
-    fn save(
+    /// `sort_config` puts them in a canonical order instead of the order their
+    /// responses arrived in; `record_order` breaks ties between interactions
+    /// the matcher cannot tell apart. See [`ordering`].
+    ///
+    /// Separate from `save` so the order can be taken from whichever cassette
+    /// the matcher actually compares - with a `uri_normalizer` that is the
+    /// normalized mirror, not the interactions written to disk.
+    #[pyo3(signature = (sort_config=None, record_order=None))]
+    fn output_order(
         &self,
-        py: Python<'_>,
-        path: &str,
         sort_config: Option<&MatchConfig>,
         record_order: Option<Vec<usize>>,
-    ) -> PyResult<()> {
-        let order = ordering::output_order(
+    ) -> Vec<usize> {
+        ordering::output_order(
             &self.interactions,
             sort_config,
             record_order.as_deref().unwrap_or(&[]),
-        );
+        )
+    }
+
+    /// Save the cassette to disk, releasing the GIL for serialization and I/O.
+    #[pyo3(signature = (path, order=None))]
+    fn save(&self, py: Python<'_>, path: &str, order: Option<Vec<usize>>) -> PyResult<()> {
+        let order = order.unwrap_or_else(|| (0..self.interactions.len()).collect());
         py.detach(|| self.save_impl(path, &order))
     }
 

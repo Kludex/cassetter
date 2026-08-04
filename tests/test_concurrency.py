@@ -10,6 +10,8 @@ from __future__ import annotations
 import contextvars
 import json
 import os
+import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -524,3 +526,42 @@ async def test_indistinguishable_interactions_keep_request_order(tmp_path: objec
             await _gather(send_first, send_second)
 
     assert _recorded(path, "body") == ["first", "second"]
+
+
+def test_concurrent_records_keep_interactions_paired_with_their_position(tmp_path: object) -> None:
+    """Appending the interaction and its position must not interleave.
+
+    A recorder slipping between the two leaves an interaction holding another
+    request's position, which silently reorders the saved cassette.
+    """
+    cassette = Cassette(os.path.join(str(tmp_path), "paired.yaml"), record_mode=RecordMode.ALL)
+    cassette.load()
+    count = 200
+    ready = threading.Barrier(count)
+
+    def record(index: int) -> None:
+        ready.wait()
+        cassette.record(
+            method="GET",
+            uri=f"https://api.example.com/{index}",
+            request_headers={},
+            request_body=None,
+            status=200,
+            response_headers={},
+            response_body=b"ok",
+            order=index,
+        )
+
+    switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        threads = [threading.Thread(target=record, args=(i,)) for i in range(count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    finally:
+        sys.setswitchinterval(switch_interval)
+
+    recorded = [i.request.uri.rsplit("/", 1)[-1] for i in cassette.interactions]
+    assert recorded == [str(order) for order in cassette._record_orders]

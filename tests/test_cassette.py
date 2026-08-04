@@ -1167,3 +1167,28 @@ def test_newly_recorded_interactions_follow_loaded_ones(tmp_path: object) -> Non
 
     saved = RustCassette.load(path)
     assert [i.response.body.content for i in saved.interactions] == ["loaded", "appended"]
+
+
+def test_uri_normalizer_collisions_keep_request_order(tmp_path: object) -> None:
+    """URIs the normalizer collapses into one must not be split by the sort.
+
+    Matching compares the normalized URI, so these two are interchangeable at
+    replay and their order is what picks the response - ordering by the raw URI
+    they were recorded with would swap them.
+    """
+    path = os.path.join(str(tmp_path), "regions.yaml")
+
+    def normalize(uri: str) -> str:
+        return re.sub(r"us-east-\d", "REGION", uri)
+
+    cassette = Cassette(path, record_mode=RecordMode.ALL, uri_normalizer=normalize)
+    cassette.load()
+    for region, reply in (("us-east-2", "sent-first"), ("us-east-1", "sent-second")):
+        _record(cassette, "GET", f"https://svc.{region}.example.com/run", None, reply)
+    cassette.save()
+
+    assert [i.response.body.content for i in RustCassette.load(path).interactions] == ["sent-first", "sent-second"]
+
+    replayed = Cassette(path, record_mode=RecordMode.NONE, uri_normalizer=normalize)
+    replayed.load()
+    assert replayed.play("GET", "https://svc.us-east-1.example.com/run", {}, None).body.content == "sent-first"
