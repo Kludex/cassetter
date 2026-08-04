@@ -2,6 +2,33 @@ use crate::matching::config::MatchConfig;
 use crate::matching::matchers::filter_json_paths;
 use crate::protocol::http::{BodyContent, HttpInteraction, HttpRequest};
 
+/// Check that `order` writes every interaction exactly once.
+///
+/// The serializers skip an index they cannot resolve, so an order that is
+/// short, repeats, or points past the end would quietly drop or duplicate
+/// recorded interactions instead of failing.
+pub(crate) fn validate(order: &[usize], count: usize) -> Result<(), String> {
+    let mut written = vec![false; count];
+    for &idx in order {
+        match written.get_mut(idx) {
+            None => {
+                return Err(format!(
+                    "interaction index {idx} out of range for {count} interactions"
+                ))
+            }
+            Some(true) => return Err(format!("interaction index {idx} appears more than once")),
+            Some(slot) => *slot = true,
+        }
+    }
+    if order.len() != count {
+        return Err(format!(
+            "order covers {} of {count} interactions",
+            order.len()
+        ));
+    }
+    Ok(())
+}
+
 /// The order interactions are written to disk in.
 ///
 /// Recording order follows whichever response arrived first, so two runs of the
@@ -263,6 +290,30 @@ mod tests {
         ];
         let order = output_order(&interactions, None, &[1, 0]);
         assert_eq!(order, vec![1, 0]);
+    }
+
+    #[test]
+    fn validate_accepts_a_permutation() {
+        assert!(validate(&[2, 0, 1], 3).is_ok());
+        assert!(validate(&[], 0).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_an_out_of_range_index() {
+        let err = validate(&[0, 2], 2).unwrap_err();
+        assert!(err.to_string().contains("out of range"), "{err}");
+    }
+
+    #[test]
+    fn validate_rejects_a_repeated_index() {
+        let err = validate(&[0, 0], 2).unwrap_err();
+        assert!(err.to_string().contains("more than once"), "{err}");
+    }
+
+    #[test]
+    fn validate_rejects_a_short_order() {
+        let err = validate(&[0], 2).unwrap_err();
+        assert!(err.to_string().contains("covers 1 of 2"), "{err}");
     }
 
     #[test]

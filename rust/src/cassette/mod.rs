@@ -228,7 +228,14 @@ impl Cassette {
     /// Save the cassette to disk, releasing the GIL for serialization and I/O.
     #[pyo3(signature = (path, order=None))]
     fn save(&self, py: Python<'_>, path: &str, order: Option<Vec<usize>>) -> PyResult<()> {
-        let order = order.unwrap_or_else(|| (0..self.interactions.len()).collect());
+        let order = match order {
+            Some(order) => {
+                ordering::validate(&order, self.interactions.len())
+                    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+                order
+            }
+            None => (0..self.interactions.len()).collect(),
+        };
         py.detach(|| self.save_impl(path, &order))
     }
 
