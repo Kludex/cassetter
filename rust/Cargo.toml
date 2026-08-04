@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 # `preserve_order` keeps a recorded JSON body in the order the server sent it, so a
 # cassette stays a faithful recording rather than an alphabetized rewrite of one.
 serde_json = { version = "1", features = ["preserve_order"] }
-serde-saphyr = "0.0.29"
+serde-saphyr = "1.0.0"
 flate2 = "1"
 brotli = { version = "8", default-features = false, features = ["std"] }
 zstd = { version = "0.13", default-features = false }
