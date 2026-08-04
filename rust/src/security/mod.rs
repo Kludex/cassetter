@@ -22,12 +22,6 @@ pub struct SecurityConfig {
     pub scrubber: body::Scrubber,
 }
 
-fn compile_scrubber(patterns: &[String]) -> PyResult<body::Scrubber> {
-    body::Scrubber::new(patterns).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("invalid body scrub pattern: {e}"))
-    })
-}
-
 #[pymethods]
 impl SecurityConfig {
     #[new]
@@ -42,14 +36,14 @@ impl SecurityConfig {
         filter_query_parameters: Option<Vec<String>>,
         body_scrub_patterns: Option<Vec<String>>,
         replacement: Option<String>,
-    ) -> PyResult<Self> {
+    ) -> Self {
         let body_scrub_patterns = body_scrub_patterns.unwrap_or_else(|| {
             defaults::DEFAULT_BODY_SCRUB_PATTERNS
                 .iter()
                 .map(|s| s.to_string())
                 .collect()
         });
-        Ok(SecurityConfig {
+        SecurityConfig {
             filter_headers: filter_headers.unwrap_or_else(|| {
                 defaults::DEFAULT_FILTER_HEADERS
                     .iter()
@@ -62,10 +56,10 @@ impl SecurityConfig {
                     .map(|s| s.to_string())
                     .collect()
             }),
-            scrubber: compile_scrubber(&body_scrub_patterns)?,
+            scrubber: body::Scrubber::new(&body_scrub_patterns),
             body_scrub_patterns,
             replacement: replacement.unwrap_or_else(|| "[FILTERED]".to_string()),
-        })
+        }
     }
 
     #[getter]
@@ -74,10 +68,9 @@ impl SecurityConfig {
     }
 
     #[setter]
-    fn set_body_scrub_patterns(&mut self, patterns: Vec<String>) -> PyResult<()> {
-        self.scrubber = compile_scrubber(&patterns)?;
+    fn set_body_scrub_patterns(&mut self, patterns: Vec<String>) {
+        self.scrubber = body::Scrubber::new(&patterns);
         self.body_scrub_patterns = patterns;
-        Ok(())
     }
 
     fn __repr__(&self) -> String {
@@ -92,10 +85,9 @@ impl SecurityConfig {
 }
 
 impl SecurityConfig {
-    /// Build a config from Rust, panicking only on patterns that cannot compile.
     #[cfg(test)]
     pub fn with_defaults() -> Self {
-        SecurityConfig::new(None, None, None, None).expect("default patterns compile")
+        SecurityConfig::new(None, None, None, None)
     }
 }
 

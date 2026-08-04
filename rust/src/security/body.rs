@@ -1,37 +1,63 @@
+use std::sync::OnceLock;
+
 use regex::{Captures, Regex};
 
 use crate::protocol::http::{Body, BodyContent};
 
-/// Pre-compiled scrubbing patterns.
+/// Scrubbing patterns, with their regex form compiled on first use.
 ///
 /// Regexes are only used for bodies that are not structured data; the
 /// structured paths walk the parsed value instead, which is both exact and
-/// cheaper than a regex sweep.
+/// cheaper than a regex sweep. Compiling them up front cost more than opening a
+/// small cassette did, and a cassette of JSON bodies never reaches them at all.
 #[derive(Clone, Debug)]
 pub struct Scrubber {
+    patterns: Vec<String>,
     lower_patterns: Vec<String>,
-    json_re: Vec<Regex>,
-    form_re: Vec<Regex>,
+    json_re: OnceLock<Vec<Regex>>,
+    form_re: OnceLock<Vec<Regex>>,
+}
+
+/// Compile one regex per pattern from a template wrapping an escaped key.
+///
+/// Every template is `(?i)` over an escaped key, so key matching mirrors
+/// `matches_key`: case-insensitive substring. `regex::escape` turns the pattern
+/// into a literal, so the only way a template fails to compile is a pattern
+/// large enough to blow the regex size limit.
+fn compile(patterns: &[String], template: impl Fn(&str) -> String) -> Vec<Regex> {
+    patterns
+        .iter()
+        .map(|pattern| {
+            let source = template(&regex::escape(pattern));
+            Regex::new(&source)
+                .unwrap_or_else(|e| panic!("scrub pattern {pattern:?} is too large: {e}"))
+        })
+        .collect()
 }
 
 impl Scrubber {
-    pub fn new(patterns: &[String]) -> Result<Self, regex::Error> {
-        let mut json_re = Vec::with_capacity(patterns.len());
-        let mut form_re = Vec::with_capacity(patterns.len());
-        for pattern in patterns {
-            let key = regex::escape(pattern);
-            // Key matching mirrors `matches_key`: case-insensitive substring.
-            json_re.push(Regex::new(&format!(
-                r#"(?i)("[^"]*{key}[^"]*"\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)"#
-            ))?);
-            form_re.push(Regex::new(&format!(
-                r"(?i)([^&\s=]*{key}[^&\s=]*=)[^&\s]*"
-            ))?);
-        }
-        Ok(Scrubber {
+    pub fn new(patterns: &[String]) -> Self {
+        Scrubber {
             lower_patterns: patterns.iter().map(|p| p.to_lowercase()).collect(),
-            json_re,
-            form_re,
+            patterns: patterns.to_vec(),
+            json_re: OnceLock::new(),
+            form_re: OnceLock::new(),
+        }
+    }
+
+    fn json_re(&self) -> &[Regex] {
+        self.json_re.get_or_init(|| {
+            compile(&self.patterns, |key| format!(
+                r#"(?i)("[^"]*{key}[^"]*"\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)"#
+            ))
+        })
+    }
+
+    fn form_re(&self) -> &[Regex] {
+        self.form_re.get_or_init(|| {
+            compile(&self.patterns, |key| {
+                format!(r"(?i)([^&\s=]*{key}[^&\s=]*=)[^&\s]*")
+            })
         })
     }
 
@@ -162,14 +188,14 @@ impl Scrubber {
         // A closure replacer is used throughout: `Regex::replace_all` expands
         // `$name` in a string replacement, so a replacement like `$0` would
         // re-emit the secret it is meant to hide.
-        for re in &self.json_re {
+        for re in self.json_re() {
             result = re
                 .replace_all(&result, |c: &Captures<'_>| {
                     format!("{}\"{}\"", &c[1], replacement)
                 })
                 .into_owned();
         }
-        for re in &self.form_re {
+        for re in self.form_re() {
             result = re
                 .replace_all(&result, |c: &Captures<'_>| {
                     format!("{}{}", &c[1], replacement)
@@ -185,7 +211,7 @@ mod tests {
     use super::*;
 
     fn scrubber(patterns: &[&str]) -> Scrubber {
-        Scrubber::new(&patterns.iter().map(|p| p.to_string()).collect::<Vec<_>>()).unwrap()
+        Scrubber::new(&patterns.iter().map(|p| p.to_string()).collect::<Vec<_>>())
     }
 
     fn scrub_text(text: &str, patterns: &[&str]) -> String {
