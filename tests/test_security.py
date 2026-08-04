@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from cassetter._core import (
     Body,
     GrpcInteraction,
@@ -235,6 +237,21 @@ def test_scrub_patterns_reassignment_discards_compiled_regexes() -> None:
 
     config.body_scrub_patterns = ["token"]
     assert _scrub_form_body(config, "password=hunter2&token=tok_abc") == "password=hunter2&token=[FILTERED]"
+
+
+def test_oversized_scrub_pattern_is_rejected_at_construction() -> None:
+    """Compilation is lazy, but a pattern too large to compile still fails where it is passed in."""
+    with pytest.raises(ValueError, match="invalid body scrub pattern"):
+        SecurityConfig(body_scrub_patterns=["a" * 1024 * 1024])
+
+
+def test_oversized_scrub_pattern_is_rejected_on_reassignment() -> None:
+    config = SecurityConfig(body_scrub_patterns=["password"])
+    with pytest.raises(ValueError, match="invalid body scrub pattern"):
+        config.body_scrub_patterns = ["a" * 1024 * 1024]
+
+    assert config.body_scrub_patterns == ["password"]
+    assert _scrub_form_body(config, "password=hunter2") == "password=[FILTERED]"
 
 
 def test_scrub_unstructured_is_stable_across_calls() -> None:
