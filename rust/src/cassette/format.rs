@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
@@ -159,9 +160,11 @@ fn opens_block_scalar(trimmed: &str) -> bool {
 /// Any other block scalar is copied through verbatim without inspecting its
 /// content, because a recorded body can legitimately contain a line ending in
 /// `!!binary |` and scanning into it would replace that line with a sentinel.
-pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
+pub fn extract_binary_scalars(content: &str) -> (Cow<'_, str>, Vec<Vec<u8>>) {
     if !content.contains("!!binary") {
-        return (content.to_string(), Vec::new());
+        // Borrow rather than copy: a cassette dominated by large bodies is
+        // mostly bytes this rewrite never touches.
+        return (Cow::Borrowed(content), Vec::new());
     }
     let mut out: Vec<String> = Vec::new();
     let mut binaries: Vec<Vec<u8>> = Vec::new();
@@ -226,7 +229,7 @@ pub fn extract_binary_scalars(content: &str) -> (String, Vec<Vec<u8>>) {
         out.push(line.to_string());
         i += 1;
     }
-    (out.join("\n"), binaries)
+    (Cow::Owned(out.join("\n")), binaries)
 }
 
 /// Deserialize status from either a plain integer (cassetter) or `{code: N, message: "..."}` (VCR).
@@ -1028,6 +1031,17 @@ interactions:
         let yaml = "body:\n  string: |\n    text mentioning !!binary | in prose\n";
         let (content, binaries) = extract_binary_scalars(yaml);
         assert_eq!(content, yaml.trim_end());
+        assert!(binaries.is_empty());
+    }
+
+    /// The prose case above still holds a `!!binary` marker, so it rewrites.
+    /// Only a cassette with no marker at all reaches the borrow.
+    #[test]
+    fn test_extract_binary_scalars_borrows_yaml_without_marker() {
+        let yaml = "body:\n  string: |\n    plain prose\n";
+        let (content, binaries) = extract_binary_scalars(yaml);
+        assert!(matches!(content, Cow::Borrowed(_)), "{content:?}");
+        assert_eq!(content, yaml);
         assert!(binaries.is_empty());
     }
 
