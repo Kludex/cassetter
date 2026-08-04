@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+import threading
 import warnings
 from collections import Counter
 from collections.abc import Callable
@@ -132,6 +133,11 @@ class Cassette:
         self._dirty = False
         self._once_replay_only = False
         self._play_counter: Counter[int] = Counter()
+        # Position of each interaction in the order its request was issued,
+        # which is stable across runs where completion order is not.
+        self._record_orders: list[int] = []
+        self._next_record_order = 0
+        self._record_lock = threading.Lock()
 
     @property
     def path(self) -> str:
@@ -214,6 +220,8 @@ class Cassette:
 
         if self._record_mode == RecordMode.ALL or not exists:
             self._inner = _RustCassette()
+            self._record_orders = []
+            self._next_record_order = 0
             self._rebuild_match_inner()
             if self._record_mode == RecordMode.ALL:
                 self._dirty = True
@@ -225,8 +233,22 @@ class Cassette:
             raise CassetteLoadError(f"could not parse cassette {self._path}: {exc}") from exc
         self._once_replay_only = True
         self._play_counter = Counter()
+        self._record_orders = list(range(len(self._inner.interactions)))
+        self._next_record_order = len(self._record_orders)
         self._check_expiry()
         self._rebuild_match_inner()
+
+    def reserve_record_order(self) -> int:
+        """Claim this interaction's position before its request is issued.
+
+        Interceptors record once the response is back, so under concurrency the
+        cassette would otherwise be written in whatever order responses arrived
+        in - different on every run.
+        """
+        with self._record_lock:
+            order = self._next_record_order
+            self._next_record_order += 1
+            return order
 
     def _rebuild_match_inner(self) -> None:
         if self._uri_normalizer is None or self._inner is None:
@@ -262,6 +284,8 @@ class Cassette:
             raise CassetteExpiredError(msg)
         if self._on_expiry == "rerecord":
             self._inner = _RustCassette()
+            self._record_orders = []
+            self._next_record_order = 0
             self._once_replay_only = False
             self._dirty = True
             return
@@ -287,11 +311,19 @@ class Cassette:
         An empty cassette is written only when a file already exists, so a
         re-record that captured nothing truncates the stale file instead of
         leaving it behind.
+
+        Interactions are written in a canonical order rather than the order
+        their responses arrived in, so a concurrent suite produces the same
+        file on every run.
         """
         if self._inner is None or not self._dirty:
             return
         if len(self._inner) > 0 or os.path.exists(self._path):
-            self._inner.save(self._path)
+            # The order comes from whichever cassette the matcher compares, so
+            # that URIs a normalizer collapses into one stay interchangeable
+            # instead of being separated by the raw URI they were recorded with.
+            matched = self._inner if self._match_inner is None else self._match_inner
+            self._inner.save(self._path, matched.output_order(self._match_config, self._record_orders))
             self._dirty = False
 
     @property
@@ -360,8 +392,14 @@ class Cassette:
         status: int,
         response_headers: dict[str, list[str]],
         response_body: bytes | None,
+        order: int | None = None,
     ) -> HttpResponse:
-        """Record an interaction and return the response."""
+        """Record an interaction and return the response.
+
+        Args:
+            order: Position claimed by `reserve_record_order()` before the
+                request went out. Defaults to the order this call arrives in.
+        """
         # Apply before_record_response hook
         if self._before_record_response is not None:
             try:
@@ -399,9 +437,16 @@ class Cassette:
             self._inner = _RustCassette()
             self._rebuild_match_inner()
 
-        self._inner.add_interaction(interaction)
-        if self._match_inner is not None:
-            self._match_inner.add_interaction(self._normalized_copy(interaction))
+        if order is None:
+            order = self.reserve_record_order()
+        # One lock over all three, or a concurrent recorder can interleave its
+        # own append between them and leave an interaction paired with another
+        # request's position.
+        with self._record_lock:
+            self._inner.add_interaction(interaction)
+            self._record_orders.append(order)
+            if self._match_inner is not None:
+                self._match_inner.add_interaction(self._normalized_copy(interaction))
         self._dirty = True
         return interaction.response
 

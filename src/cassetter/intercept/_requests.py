@@ -49,6 +49,7 @@ class RequestsInterceptor:
                 if not cassette.can_record:
                     raise
 
+            order = cassette.reserve_record_order()
             real_response = original_send(session, request, **kwargs)
             # requests exposes the decompressed body via .content, so drop
             # content-encoding to prevent double-decompression when recording
@@ -62,6 +63,7 @@ class RequestsInterceptor:
                 status=real_response.status_code,
                 response_headers=resp_headers,
                 response_body=real_response.content,
+                order=order,
             )
             return real_response
 

@@ -55,7 +55,7 @@ pub fn match_json_body(
 }
 
 /// Remove specified paths from a JSON value for comparison.
-fn filter_json_paths(
+pub(crate) fn filter_json_paths(
     value: &serde_json::Value,
     ignore_paths: &[String],
     current_path: &str,

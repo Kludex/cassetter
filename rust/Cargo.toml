@@ -21,8 +21,8 @@ zstd = { version = "0.13", default-features = false }
 regex = "1"
 unicode-normalization = "0.1"
 pythonize = "0.29"
-toml = "0.8"
-base64 = "0.22"
+toml = "1.1"
+base64 = "0.23"
 
 [lints.clippy]
 dbg_macro = "deny"

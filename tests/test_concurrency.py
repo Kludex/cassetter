@@ -8,7 +8,10 @@ Inspired by govcr's concurrency_test.go which runs 50 goroutines simultaneously.
 from __future__ import annotations
 
 import contextvars
+import json
 import os
+import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -434,3 +437,131 @@ def test_no_fallback_while_several_cassettes_are_active(tmp_path: object) -> Non
     pop_fallback_cassette(cassette_b)
     assert get_current_cassette() is cassette_a
     pop_fallback_cassette(cassette_a)
+
+
+async def _record_concurrently(path: str, requests: list[tuple[str, str]], delays: list[float]) -> None:
+    """POST each `(uri, name)` concurrently, holding its response back by `delays`.
+
+    The delay is keyed off the body so that requests sharing a URI can still
+    finish in a chosen order.
+    """
+    held = {name: delay for (_, name), delay in zip(requests, delays)}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        name = json.loads(request.content)["n"]
+        await anyio.sleep(held[name])
+        return httpx.Response(200, json={"n": name})
+
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+
+            def issue(uri: str, name: str) -> Any:
+                async def send() -> None:
+                    await client.post(uri, json={"n": name})
+
+                return send
+
+            await _gather(*[issue(uri, name) for uri, name in requests])
+
+
+def _recorded(path: str, field: str) -> list[str]:
+    interactions = RustCassette.load(path).interactions
+    if field == "uri":
+        return [i.request.uri for i in interactions]
+    return [i.request.body.content["n"] for i in interactions]
+
+
+@pytest.mark.anyio
+async def test_saved_order_does_not_depend_on_response_order(tmp_path: object) -> None:
+    """Two runs of the same concurrent suite write the same cassette."""
+    dir_path = str(tmp_path)
+    requests = [("https://api.example.com/b", "b"), ("https://api.example.com/a", "a")]
+
+    first = os.path.join(dir_path, "first.yaml")
+    second = os.path.join(dir_path, "second.yaml")
+    await _record_concurrently(first, requests, delays=[0.01, 0.05])
+    await _record_concurrently(second, requests, delays=[0.05, 0.01])
+
+    assert _recorded(first, "uri") == _recorded(second, "uri")
+    # Canonical order, not the order either run happened to finish in.
+    assert _recorded(first, "uri") == ["https://api.example.com/a", "https://api.example.com/b"]
+
+
+@pytest.mark.anyio
+async def test_indistinguishable_interactions_keep_request_order(tmp_path: object) -> None:
+    """What the matcher cannot tell apart is written in the order it was sent.
+
+    Both requests share a method and URI, so the sort has to leave them alone -
+    their order is what picks the response - and only the position each claimed
+    before going out keeps the earlier request first. The second request is held
+    until the first is in flight and then answered first, so send order and
+    completion order disagree no matter how the event loop schedules the tasks.
+    """
+    path = os.path.join(str(tmp_path), "chat.yaml")
+    uri = "https://api.example.com/chat"
+    first_in_flight = anyio.Event()
+    answer_first = anyio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        name = json.loads(request.content)["n"]
+        if name == "first":
+            first_in_flight.set()
+            await answer_first.wait()
+        else:
+            answer_first.set()
+        return httpx.Response(200, json={"n": name})
+
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+
+            async def send_first() -> None:
+                await client.post(uri, json={"n": "first"})
+
+            async def send_second() -> None:
+                await first_in_flight.wait()
+                await client.post(uri, json={"n": "second"})
+
+            await _gather(send_first, send_second)
+
+    assert _recorded(path, "body") == ["first", "second"]
+
+
+def test_concurrent_records_keep_interactions_paired_with_their_position(tmp_path: object) -> None:
+    """Appending the interaction and its position must not interleave.
+
+    A recorder slipping between the two leaves an interaction holding another
+    request's position, which silently reorders the saved cassette.
+    """
+    cassette = Cassette(os.path.join(str(tmp_path), "paired.yaml"), record_mode=RecordMode.ALL)
+    cassette.load()
+    count = 200
+    ready = threading.Barrier(count)
+
+    def record(index: int) -> None:
+        ready.wait()
+        cassette.record(
+            method="GET",
+            uri=f"https://api.example.com/{index}",
+            request_headers={},
+            request_body=None,
+            status=200,
+            response_headers={},
+            response_body=b"ok",
+            order=index,
+        )
+
+    switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        threads = [threading.Thread(target=record, args=(i,)) for i in range(count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    finally:
+        sys.setswitchinterval(switch_interval)
+
+    recorded = [i.request.uri.rsplit("/", 1)[-1] for i in cassette.interactions]
+    assert recorded == [str(order) for order in cassette._record_orders]

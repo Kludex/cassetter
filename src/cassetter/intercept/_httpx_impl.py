@@ -42,6 +42,7 @@ async def async_intercept(mod: Any, request: Any, passthrough: AsyncPassthrough)
         if not cassette.can_record:
             raise
 
+    order = cassette.reserve_record_order()
     real_response = await passthrough(request)
     await real_response.aread()
     resp_body = real_response.content
@@ -57,6 +58,7 @@ async def async_intercept(mod: Any, request: Any, passthrough: AsyncPassthrough)
         status=real_response.status_code,
         response_headers=resp_headers,
         response_body=resp_body,
+        order=order,
     )
     return real_response
 
@@ -90,6 +92,7 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
         if not cassette.can_record:
             raise
 
+    order = cassette.reserve_record_order()
     real_response = passthrough(request)
     real_response.read()
     resp_body = real_response.content
@@ -104,6 +107,7 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
         status=real_response.status_code,
         response_headers=resp_headers,
         response_body=resp_body,
+        order=order,
     )
     return real_response
 

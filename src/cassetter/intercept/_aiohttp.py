@@ -59,6 +59,7 @@ class AiohttpInterceptor:
                 if not cassette.can_record:
                     raise
 
+            order = cassette.reserve_record_order()
             real_response = await original_request(session, method, str_or_url, **kwargs)
             resp_body = await real_response.read()
             resp_headers = extract_response_headers(real_response.headers)
@@ -71,6 +72,7 @@ class AiohttpInterceptor:
                 status=real_response.status,
                 response_headers=resp_headers,
                 response_body=resp_body,
+                order=order,
             )
             return real_response
 
