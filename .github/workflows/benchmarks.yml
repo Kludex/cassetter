@@ -26,4 +26,9 @@ jobs:
       - run: uv run maturin develop --release
       - uses: CodSpeedHQ/action@v4.19.1
         with:
+          # v4 requires the mode that v3 picked on its own. `simulation` is what
+          # it chose for a hosted runner, under its old name `instrumentation`,
+          # so the numbers stay comparable with everything recorded so far -
+          # `walltime` measures something else and is noisy on a shared VM.
+          mode: simulation
           run: uv run pytest benchmarks/test_bench.py --codspeed
