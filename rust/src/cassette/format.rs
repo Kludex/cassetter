@@ -1034,6 +1034,17 @@ interactions:
         assert!(binaries.is_empty());
     }
 
+    /// The prose case above still holds a `!!binary` marker, so it rewrites.
+    /// Only a cassette with no marker at all reaches the borrow.
+    #[test]
+    fn test_extract_binary_scalars_borrows_yaml_without_marker() {
+        let yaml = "body:\n  string: |\n    plain prose\n";
+        let (content, binaries) = extract_binary_scalars(yaml);
+        assert!(matches!(content, Cow::Borrowed(_)), "{content:?}");
+        assert_eq!(content, yaml);
+        assert!(binaries.is_empty());
+    }
+
     #[test]
     fn test_round_trip_preserves_newline_only_strings() {
         // serde-saphyr auto-selects block scalars for newline-only strings,
