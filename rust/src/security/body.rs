@@ -369,7 +369,7 @@ mod tests {
     #[test]
     fn test_longest_unchecked_pattern_compiles_lazily() {
         let long = "a".repeat(MAX_UNCHECKED_PATTERN);
-        let scrubber = Scrubber::new(&[long.clone()]).unwrap();
+        let scrubber = Scrubber::new(std::slice::from_ref(&long)).unwrap();
         let scrubbed = scrubber.scrub_text(&format!("{long}=hunter2"), "[FILTERED]");
         assert!(scrubbed.ends_with("=[FILTERED]"), "{scrubbed}");
     }
