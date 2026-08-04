@@ -1,38 +1,84 @@
+use std::sync::OnceLock;
+
 use regex::{Captures, Regex};
 
 use crate::protocol::http::{Body, BodyContent};
 
-/// Pre-compiled scrubbing patterns.
+/// Scrubbing patterns, with their regex form compiled on first use.
 ///
 /// Regexes are only used for bodies that are not structured data; the
 /// structured paths walk the parsed value instead, which is both exact and
-/// cheaper than a regex sweep.
+/// cheaper than a regex sweep. Compiling them up front cost more than opening a
+/// small cassette did, and a cassette of JSON bodies never reaches them at all.
 #[derive(Clone, Debug)]
 pub struct Scrubber {
+    patterns: Vec<String>,
     lower_patterns: Vec<String>,
-    json_re: Vec<Regex>,
-    form_re: Vec<Regex>,
+    json_re: OnceLock<Vec<Regex>>,
+    form_re: OnceLock<Vec<Regex>>,
+}
+
+/// Longest pattern accepted without compiling it to check.
+///
+/// `regex::escape` turns a pattern into a literal, so the only way a template
+/// fails to compile is a pattern long enough to blow the regex size limit -
+/// which takes hundreds of kilobytes, two orders of magnitude past this. A
+/// pattern beyond it is compiled up front instead, so an unusable one is still
+/// rejected where it was passed in rather than at the first body that needs it.
+const MAX_UNCHECKED_PATTERN: usize = 4 * 1024;
+
+// Both templates are `(?i)` over an escaped key, so key matching mirrors
+// `matches_key`: case-insensitive substring.
+fn json_template(key: &str) -> String {
+    format!(
+        r#"(?i)("[^"]*{key}[^"]*"\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)"#
+    )
+}
+
+fn form_template(key: &str) -> String {
+    format!(r"(?i)([^&\s=]*{key}[^&\s=]*=)[^&\s]*")
+}
+
+fn compile(patterns: &[String], template: fn(&str) -> String) -> Result<Vec<Regex>, regex::Error> {
+    patterns
+        .iter()
+        .map(|pattern| Regex::new(&template(&regex::escape(pattern))))
+        .collect()
+}
+
+/// Compile from a lazy getter, where the patterns are known to be short enough
+/// that [`compile`] cannot fail.
+fn compile_checked(patterns: &[String], template: fn(&str) -> String) -> Vec<Regex> {
+    compile(patterns, template).expect("patterns this short are literals that always compile")
 }
 
 impl Scrubber {
     pub fn new(patterns: &[String]) -> Result<Self, regex::Error> {
-        let mut json_re = Vec::with_capacity(patterns.len());
-        let mut form_re = Vec::with_capacity(patterns.len());
-        for pattern in patterns {
-            let key = regex::escape(pattern);
-            // Key matching mirrors `matches_key`: case-insensitive substring.
-            json_re.push(Regex::new(&format!(
-                r#"(?i)("[^"]*{key}[^"]*"\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)"#
-            ))?);
-            form_re.push(Regex::new(&format!(
-                r"(?i)([^&\s=]*{key}[^&\s=]*=)[^&\s]*"
-            ))?);
-        }
+        let oversized = patterns.iter().any(|p| p.len() > MAX_UNCHECKED_PATTERN);
         Ok(Scrubber {
             lower_patterns: patterns.iter().map(|p| p.to_lowercase()).collect(),
-            json_re,
-            form_re,
+            // Priming these leaves the lazy getters unreachable for the patterns
+            // that could have failed, so their `expect` holds by construction.
+            json_re: match oversized {
+                true => OnceLock::from(compile(patterns, json_template)?),
+                false => OnceLock::new(),
+            },
+            form_re: match oversized {
+                true => OnceLock::from(compile(patterns, form_template)?),
+                false => OnceLock::new(),
+            },
+            patterns: patterns.to_vec(),
         })
+    }
+
+    fn json_re(&self) -> &[Regex] {
+        self.json_re
+            .get_or_init(|| compile_checked(&self.patterns, json_template))
+    }
+
+    fn form_re(&self) -> &[Regex] {
+        self.form_re
+            .get_or_init(|| compile_checked(&self.patterns, form_template))
     }
 
     fn matches_key(&self, key: &str) -> bool {
@@ -162,14 +208,14 @@ impl Scrubber {
         // A closure replacer is used throughout: `Regex::replace_all` expands
         // `$name` in a string replacement, so a replacement like `$0` would
         // re-emit the secret it is meant to hide.
-        for re in &self.json_re {
+        for re in self.json_re() {
             result = re
                 .replace_all(&result, |c: &Captures<'_>| {
                     format!("{}\"{}\"", &c[1], replacement)
                 })
                 .into_owned();
         }
-        for re in &self.form_re {
+        for re in self.form_re() {
             result = re
                 .replace_all(&result, |c: &Captures<'_>| {
                     format!("{}{}", &c[1], replacement)
@@ -310,6 +356,22 @@ mod tests {
     fn test_clean_json_text_is_not_reformatted() {
         let text = "{\n  \"name\": \"alice\"\n}";
         assert_eq!(scrub_text(text, &["password"]), text);
+    }
+
+    #[test]
+    fn test_oversized_pattern_is_rejected_up_front() {
+        let huge = "a".repeat(1024 * 1024);
+        assert!(Scrubber::new(&[huge]).is_err());
+    }
+
+    /// The longest pattern accepted unchecked, driven through the lazy getters
+    /// that assume it compiles. Pins the headroom `MAX_UNCHECKED_PATTERN` claims.
+    #[test]
+    fn test_longest_unchecked_pattern_compiles_lazily() {
+        let long = "a".repeat(MAX_UNCHECKED_PATTERN);
+        let scrubber = Scrubber::new(std::slice::from_ref(&long)).unwrap();
+        let scrubbed = scrubber.scrub_text(&format!("{long}=hunter2"), "[FILTERED]");
+        assert!(scrubbed.ends_with("=[FILTERED]"), "{scrubbed}");
     }
 
     #[test]

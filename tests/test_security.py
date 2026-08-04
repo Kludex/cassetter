@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from cassetter._core import (
     Body,
     GrpcInteraction,
@@ -215,6 +217,48 @@ def test_scrub_custom_replacement() -> None:
     scrubbed = scrub_interaction(interaction, config)
 
     assert scrubbed.request.body.content["password"] == "***REDACTED***"
+
+
+def _scrub_form_body(config: SecurityConfig, body: str) -> str:
+    """Scrub a form body, which has no structure and so takes the regex path."""
+    interaction = HttpInteraction(
+        request=HttpRequest("POST", "https://api.example.com/auth", body=Body("text", body)),
+        response=HttpResponse(200),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+    content: str = scrub_interaction(interaction, config).request.body.content
+    return content
+
+
+def test_scrub_patterns_reassignment_discards_compiled_regexes() -> None:
+    """The regex path is compiled on first use, so a later reassignment must rebuild it."""
+    config = SecurityConfig(body_scrub_patterns=["password"])
+    assert _scrub_form_body(config, "password=hunter2&token=tok_abc") == "password=[FILTERED]&token=tok_abc"
+
+    config.body_scrub_patterns = ["token"]
+    assert _scrub_form_body(config, "password=hunter2&token=tok_abc") == "password=hunter2&token=[FILTERED]"
+
+
+def test_oversized_scrub_pattern_is_rejected_at_construction() -> None:
+    """Compilation is lazy, but a pattern too large to compile still fails where it is passed in."""
+    with pytest.raises(ValueError, match="invalid body scrub pattern"):
+        SecurityConfig(body_scrub_patterns=["a" * 1024 * 1024])
+
+
+def test_oversized_scrub_pattern_is_rejected_on_reassignment() -> None:
+    config = SecurityConfig(body_scrub_patterns=["password"])
+    with pytest.raises(ValueError, match="invalid body scrub pattern"):
+        config.body_scrub_patterns = ["a" * 1024 * 1024]
+
+    assert config.body_scrub_patterns == ["password"]
+    assert _scrub_form_body(config, "password=hunter2") == "password=[FILTERED]"
+
+
+def test_scrub_unstructured_is_stable_across_calls() -> None:
+    config = SecurityConfig(body_scrub_patterns=["password"])
+    first = _scrub_form_body(config, "password=hunter2&user=alice")
+    assert first == "password=[FILTERED]&user=alice"
+    assert _scrub_form_body(config, "password=hunter2&user=alice") == first
 
 
 def test_scrub_custom_filter_list() -> None:
