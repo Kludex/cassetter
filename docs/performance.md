@@ -9,24 +9,24 @@ Compared with VCR.py (using its fastest configuration, PyYAML with libyaml):
 ```
                 cassetter    vcrpy       speedup
 10 interactions
-load            205 us       471 us      2.3x
-match           0.9 us       12.6 us     13.7x
-save            252 us       456 us      1.8x
+load            192 us       480 us      2.5x
+match           0.9 us       12.3 us     13.2x
+save            250 us       477 us      1.9x
 
 1000 interactions
-load            18.1 ms      52.8 ms     2.9x
-match           0.8 us       1.22 ms     1573.7x
-save            6.5 ms       42.5 ms     6.5x
+load            16.7 ms      53.9 ms     3.2x
+match           0.8 us       1.25 ms     1527.1x
+save            6.6 ms       47.0 ms     7.2x
 ```
 
-Absolute timings are machine dependent, so the speedup ratios matter more than the raw numbers. Load speedup also depends on cassette shape: many tiny interactions (as above) is the hardest case for the parser, while cassettes dominated by large bodies - LLM and SSE responses, for example - load proportionally faster.
+Absolute timings are machine dependent, so the speedup ratios matter more than the raw numbers. Load speedup also depends on cassette shape. Many tiny interactions (as above) is the cheapest shape per byte, because the parser spends most of its time on structure it handles well. A cassette dominated by large bodies - LLM and SSE responses, for example - is the opposite profile: parsing is one long scalar copy, which neither parser can shortcut, so the margin narrows to roughly 2.5x.
 
-TOML cassettes load about 2.8 times faster than YAML and produce about 12% smaller files, at the cost of slower saves:
+TOML cassettes load about 4.3 times faster than YAML, save about 2.4 times faster, and produce about 12% smaller files:
 
 ```
                 YAML         TOML
-save            10.7 ms      18.0 ms
-load            53 ms        18.6 ms
+save            10.2 ms      4.3 ms
+load            26.1 ms      6.0 ms
 size            768 KB       675 KB
 ```
 
