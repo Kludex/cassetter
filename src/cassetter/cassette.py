@@ -33,6 +33,9 @@ from cassetter.intercept._base import is_localhost
 from cassetter.introspection import RecordedRequest, recorded_request
 from cassetter.recording import RecordMode
 
+_DISCARDING_MODES = (RecordMode.ALL, RecordMode.REWRITE)
+"""Modes that start from an empty cassette instead of replaying what is on disk."""
+
 
 class CassetteNotFoundError(Exception):
     """Raised when a cassette file is not found and record mode doesn't allow recording."""
@@ -218,12 +221,18 @@ class Cassette:
         """Load the cassette from disk, or create a new one based on record mode."""
         exists = os.path.exists(self._path)
 
-        if self._record_mode == RecordMode.ALL or not exists:
+        # `rewrite` drops the file before recording, so a run that captures
+        # nothing leaves no stale cassette behind.
+        if self._record_mode == RecordMode.REWRITE and exists:
+            os.remove(self._path)
+            exists = False
+
+        if self._record_mode in _DISCARDING_MODES or not exists:
             self._inner = _RustCassette()
             self._record_orders = []
             self._next_record_order = 0
             self._rebuild_match_inner()
-            if self._record_mode == RecordMode.ALL:
+            if self._record_mode in _DISCARDING_MODES:
                 self._dirty = True
             return
 
@@ -328,7 +337,7 @@ class Cassette:
 
     @property
     def can_record(self) -> bool:
-        if self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES):
+        if self._record_mode in (RecordMode.ALL, RecordMode.NEW_EPISODES, RecordMode.REWRITE):
             return True
         # `once` records only when the cassette didn't exist: with an existing
         # cassette an unmatched request must raise instead of silently hitting

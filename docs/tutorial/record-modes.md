@@ -8,6 +8,7 @@ The record mode controls what happens when a request is made under an active cas
 | `once` | Record if the cassette doesn't exist. Replay if it does. |
 | `new_episodes` | Replay existing interactions. Record new ones. |
 | `all` | Record everything, overwriting the cassette. |
+| `rewrite` | Delete the cassette, then record everything. |
 
 ## `none`
 
@@ -44,6 +45,15 @@ Use it to re-record a cassette from scratch, for example after an API change.
 
 ```python
 with use_cassette("cassette.yaml", record_mode="all"):
+    ...
+```
+
+## `rewrite`
+
+Same as `all`, except the cassette file is deleted before the test runs. A test that no longer makes the request it used to leaves no cassette behind, instead of leaving an empty one.
+
+```python
+with use_cassette("cassette.yaml", record_mode="rewrite"):
     ...
 ```
 
