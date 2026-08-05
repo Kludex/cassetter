@@ -226,8 +226,8 @@ class Cassette:
 
         # `rewrite` drops the file before recording, so a run that captures
         # nothing leaves no stale cassette behind. The writer copies the mode
-        # off the file it replaces, so with nothing there it has to be carried
-        # across by hand - otherwise a 0600 cassette comes back at the umask.
+        # off the file it replaces, so with nothing there it has to be handed
+        # over - otherwise a 0600 cassette comes back at the process umask.
         if self._record_mode == RecordMode.REWRITE and exists:
             self._rewritten_file_mode = stat.S_IMODE(os.stat(self._path).st_mode)
             os.remove(self._path)
@@ -338,11 +338,13 @@ class Cassette:
             # that URIs a normalizer collapses into one stay interchangeable
             # instead of being separated by the raw URI they were recorded with.
             matched = self._inner if self._match_inner is None else self._match_inner
-            self._inner.save(self._path, matched.output_order(self._match_config, self._record_orders))
+            self._inner.save(
+                self._path,
+                matched.output_order(self._match_config, self._record_orders),
+                self._rewritten_file_mode,
+            )
             self._dirty = False
-            if self._rewritten_file_mode is not None:
-                os.chmod(self._path, self._rewritten_file_mode)
-                self._rewritten_file_mode = None
+            self._rewritten_file_mode = None
 
     @property
     def can_record(self) -> bool:
