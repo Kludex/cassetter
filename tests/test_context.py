@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -27,7 +29,7 @@ def _make_cassette(path: str) -> str:
 
 
 @pytest.mark.anyio
-async def test_use_cassette_with_filter_headers(tmp_path: object) -> None:
+async def test_use_cassette_with_filter_headers(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with use_cassette(path, record_mode="none", filter_headers=["x-custom"]):
         async with httpx.AsyncClient() as client:
@@ -36,7 +38,7 @@ async def test_use_cassette_with_filter_headers(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_use_cassette_with_filter_query_parameters(tmp_path: object) -> None:
+async def test_use_cassette_with_filter_query_parameters(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with use_cassette(path, record_mode="none", filter_query_parameters=["token"]):
         async with httpx.AsyncClient() as client:
@@ -45,7 +47,7 @@ async def test_use_cassette_with_filter_query_parameters(tmp_path: object) -> No
 
 
 @pytest.mark.anyio
-async def test_use_cassette_with_body_scrub_patterns(tmp_path: object) -> None:
+async def test_use_cassette_with_body_scrub_patterns(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with use_cassette(path, record_mode="none", body_scrub_patterns=["secret"]):
         async with httpx.AsyncClient() as client:
@@ -54,7 +56,7 @@ async def test_use_cassette_with_body_scrub_patterns(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_use_cassette_with_filter_replacement(tmp_path: object) -> None:
+async def test_use_cassette_with_filter_replacement(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with use_cassette(path, record_mode="none", filter_replacement="[REDACTED]"):
         async with httpx.AsyncClient() as client:
@@ -63,7 +65,7 @@ async def test_use_cassette_with_filter_replacement(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_use_cassette_string_record_mode(tmp_path: object) -> None:
+async def test_use_cassette_string_record_mode(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with use_cassette(path, record_mode="none"):
         async with httpx.AsyncClient() as client:
@@ -72,7 +74,7 @@ async def test_use_cassette_string_record_mode(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_use_cassette_enum_record_mode(tmp_path: object) -> None:
+async def test_use_cassette_enum_record_mode(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with use_cassette(path, record_mode=RecordMode.NONE):
         async with httpx.AsyncClient() as client:
@@ -119,7 +121,7 @@ def test_resolve_interceptors_auto_detect_no_interceptors(monkeypatch: pytest.Mo
 
 
 @pytest.mark.anyio
-async def test_use_cassette_expired_warns(tmp_path: object) -> None:
+async def test_use_cassette_expired_warns(tmp_path: Path) -> None:
     path = _make_cassette(f"{tmp_path}/test.yaml")
     with pytest.warns(CassetteExpiredWarning):
         with use_cassette(path, record_mode="none", max_age="1h", on_expiry="warn"):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import grpc
 import grpc.aio
@@ -269,7 +270,7 @@ def test_rust_cassette_repr_includes_grpc() -> None:
 # --- Cassette roundtrip (save/load) ---
 
 
-def test_grpc_save_and_load(tmp_path: object) -> None:
+def test_grpc_save_and_load(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "grpc.yaml")
     c = RustCassette()
     c.add_grpc_interaction(
@@ -297,7 +298,7 @@ def test_grpc_save_and_load(tmp_path: object) -> None:
     assert grpc_i.json_debug == {"request": {"input": "Hello"}, "response": {"output": "Hi"}}
 
 
-def test_ws_save_and_load(tmp_path: object) -> None:
+def test_ws_save_and_load(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws.yaml")
     c = RustCassette()
     c.add_ws_interaction(
@@ -327,7 +328,7 @@ def test_ws_save_and_load(tmp_path: object) -> None:
     assert ws_i.frames[1].offset_ms == 120
 
 
-def test_mixed_protocol_roundtrip(tmp_path: object) -> None:
+def test_mixed_protocol_roundtrip(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "mixed.yaml")
     c = RustCassette()
     c.add_interaction(
@@ -354,7 +355,7 @@ def test_mixed_protocol_roundtrip(tmp_path: object) -> None:
     assert len(c2) == 3
 
 
-def test_backward_compat_http_only(tmp_path: object) -> None:
+def test_backward_compat_http_only(tmp_path: Path) -> None:
     """Existing HTTP-only cassettes still load without grpc/ws sections."""
     path = os.path.join(str(tmp_path), "http_only.yaml")
     c = RustCassette()
@@ -401,7 +402,7 @@ def test_play_ws_before_load_raises() -> None:
         cassette.play_ws("wss://example.com")
 
 
-def test_record_and_play_grpc(tmp_path: object) -> None:
+def test_record_and_play_grpc(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "grpc_test.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -419,7 +420,7 @@ def test_record_and_play_grpc(tmp_path: object) -> None:
     assert resp.body.body_type == "binary"
 
 
-def test_play_grpc_no_match_raises(tmp_path: object) -> None:
+def test_play_grpc_no_match_raises(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     cassette.load()
@@ -428,7 +429,7 @@ def test_play_grpc_no_match_raises(tmp_path: object) -> None:
         cassette.play_grpc("/pkg.Svc/Unknown")
 
 
-def test_record_ws_interaction(tmp_path: object) -> None:
+def test_record_ws_interaction(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws_test.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -441,7 +442,7 @@ def test_record_ws_interaction(tmp_path: object) -> None:
     assert len(cassette.ws_interactions) == 1
 
 
-def test_record_ws_scrubs_headers(tmp_path: object) -> None:
+def test_record_ws_scrubs_headers(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws_scrub.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -454,7 +455,7 @@ def test_record_ws_scrubs_headers(tmp_path: object) -> None:
     assert recorded.headers["x-custom"] == ["keep"]
 
 
-def test_record_ws_scrubs_frame_bodies(tmp_path: object) -> None:
+def test_record_ws_scrubs_frame_bodies(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws_frame_scrub.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -472,7 +473,7 @@ def test_record_ws_scrubs_frame_bodies(tmp_path: object) -> None:
     assert '"password":"[FILTERED]"' in recorded.frames[1].body.content
 
 
-def test_record_grpc_scrubs_metadata_and_json_debug(tmp_path: object) -> None:
+def test_record_grpc_scrubs_metadata_and_json_debug(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "grpc_scrub.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -495,7 +496,7 @@ def test_record_grpc_scrubs_metadata_and_json_debug(tmp_path: object) -> None:
     assert recorded.request.body.content == b"\x0a\x0b"
 
 
-def test_play_ws_interaction(tmp_path: object) -> None:
+def test_play_ws_interaction(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws_play.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -511,7 +512,7 @@ def test_play_ws_interaction(tmp_path: object) -> None:
     assert len(interaction.frames) == 2
 
 
-def test_play_ws_no_match_raises(tmp_path: object) -> None:
+def test_play_ws_no_match_raises(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     cassette.load()
@@ -520,7 +521,7 @@ def test_play_ws_no_match_raises(tmp_path: object) -> None:
         cassette.play_ws("wss://unknown.com")
 
 
-def test_grpc_ws_save_persists(tmp_path: object) -> None:
+def test_grpc_ws_save_persists(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "mixed_persist.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -672,7 +673,7 @@ def test_grpc_interceptor_install_uninstall() -> None:
 
 
 @pytest.mark.anyio
-async def test_unary_unary_replay(tmp_path: object) -> None:
+async def test_unary_unary_replay(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_replay.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -700,7 +701,7 @@ async def test_unary_unary_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_unary_unary_no_match_raises(tmp_path: object) -> None:
+async def test_unary_unary_no_match_raises(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -721,7 +722,7 @@ async def test_unary_unary_no_match_raises(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_unary_stream_replay(tmp_path: object) -> None:
+async def test_unary_stream_replay(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_stream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -752,7 +753,7 @@ async def test_unary_stream_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
+async def test_unary_stream_no_match_raises(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -769,7 +770,7 @@ async def test_unary_stream_no_match_raises(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_unary_replay(tmp_path: object) -> None:
+async def test_stream_unary_replay(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_cstream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -801,7 +802,7 @@ async def test_stream_unary_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
+async def test_stream_unary_no_match_raises(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -820,7 +821,7 @@ async def test_stream_unary_no_match_raises(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_stream_replay(tmp_path: object) -> None:
+async def test_stream_stream_replay(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_bidi.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -854,7 +855,7 @@ async def test_stream_stream_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_stream_no_match_raises(tmp_path: object) -> None:
+async def test_stream_stream_no_match_raises(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -978,7 +979,7 @@ async def test_replay_wsasync_iter() -> None:
 
 
 @pytest.mark.anyio
-async def test_record_ws_frames(tmp_path: object) -> None:
+async def test_record_ws_frames(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_record.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1012,7 +1013,7 @@ async def test_record_ws_frames(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_record_ws_context_manager(tmp_path: object) -> None:
+async def test_record_ws_context_manager(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_ctx.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1041,7 +1042,7 @@ async def test_record_ws_context_manager(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_record_ws_binary_frames(tmp_path: object) -> None:
+async def test_record_ws_binary_frames(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_binary.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1073,7 +1074,7 @@ async def test_record_ws_binary_frames(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_record_wsasync_iter(tmp_path: object) -> None:
+async def test_record_wsasync_iter(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_iter.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1108,7 +1109,7 @@ async def test_record_wsasync_iter(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_patched_connect_replay(tmp_path: object) -> None:
+async def test_patched_connect_replay(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_connect.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1130,7 +1131,7 @@ async def test_patched_connect_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_patched_connect_no_match_raises(tmp_path: object) -> None:
+async def test_patched_connect_no_match_raises(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
@@ -1165,7 +1166,7 @@ def test_websocket_interceptor_install_uninstall() -> None:
 
 
 @pytest.mark.anyio
-async def test_unary_unary_record(tmp_path: object) -> None:
+async def test_unary_unary_record(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_rec.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1195,7 +1196,7 @@ async def test_unary_unary_record(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_unary_stream_record(tmp_path: object) -> None:
+async def test_unary_stream_record(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_rec_stream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1235,7 +1236,7 @@ async def test_unary_stream_record(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_unary_record(tmp_path: object) -> None:
+async def test_stream_unary_record(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_rec_cstream.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1268,7 +1269,7 @@ async def test_stream_unary_record(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_stream_record(tmp_path: object) -> None:
+async def test_stream_stream_record(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "grpc_rec_bidi.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -1454,7 +1455,7 @@ async def test_grpc_replay_unknown_status_code_maps_to_unknown() -> None:
 
 
 @pytest.mark.anyio
-async def test_patched_connect_await_form(tmp_path: object) -> None:
+async def test_patched_connect_await_form(tmp_path: Path) -> None:
     """`ws = await websockets.connect(uri)` (not just `async with`) must work."""
 
     path = os.path.join(str(tmp_path), "ws_await.yaml")
@@ -1474,7 +1475,7 @@ async def test_patched_connect_await_form(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_patched_connect_async_for_form(tmp_path: object) -> None:
+async def test_patched_connect_async_for_form(tmp_path: Path) -> None:
     """`async for ws in connect(...)` reconnect loop yields one connection."""
 
     path = os.path.join(str(tmp_path), "ws_for.yaml")
@@ -1498,7 +1499,7 @@ async def test_patched_connect_async_for_form(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_ws_bypass_ignores_localhost(tmp_path: object) -> None:
+async def test_ws_bypass_ignores_localhost(tmp_path: Path) -> None:
     """A bypassed WS URI must not consult the cassette (would raise NoMatch here)."""
 
     path = os.path.join(str(tmp_path), "ws_bypass.yaml")

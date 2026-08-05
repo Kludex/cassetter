@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -17,7 +18,7 @@ pytest_plugins = ("anyio",)
 
 
 @pytest.fixture
-def cassette_path(tmp_path: object) -> str:
+def cassette_path(tmp_path: Path) -> str:
     return os.path.join(str(tmp_path), "httpx_test.yaml")
 
 

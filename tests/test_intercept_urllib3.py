@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -35,7 +36,7 @@ def _preload_cassette(path: str) -> None:
     c.save(path)
 
 
-def test_replay_via_urllib3(tmp_path: object) -> None:
+def test_replay_via_urllib3(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -46,7 +47,7 @@ def test_replay_via_urllib3(tmp_path: object) -> None:
         assert response.json() == {"data": "hello"}
 
 
-def test_replay_via_requests(tmp_path: object) -> None:
+def test_replay_via_requests(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -56,7 +57,7 @@ def test_replay_via_requests(tmp_path: object) -> None:
         assert response.json() == {"data": "hello"}
 
 
-def test_replay_with_mismatched_content_length(tmp_path: object) -> None:
+def test_replay_with_mismatched_content_length(tmp_path: Path) -> None:
     """Replaying a cassette whose stored content-length differs from the re-serialized body must not raise."""
     path = os.path.join(str(tmp_path), "test.yaml")
     c = RustCassette()
@@ -81,7 +82,7 @@ def test_replay_with_mismatched_content_length(tmp_path: object) -> None:
         assert body["output"]["message"]["content"][0]["text"] == "hi"
 
 
-def test_record_urllib3(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_record_urllib3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
 
     fake_response = urllib3.response.HTTPResponse(
@@ -107,7 +108,7 @@ def test_record_urllib3(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.undo()
 
 
-def test_no_match_raises_error(tmp_path: object) -> None:
+def test_no_match_raises_error(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -256,7 +257,7 @@ def test_build_urllib3_response_headers() -> None:
     assert response.headers.getlist("x-custom") == ["a", "b"]
 
 
-def test_record_urllib3_rewrites_content_length(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_record_urllib3_rewrites_content_length(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A recorded response carrying content-length has it rewritten to the stored body length."""
     path = os.path.join(str(tmp_path), "clen.yaml")
     body = b'{"recorded": true}'
