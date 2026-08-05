@@ -8,7 +8,7 @@ Cassetter is designed so this cannot happen. Sensitive data is filtered **at wri
 
 These request and response **headers** are stripped automatically:
 
-`authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`
+`authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`, `x-goog-api-key`, `x-amz-security-token`
 
 These **query parameters** are replaced with `[FILTERED]`:
 
@@ -74,12 +74,12 @@ with use_cassette(
 ```
 
 !!! warning
-    Passing `filter_headers` **replaces** the default list, it does not extend it. If you want the defaults plus your own, get them from `SecurityConfig`:
+    Passing `filter_headers` **replaces** the default list, it does not extend it - the same as VCR.py, which starts from an empty list. Since cassetter's list is not empty, adding one header would otherwise drop the rest, so spread the defaults in:
 
     ```python
-    from cassetter import SecurityConfig
+    from cassetter import DEFAULT_FILTER_HEADERS
 
-    filter_headers=[*SecurityConfig().filter_headers, "x-custom-secret"]
+    filter_headers=[*DEFAULT_FILTER_HEADERS, "x-custom-secret"]
     ```
 
 Body scrub patterns are matched case insensitively against JSON keys, at any depth. A pattern matches if the key contains it, so `token` matches `access_token` and `refresh_token` too.

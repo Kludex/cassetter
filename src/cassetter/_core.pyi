@@ -7,6 +7,8 @@ FrameType = Literal["text", "binary"]
 Direction = Literal["send", "recv"]
 Matcher = Literal["method", "uri", "headers", "body", "json_body"]
 
+DEFAULT_FILTER_HEADERS: list[str]
+
 # The protocol types below are frozen: attributes are read-only and assignment
 # raises AttributeError. Use `replace()` to derive a modified copy.
 

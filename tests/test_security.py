@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cassetter._core import (
+    DEFAULT_FILTER_HEADERS,
     Body,
     GrpcInteraction,
     GrpcRequest,
@@ -24,6 +25,32 @@ def test_security_default_filter_headers() -> None:
     assert "authorization" in config.filter_headers
     assert "cookie" in config.filter_headers
     assert "x-api-key" in config.filter_headers
+    # The Google SDKs and SigV4 put credentials in these, so they count as much
+    # as `x-api-key` does.
+    assert "x-goog-api-key" in config.filter_headers
+    assert "x-amz-security-token" in config.filter_headers
+
+
+def test_default_filter_headers_is_what_the_default_config_uses() -> None:
+    """Exported so callers can add a header without silently dropping the rest."""
+    assert list(DEFAULT_FILTER_HEADERS) == SecurityConfig().filter_headers
+
+
+def test_provider_credential_headers_are_scrubbed_by_default() -> None:
+    interaction = HttpInteraction(
+        request=HttpRequest(
+            "POST",
+            "https://api.example.com/v1/chat",
+            {"x-goog-api-key": ["AIzaSyREAL"], "x-amz-security-token": ["FwoGZXIvYXdzREAL"]},
+        ),
+        response=HttpResponse(200),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+
+    scrubbed = scrub_interaction(interaction, SecurityConfig())
+
+    assert "x-goog-api-key" not in scrubbed.request.headers
+    assert "x-amz-security-token" not in scrubbed.request.headers
 
 
 def test_security_default_filter_query_parameters() -> None:

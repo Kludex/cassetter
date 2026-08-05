@@ -121,7 +121,7 @@ Set via CLI: `pytest --record-mode=none`
 
 Sensitive data is filtered **at write time** - cassettes never contain secrets. These headers are stripped automatically:
 
-`authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`
+`authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`, `x-goog-api-key`, `x-amz-security-token`
 
 Query params like `api_key`, `access_token`, `token`, `client_secret` are replaced with `[FILTERED]`.
 

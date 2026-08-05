@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from cassetter._core import (
+    DEFAULT_FILTER_HEADERS,
     Body,
     GrpcInteraction,
     GrpcRequest,
@@ -33,6 +34,7 @@ from cassetter.introspection import RecordedRequest
 from cassetter.recording import RecordMode
 
 __all__ = [
+    "DEFAULT_FILTER_HEADERS",
     "BeforeRecordRequest",
     "BeforeRecordResponse",
     "Body",
