@@ -18,6 +18,9 @@ class RecordMode(enum.Enum):
     ONCE = enum.auto()
     """Record if cassette doesn't exist. Replay if it does."""
 
+    REWRITE = enum.auto()
+    """Delete the cassette up front, then record everything. A run that records nothing leaves no file."""
+
     @classmethod
     def from_str(cls, value: str) -> RecordMode:
         mapping = {
@@ -25,6 +28,7 @@ class RecordMode(enum.Enum):
             "new_episodes": cls.NEW_EPISODES,
             "all": cls.ALL,
             "once": cls.ONCE,
+            "rewrite": cls.REWRITE,
         }
         normalized = value.lower().replace("-", "_")
         if normalized not in mapping:

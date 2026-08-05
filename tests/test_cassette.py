@@ -6,6 +6,7 @@ import re
 import stat
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 import yaml
@@ -153,6 +154,7 @@ def test_cassette_interactions_before_load() -> None:
 def test_cassette_can_record() -> None:
     assert Cassette("/tmp/t.yaml", record_mode=RecordMode.ALL).can_record is True
     assert Cassette("/tmp/t.yaml", record_mode=RecordMode.NEW_EPISODES).can_record is True
+    assert Cassette("/tmp/t.yaml", record_mode=RecordMode.REWRITE).can_record is True
     assert Cassette("/tmp/t.yaml", record_mode=RecordMode.ONCE).can_record is True
     assert Cassette("/tmp/t.yaml", record_mode=RecordMode.NONE).can_record is False
 
@@ -301,6 +303,7 @@ def test_record_mode_from_str() -> None:
     assert RecordMode.from_str("once") == RecordMode.ONCE
     assert RecordMode.from_str("new_episodes") == RecordMode.NEW_EPISODES
     assert RecordMode.from_str("new-episodes") == RecordMode.NEW_EPISODES
+    assert RecordMode.from_str("rewrite") == RecordMode.REWRITE
 
 
 def test_record_mode_from_str_invalid() -> None:
@@ -977,6 +980,50 @@ def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
     rerecord.load()
     rerecord.save()
     assert len(RustCassette.load(path)) == 0
+
+
+def test_rewrite_mode_discards_recorded_interactions(tmp_path: Path) -> None:
+    path = str(tmp_path / "stale.yaml")
+    _save_interaction(path, "GET", "https://example.com/old", "old")
+    assert len(RustCassette.load(path)) == 1
+
+    rewrite = Cassette(path, record_mode=RecordMode.REWRITE)
+    rewrite.load()
+    assert rewrite.interactions == []
+    assert rewrite.can_record is True
+    rewrite.record(
+        method="GET",
+        uri="https://example.com/new",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    rewrite.save()
+
+    written = RustCassette.load(path)
+    assert [i.request.uri for i in written.interactions] == ["https://example.com/new"]
+
+
+def test_rewrite_mode_leaves_no_file_when_nothing_is_recorded(tmp_path: Path) -> None:
+    """Unlike `all`, which truncates, `rewrite` removes the cassette up front."""
+    path = str(tmp_path / "stale.yaml")
+    _save_interaction(path, "GET", "https://example.com/old", "old")
+
+    rewrite = Cassette(path, record_mode=RecordMode.REWRITE)
+    rewrite.load()
+    rewrite.save()
+    assert not os.path.exists(path)
+
+
+def test_rewrite_mode_without_existing_cassette(tmp_path: Path) -> None:
+    path = str(tmp_path / "missing.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.REWRITE)
+    cassette.load()
+    assert cassette.interactions == []
+    cassette.save()
+    assert not os.path.exists(path)
 
 
 def test_save_preserves_file_permissions(tmp_path: object) -> None:

@@ -113,6 +113,7 @@ def vcr_config() -> Cassetter:
 | `once` | Record if cassette doesn't exist. Replay if it does. |
 | `new_episodes` | Replay existing interactions. Record new ones. |
 | `all` | Record everything, overwriting the cassette. |
+| `rewrite` | Delete the cassette, then record everything. |
 
 Set via CLI: `pytest --record-mode=none`
 

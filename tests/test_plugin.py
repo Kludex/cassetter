@@ -125,6 +125,27 @@ def test_resolve_cassette_default_config(tmp_path: object) -> None:
     assert len(interceptor_classes) >= 1
 
 
+def test_resolve_cassette_cli_rewrite_drops_the_cassette(tmp_path: Path) -> None:
+    """`--record-mode=rewrite` removes the file at load, so a stale one cannot replay."""
+    test_dir = str(tmp_path)
+    cassette_dir = tmp_path / "cassettes" / "test_example"
+    cassette_dir.mkdir(parents=True)
+    yaml_path = cassette_dir / "test_func.yaml"
+    RustCassette().save(str(yaml_path))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode="rewrite",
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert cassette.record_mode == RecordMode.REWRITE
+    assert not yaml_path.exists()
+
+
 def test_resolve_cassette_custom_cassette_name(tmp_path: object) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
