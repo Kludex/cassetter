@@ -9,6 +9,7 @@ is touched.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import aiohttp
 import httpx
@@ -55,7 +56,7 @@ def _rewrite_to(target: str) -> BeforeRecordRequest:
 # --- requests ---
 
 
-def test_requests_bypass_passes_through(tmp_path: object) -> None:
+def test_requests_bypass_passes_through(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "req_bypass.yaml")
     _preload(path, "http://example.com/x")
@@ -64,7 +65,7 @@ def test_requests_bypass_passes_through(tmp_path: object) -> None:
             requests.get(_REFUSED)
 
 
-def test_requests_hook_rewrites_to_match(tmp_path: object) -> None:
+def test_requests_hook_rewrites_to_match(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "req_hook.yaml")
     _preload(path, "https://api.example.com/real")
@@ -78,7 +79,7 @@ def test_requests_hook_rewrites_to_match(tmp_path: object) -> None:
     assert resp.status_code == 200
 
 
-def test_requests_hook_skip_recording_passes_through(tmp_path: object) -> None:
+def test_requests_hook_skip_recording_passes_through(tmp_path: Path) -> None:
 
     def hook(request: RawRequest) -> RawRequest:
         raise SkipRecording
@@ -92,7 +93,7 @@ def test_requests_hook_skip_recording_passes_through(tmp_path: object) -> None:
 # --- urllib3 ---
 
 
-def test_urllib3_bypass_passes_through(tmp_path: object) -> None:
+def test_urllib3_bypass_passes_through(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "u3_bypass.yaml")
     _preload(path, "http://example.com/x")
@@ -101,7 +102,7 @@ def test_urllib3_bypass_passes_through(tmp_path: object) -> None:
             urllib3.PoolManager().request("GET", _REFUSED, retries=False)
 
 
-def test_urllib3_hook_rewrites_to_match(tmp_path: object) -> None:
+def test_urllib3_hook_rewrites_to_match(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "u3_hook.yaml")
     _preload(path, "https://api.example.com/real")
@@ -119,7 +120,7 @@ def test_urllib3_hook_rewrites_to_match(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_aiohttp_bypass_passes_through(tmp_path: object) -> None:
+async def test_aiohttp_bypass_passes_through(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "aio_bypass.yaml")
     _preload(path, "http://example.com/x")
@@ -130,7 +131,7 @@ async def test_aiohttp_bypass_passes_through(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_aiohttp_hook_rewrites_to_match(tmp_path: object) -> None:
+async def test_aiohttp_hook_rewrites_to_match(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "aio_hook.yaml")
     _preload(path, "https://api.example.com/real")
@@ -148,7 +149,7 @@ async def test_aiohttp_hook_rewrites_to_match(tmp_path: object) -> None:
 # --- pyreqwest ---
 
 
-def test_pyreqwest_bypass_passes_through(tmp_path: object) -> None:
+def test_pyreqwest_bypass_passes_through(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "prq_bypass.yaml")
     _preload(path, "http://example.com/x")
@@ -157,7 +158,7 @@ def test_pyreqwest_bypass_passes_through(tmp_path: object) -> None:
             pri.Client().get(_REFUSED)
 
 
-def test_pyreqwest_hook_rewrites_to_match(tmp_path: object) -> None:
+def test_pyreqwest_hook_rewrites_to_match(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "prq_hook.yaml")
     _preload(path, "https://api.example.com/real")
@@ -171,7 +172,7 @@ def test_pyreqwest_hook_rewrites_to_match(tmp_path: object) -> None:
     assert resp.status_code == 200
 
 
-def test_pyreqwest_replay_with_bytes_body(tmp_path: object) -> None:
+def test_pyreqwest_replay_with_bytes_body(tmp_path: Path) -> None:
     """A bytes `data=` body exercises extract_body's bytes branch."""
 
     path = os.path.join(str(tmp_path), "prq_body.yaml")
@@ -189,7 +190,7 @@ def test_pyreqwest_replay_with_bytes_body(tmp_path: object) -> None:
     assert resp.status_code == 200
 
 
-def test_urllib3_hook_skip_recording_passes_through(tmp_path: object) -> None:
+def test_urllib3_hook_skip_recording_passes_through(tmp_path: Path) -> None:
 
     def hook(request: RawRequest) -> RawRequest:
         raise SkipRecording
@@ -201,7 +202,7 @@ def test_urllib3_hook_skip_recording_passes_through(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_aiohttp_hook_skip_recording_passes_through(tmp_path: object) -> None:
+async def test_aiohttp_hook_skip_recording_passes_through(tmp_path: Path) -> None:
 
     def hook(request: RawRequest) -> RawRequest:
         raise SkipRecording
@@ -213,7 +214,7 @@ async def test_aiohttp_hook_skip_recording_passes_through(tmp_path: object) -> N
                 await session.get(_REFUSED)
 
 
-def test_pyreqwest_hook_skip_recording_passes_through(tmp_path: object) -> None:
+def test_pyreqwest_hook_skip_recording_passes_through(tmp_path: Path) -> None:
 
     def hook(request: RawRequest) -> RawRequest:
         raise SkipRecording
@@ -225,7 +226,7 @@ def test_pyreqwest_hook_skip_recording_passes_through(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_httpx_async_hook_rewrites_to_match(tmp_path: object) -> None:
+async def test_httpx_async_hook_rewrites_to_match(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "hx_hook.yaml")
     _preload(path, "https://api.example.com/real")

@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -63,7 +64,7 @@ def _make_cassette(path: str, url: str, response_data: dict[str, object]) -> str
 
 
 @pytest.mark.anyio
-async def test_two_concurrent_async_cassettes(tmp_path: object) -> None:
+async def test_two_concurrent_async_cassettes(tmp_path: Path) -> None:
     """Two async tasks using different cassettes concurrently get correct responses."""
     dir_path = str(tmp_path)
     path_a = _make_cassette(os.path.join(dir_path, "a.yaml"), "https://api.example.com/data", {"source": "a"})
@@ -88,7 +89,7 @@ async def test_two_concurrent_async_cassettes(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_many_concurrent_async_cassettes(tmp_path: object) -> None:
+async def test_many_concurrent_async_cassettes(tmp_path: Path) -> None:
     """N concurrent async tasks each get their own cassette - like Go's 50 goroutine test."""
     dir_path = str(tmp_path)
     n = 50
@@ -115,7 +116,7 @@ async def test_many_concurrent_async_cassettes(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_nested_cassettes(tmp_path: object) -> None:
+async def test_nested_cassettes(tmp_path: Path) -> None:
     """Inner use_cassette overrides the outer one; outer is restored after inner exits."""
     dir_path = str(tmp_path)
     path_outer = _make_cassette(
@@ -155,7 +156,7 @@ async def test_no_cassette_passthrough() -> None:
 
 
 @pytest.mark.anyio
-async def test_concurrent_record_and_replay(tmp_path: object) -> None:
+async def test_concurrent_record_and_replay(tmp_path: Path) -> None:
     """One task replays from cassette A while another records to cassette B - no cross-contamination."""
     dir_path = str(tmp_path)
     path_replay = _make_cassette(
@@ -183,7 +184,7 @@ async def test_concurrent_record_and_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_concurrent_cassettes_different_urls(tmp_path: object) -> None:
+async def test_concurrent_cassettes_different_urls(tmp_path: Path) -> None:
     """Concurrent cassettes targeting different URLs don't interfere."""
     dir_path = str(tmp_path)
     path_a = _make_cassette(os.path.join(dir_path, "a.yaml"), "https://api-a.example.com/data", {"api": "a"})
@@ -212,7 +213,7 @@ async def test_concurrent_cassettes_different_urls(tmp_path: object) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_threadpool_concurrent_cassettes(tmp_path: object) -> None:
+def test_threadpool_concurrent_cassettes(tmp_path: Path) -> None:
     """Multiple threads each using their own cassette via ThreadPoolExecutor."""
     dir_path = str(tmp_path)
     n = 10
@@ -251,7 +252,7 @@ def test_threadpool_concurrent_cassettes(tmp_path: object) -> None:
         release_patches([HttpxInterceptor])
 
 
-def test_threadpool_with_context_propagation(tmp_path: object) -> None:
+def test_threadpool_with_context_propagation(tmp_path: Path) -> None:
     """ThreadPoolExecutor with explicit context propagation via copy_context."""
     dir_path = str(tmp_path)
     path = _make_cassette(os.path.join(dir_path, "ctx.yaml"), "https://api.example.com/data", {"propagated": True})
@@ -272,7 +273,7 @@ def test_threadpool_with_context_propagation(tmp_path: object) -> None:
     assert result == {"propagated": True}
 
 
-def test_threadpool_no_cassette_in_thread(tmp_path: object) -> None:
+def test_threadpool_no_cassette_in_thread(tmp_path: Path) -> None:
     """Without context propagation, threads have no cassette - requests pass through."""
     acquire_patches([HttpxInterceptor])
     try:
@@ -294,7 +295,7 @@ def test_threadpool_no_cassette_in_thread(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_concurrent_tasks_with_no_match_isolation(tmp_path: object) -> None:
+async def test_concurrent_tasks_with_no_match_isolation(tmp_path: Path) -> None:
     """NoMatchError in one task doesn't affect another concurrent task."""
     dir_path = str(tmp_path)
     path_a = _make_cassette(os.path.join(dir_path, "a.yaml"), "https://api.example.com/data", {"source": "a"})
@@ -350,7 +351,7 @@ def test_patch_refcounting() -> None:
     assert httpx.AsyncClient.__init__ is original_init
 
 
-def test_thread_without_context_falls_back_to_active_cassette(tmp_path: object) -> None:
+def test_thread_without_context_falls_back_to_active_cassette(tmp_path: Path) -> None:
     """Threads with no propagated context see the active cassette.
 
     Libraries like Temporal and DBOS run workflow code on worker threads
@@ -373,7 +374,7 @@ def test_thread_without_context_falls_back_to_active_cassette(tmp_path: object) 
     assert result == {"fallback": "hit"}
 
 
-def test_thread_context_cassette_wins_over_fallback(tmp_path: object) -> None:
+def test_thread_context_cassette_wins_over_fallback(tmp_path: Path) -> None:
     """A cassette set in the thread's own context takes priority over the fallback."""
     dir_path = str(tmp_path)
     path_outer = _make_cassette(os.path.join(dir_path, "f-outer.yaml"), "https://api.example.com/data", {"c": "outer"})
@@ -397,7 +398,7 @@ def test_thread_context_cassette_wins_over_fallback(tmp_path: object) -> None:
     assert result == {"c": "own"}
 
 
-def test_fallback_removed_out_of_order(tmp_path: object) -> None:
+def test_fallback_removed_out_of_order(tmp_path: Path) -> None:
     """Exiting an earlier cassette leaves a later still-active one as the fallback."""
     from cassetter._state import get_current_cassette, pop_fallback_cassette, push_fallback_cassette
 
@@ -418,7 +419,7 @@ def test_fallback_removed_out_of_order(tmp_path: object) -> None:
     assert get_current_cassette() is None
 
 
-def test_no_fallback_while_several_cassettes_are_active(tmp_path: object) -> None:
+def test_no_fallback_while_several_cassettes_are_active(tmp_path: Path) -> None:
     """A context-less thread inherits nothing rather than another task's cassette."""
     from cassetter._state import get_current_cassette, pop_fallback_cassette, push_fallback_cassette
 
@@ -473,7 +474,7 @@ def _recorded(path: str, field: str) -> list[str]:
 
 
 @pytest.mark.anyio
-async def test_saved_order_does_not_depend_on_response_order(tmp_path: object) -> None:
+async def test_saved_order_does_not_depend_on_response_order(tmp_path: Path) -> None:
     """Two runs of the same concurrent suite write the same cassette."""
     dir_path = str(tmp_path)
     requests = [("https://api.example.com/b", "b"), ("https://api.example.com/a", "a")]
@@ -489,7 +490,7 @@ async def test_saved_order_does_not_depend_on_response_order(tmp_path: object) -
 
 
 @pytest.mark.anyio
-async def test_indistinguishable_interactions_keep_request_order(tmp_path: object) -> None:
+async def test_indistinguishable_interactions_keep_request_order(tmp_path: Path) -> None:
     """What the matcher cannot tell apart is written in the order it was sent.
 
     Both requests share a method and URI, so the sort has to leave them alone -
@@ -528,7 +529,7 @@ async def test_indistinguishable_interactions_keep_request_order(tmp_path: objec
     assert _recorded(path, "body") == ["first", "second"]
 
 
-def test_concurrent_records_keep_interactions_paired_with_their_position(tmp_path: object) -> None:
+def test_concurrent_records_keep_interactions_paired_with_their_position(tmp_path: Path) -> None:
     """Appending the interaction and its position must not interleave.
 
     A recorder slipping between the two leaves an interaction holding another

@@ -68,7 +68,7 @@ def test_rust_cassette_mark_played() -> None:
     assert c.unplayed_count == 0
 
 
-def test_rust_cassette_save_and_load(tmp_path: object) -> None:
+def test_rust_cassette_save_and_load(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
 
     c = RustCassette()
@@ -105,7 +105,7 @@ def test_rust_cassette_save_and_load(tmp_path: object) -> None:
     assert c2.interactions[0].response.status == 200
 
 
-def test_rust_cassette_preserves_json_key_order(tmp_path: object) -> None:
+def test_rust_cassette_preserves_json_key_order(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "key-order.yaml")
     raw = b'{"id":"chatcmpl-abc","choices":[],"created":1,"usage":{"total_tokens":3,"prompt_tokens":1}}'
 
@@ -180,7 +180,7 @@ def test_cassette_record_before_load() -> None:
     assert len(cassette.interactions) == 1
 
 
-def test_cassette_load_existing_file(tmp_path: object) -> None:
+def test_cassette_load_existing_file(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "existing.yaml")
     c = RustCassette()
     c.add_interaction(
@@ -204,14 +204,14 @@ def test_record_mode_none_missing_file() -> None:
     assert cassette.interactions == []
 
 
-def test_record_mode_once_creates_new(tmp_path: object) -> None:
+def test_record_mode_once_creates_new(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "new.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ONCE)
     cassette.load()
     assert cassette.interactions == []
 
 
-def test_cassette_record_and_play(tmp_path: object) -> None:
+def test_cassette_record_and_play(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -237,7 +237,7 @@ def test_cassette_record_and_play(tmp_path: object) -> None:
     assert response.status == 200
 
 
-def test_cassette_play_no_match(tmp_path: object) -> None:
+def test_cassette_play_no_match(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "empty.yaml")
     cassette = Cassette(path, record_mode=RecordMode.NONE)
     # Create empty cassette file
@@ -248,7 +248,7 @@ def test_cassette_play_no_match(tmp_path: object) -> None:
         cassette.play("GET", "https://nonexistent.com/", {}, None)
 
 
-def test_cassette_save_persists(tmp_path: object) -> None:
+def test_cassette_save_persists(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "persist.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -270,7 +270,7 @@ def test_cassette_save_persists(tmp_path: object) -> None:
     assert len(cassette2.interactions) == 1
 
 
-def test_cassette_security_filtering_on_record(tmp_path: object) -> None:
+def test_cassette_security_filtering_on_record(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "secure.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -351,7 +351,7 @@ def _make_old_cassette(path: str, recorded_at: str) -> None:
     c.save(path)
 
 
-def test_expiry_no_expiry_when_max_age_none(tmp_path: object) -> None:
+def test_expiry_no_expiry_when_max_age_none(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _make_old_cassette(path, "2020-01-01T00:00:00Z")
 
@@ -360,7 +360,7 @@ def test_expiry_no_expiry_when_max_age_none(tmp_path: object) -> None:
     assert len(cassette.interactions) == 1
 
 
-def test_expiry_not_expired(tmp_path: object) -> None:
+def test_expiry_not_expired(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _make_old_cassette(path, "2099-01-01T00:00:00Z")
 
@@ -369,7 +369,7 @@ def test_expiry_not_expired(tmp_path: object) -> None:
     assert len(cassette.interactions) == 1
 
 
-def test_expiry_warn_on_expiry(tmp_path: object) -> None:
+def test_expiry_warn_on_expiry(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _make_old_cassette(path, "2020-01-01T00:00:00Z")
 
@@ -379,7 +379,7 @@ def test_expiry_warn_on_expiry(tmp_path: object) -> None:
     assert len(cassette.interactions) == 1
 
 
-def test_expiry_fail_on_expiry(tmp_path: object) -> None:
+def test_expiry_fail_on_expiry(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _make_old_cassette(path, "2020-01-01T00:00:00Z")
 
@@ -388,7 +388,7 @@ def test_expiry_fail_on_expiry(tmp_path: object) -> None:
         cassette.load()
 
 
-def test_expiry_rerecord_on_expiry(tmp_path: object) -> None:
+def test_expiry_rerecord_on_expiry(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _make_old_cassette(path, "2020-01-01T00:00:00Z")
 
@@ -397,7 +397,7 @@ def test_expiry_rerecord_on_expiry(tmp_path: object) -> None:
     assert len(cassette.interactions) == 0
 
 
-def test_expiry_empty_cassette_not_expired(tmp_path: object) -> None:
+def test_expiry_empty_cassette_not_expired(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     RustCassette().save(path)
 
@@ -406,7 +406,7 @@ def test_expiry_empty_cassette_not_expired(tmp_path: object) -> None:
     assert len(cassette.interactions) == 0
 
 
-def test_expiry_no_check_when_record_mode_all(tmp_path: object) -> None:
+def test_expiry_no_check_when_record_mode_all(tmp_path: Path) -> None:
     """RecordMode.ALL creates a fresh cassette, so expiry check never runs."""
     path = os.path.join(str(tmp_path), "test.yaml")
     _make_old_cassette(path, "2020-01-01T00:00:00Z")
@@ -416,7 +416,7 @@ def test_expiry_no_check_when_record_mode_all(tmp_path: object) -> None:
     assert len(cassette.interactions) == 0
 
 
-def test_expiry_no_check_when_file_missing(tmp_path: object) -> None:
+def test_expiry_no_check_when_file_missing(tmp_path: Path) -> None:
     """Missing file creates empty cassette, no expiry check."""
     path = os.path.join(str(tmp_path), "missing.yaml")
 
@@ -425,7 +425,7 @@ def test_expiry_no_check_when_file_missing(tmp_path: object) -> None:
     assert len(cassette.interactions) == 0
 
 
-def test_expiry_uses_newest_across_interaction_types(tmp_path: object) -> None:
+def test_expiry_uses_newest_across_interaction_types(tmp_path: Path) -> None:
     """Expiry is based on the newest recorded_at across HTTP, gRPC, and WS interactions."""
     path = os.path.join(str(tmp_path), "mixed.yaml")
     c = RustCassette()
@@ -460,7 +460,7 @@ def _write_vcr_cassette(path: str, interactions: list[dict[str, object]]) -> Non
         yaml.dump(data, f)
 
 
-def test_vcr_format_json_response(tmp_path: object) -> None:
+def test_vcr_format_json_response(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
     _write_vcr_cassette(
         path,
@@ -491,7 +491,7 @@ def test_vcr_format_json_response(tmp_path: object) -> None:
     assert i.response.body.content == {"key": "value", "num": 42}
 
 
-def test_vcr_format_text_response(tmp_path: object) -> None:
+def test_vcr_format_text_response(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
     _write_vcr_cassette(
         path,
@@ -517,7 +517,7 @@ def test_vcr_format_text_response(tmp_path: object) -> None:
     assert i.response.body.content == "<html>hello</html>"
 
 
-def test_vcr_format_null_response_body(tmp_path: object) -> None:
+def test_vcr_format_null_response_body(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
     _write_vcr_cassette(
         path,
@@ -542,7 +542,7 @@ def test_vcr_format_null_response_body(tmp_path: object) -> None:
     assert c.interactions[0].response.body.body_type == "none"
 
 
-def test_vcr_format_empty_string_request_body(tmp_path: object) -> None:
+def test_vcr_format_empty_string_request_body(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
     _write_vcr_cassette(
         path,
@@ -566,7 +566,7 @@ def test_vcr_format_empty_string_request_body(tmp_path: object) -> None:
     assert c.interactions[0].request.body.body_type == "none"
 
 
-def test_vcr_format_string_request_body(tmp_path: object) -> None:
+def test_vcr_format_string_request_body(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
     _write_vcr_cassette(
         path,
@@ -594,7 +594,7 @@ def test_vcr_format_string_request_body(tmp_path: object) -> None:
     assert i.response.body.content == {"reply": "hi"}
 
 
-def test_vcr_format_saves_as_cassetter(tmp_path: object) -> None:
+def test_vcr_format_saves_as_cassetter(tmp_path: Path) -> None:
     vcr_path = os.path.join(str(tmp_path), "vcr.yaml")
     out_path = os.path.join(str(tmp_path), "out.yaml")
     _write_vcr_cassette(
@@ -628,7 +628,7 @@ def test_vcr_format_saves_as_cassetter(tmp_path: object) -> None:
     assert resp["body"]["content"] == {"ok": True}
 
 
-def test_vcr_format_playback(tmp_path: object) -> None:
+def test_vcr_format_playback(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "vcr.yaml")
     _write_vcr_cassette(
         path,
@@ -655,7 +655,7 @@ def test_vcr_format_playback(tmp_path: object) -> None:
     assert response.body.content == {"users": []}
 
 
-def test_vcr_format_parsed_body(tmp_path: object) -> None:
+def test_vcr_format_parsed_body(tmp_path: Path) -> None:
     """pydantic-ai style serializer: structured `parsed_body` instead of `body`."""
     path = os.path.join(str(tmp_path), "parsed.yaml")
     _write_vcr_cassette(
@@ -684,7 +684,7 @@ def test_vcr_format_parsed_body(tmp_path: object) -> None:
     assert i.response.body.content["choices"][0]["message"]["content"] == "hello"
 
 
-def test_vcr_format_missing_version(tmp_path: object) -> None:
+def test_vcr_format_missing_version(tmp_path: Path) -> None:
     """Cassettes written without a top-level version key load with version 1."""
     path = os.path.join(str(tmp_path), "no_version.yaml")
     data = {
@@ -703,7 +703,7 @@ def test_vcr_format_missing_version(tmp_path: object) -> None:
     assert len(c) == 1
 
 
-def test_parsed_body_saves_as_cassetter_format(tmp_path: object) -> None:
+def test_parsed_body_saves_as_cassetter_format(tmp_path: Path) -> None:
     """parsed_body cassettes are rewritten in cassetter's own body format on save."""
     path = os.path.join(str(tmp_path), "parsed.yaml")
     _write_vcr_cassette(
@@ -731,7 +731,7 @@ def test_parsed_body_saves_as_cassetter_format(tmp_path: object) -> None:
     assert request["body"] == {"type": "json", "content": {"q": 1}}
 
 
-def test_vcr_format_binary_body_and_headers(tmp_path: object) -> None:
+def test_vcr_format_binary_body_and_headers(tmp_path: Path) -> None:
     """PyYAML !!binary scalars (bodies and header values) decode to real bytes."""
     path = os.path.join(str(tmp_path), "binary.yaml")
     data = {
@@ -756,7 +756,7 @@ def test_vcr_format_binary_body_and_headers(tmp_path: object) -> None:
     assert response.body.content == b"\x00\x01\xffbinary-payload"
 
 
-def test_vcr_format_bare_mapping_request_body(tmp_path: object) -> None:
+def test_vcr_format_bare_mapping_request_body(tmp_path: Path) -> None:
     """A structured dict directly under request.body (aiohttp recordings) loads as JSON."""
     path = os.path.join(str(tmp_path), "mapping.yaml")
     data = {
@@ -786,7 +786,7 @@ def test_match_config_rejects_unknown_matcher() -> None:
         MatchConfig(match_on=["method", "url"])  # type: ignore[list-item]
 
 
-def test_toml_save_refuses_grpc_interactions(tmp_path: object) -> None:
+def test_toml_save_refuses_grpc_interactions(tmp_path: Path) -> None:
     c = RustCassette()
     c.add_grpc_interaction(
         GrpcInteraction(
@@ -799,7 +799,7 @@ def test_toml_save_refuses_grpc_interactions(tmp_path: object) -> None:
         c.save(os.path.join(str(tmp_path), "grpc.toml"))
 
 
-def test_saved_headers_are_sorted(tmp_path: object) -> None:
+def test_saved_headers_are_sorted(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "sorted.yaml")
     c = RustCassette()
     c.add_interaction(
@@ -834,7 +834,7 @@ def test_scrub_multibyte_query_no_panic() -> None:
     assert "api_key=[FILTERED]" in scrubbed.request.uri
 
 
-def test_once_with_existing_cassette_is_replay_only(tmp_path: object) -> None:
+def test_once_with_existing_cassette_is_replay_only(tmp_path: Path) -> None:
     """`once` must not record (or hit the network) when the cassette already exists."""
     path = os.path.join(str(tmp_path), "once.yaml")
     recorder = Cassette(path, record_mode=RecordMode.ALL)
@@ -862,14 +862,14 @@ def test_once_with_existing_cassette_is_replay_only(tmp_path: object) -> None:
         cassette.play("GET", "https://example.com/unknown", {}, None)
 
 
-def test_once_without_cassette_records(tmp_path: object) -> None:
+def test_once_without_cassette_records(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "fresh.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ONCE)
     cassette.load()
     assert cassette.can_record is True
 
 
-def test_once_rerecord_expiry_allows_recording(tmp_path: object) -> None:
+def test_once_rerecord_expiry_allows_recording(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "expired.yaml")
     recorder = Cassette(path, record_mode=RecordMode.ALL)
     recorder.load()
@@ -895,7 +895,7 @@ def test_once_rerecord_expiry_allows_recording(tmp_path: object) -> None:
     assert cassette.can_record is True
 
 
-def test_play_matches_uri_with_filtered_query_param(tmp_path: object) -> None:
+def test_play_matches_uri_with_filtered_query_param(tmp_path: Path) -> None:
     """Scrubbed query params must not break replay matching."""
     path = os.path.join(str(tmp_path), "filtered.yaml")
     recorder = Cassette(path, record_mode=RecordMode.ALL)
@@ -927,7 +927,7 @@ def test_play_matches_uri_with_filtered_query_param(tmp_path: object) -> None:
     assert response.status == 200
 
 
-def test_play_matches_scrubbed_json_body(tmp_path: object) -> None:
+def test_play_matches_scrubbed_json_body(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "body_match.yaml")
     config = MatchConfig(match_on=["method", "uri", "json_body"])
     recorder = Cassette(path, record_mode=RecordMode.ALL, match_config=config)
@@ -954,12 +954,12 @@ def test_play_matches_scrubbed_json_body(tmp_path: object) -> None:
     assert response.status == 200
 
 
-def test_invalid_on_expiry_rejected(tmp_path: object) -> None:
+def test_invalid_on_expiry_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="invalid on_expiry"):
         Cassette(os.path.join(str(tmp_path), "x.yaml"), on_expiry="error")
 
 
-def test_all_mode_truncates_stale_cassette(tmp_path: object) -> None:
+def test_all_mode_truncates_stale_cassette(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "stale.yaml")
     recorder = Cassette(path, record_mode=RecordMode.ALL)
     recorder.load()
@@ -1026,7 +1026,7 @@ def test_rewrite_mode_without_existing_cassette(tmp_path: Path) -> None:
     assert not os.path.exists(path)
 
 
-def test_save_preserves_file_permissions(tmp_path: object) -> None:
+def test_save_preserves_file_permissions(tmp_path: Path) -> None:
     """Atomic save must keep a restrictive mode on an existing cassette."""
     if sys.platform == "win32":  # pragma: no cover
         pytest.skip("POSIX permissions only")
@@ -1060,7 +1060,7 @@ def _save_interaction(path: str, method: str, uri: str, body_text: str) -> None:
     c.save(path)
 
 
-def test_uri_normalizer_matches_normalized_equivalent(tmp_path: object) -> None:
+def test_uri_normalizer_matches_normalized_equivalent(tmp_path: Path) -> None:
     """A normalizer applied to both sides lets region-variant URIs replay."""
     path = os.path.join(str(tmp_path), "regions.yaml")
     _save_interaction(path, "POST", "https://svc.us-east-2.example.com/model/m:0/run", "east-2")
@@ -1077,7 +1077,7 @@ def test_uri_normalizer_matches_normalized_equivalent(tmp_path: object) -> None:
     assert cassette.play_count == 1
 
 
-def test_uri_normalizer_still_rejects_distinct_uris(tmp_path: object) -> None:
+def test_uri_normalizer_still_rejects_distinct_uris(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "distinct.yaml")
     _save_interaction(path, "GET", "https://svc.us-east-2.example.com/a", "a")
 
@@ -1088,7 +1088,7 @@ def test_uri_normalizer_still_rejects_distinct_uris(tmp_path: object) -> None:
         cassette.play("GET", "https://svc.us-east-2.example.com/other", {}, None)
 
 
-def test_uri_normalizer_applies_to_recorded_interactions(tmp_path: object) -> None:
+def test_uri_normalizer_applies_to_recorded_interactions(tmp_path: Path) -> None:
     """An interaction recorded in this session is matchable through the normalizer."""
     path = os.path.join(str(tmp_path), "recorded.yaml")
     cassette = Cassette(
@@ -1111,7 +1111,7 @@ def test_uri_normalizer_applies_to_recorded_interactions(tmp_path: object) -> No
     assert response.body.content == "items"
 
 
-def test_without_uri_normalizer_region_variant_does_not_match(tmp_path: object) -> None:
+def test_without_uri_normalizer_region_variant_does_not_match(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "no-normalizer.yaml")
     _save_interaction(path, "POST", "https://svc.us-east-2.example.com/run", "east-2")
 
@@ -1122,7 +1122,7 @@ def test_without_uri_normalizer_region_variant_does_not_match(tmp_path: object) 
         cassette.play("POST", "https://svc.us-east-1.example.com/run", {}, None)
 
 
-def test_corrupt_cassette_raises_cassette_load_error(tmp_path: object) -> None:
+def test_corrupt_cassette_raises_cassette_load_error(tmp_path: Path) -> None:
     """A corrupt cassette surfaces as a library error, not a bare Rust ValueError."""
     path = os.path.join(str(tmp_path), "corrupt.yaml")
     with open(path, "w") as f:
@@ -1145,7 +1145,7 @@ def _record(cassette: Cassette, method: str, uri: str, body: bytes | None, reply
     )
 
 
-def test_save_writes_interactions_in_canonical_order(tmp_path: object) -> None:
+def test_save_writes_interactions_in_canonical_order(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "canonical.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
@@ -1160,7 +1160,7 @@ def test_save_writes_interactions_in_canonical_order(tmp_path: object) -> None:
     ]
 
 
-def test_save_keeps_order_the_matcher_relies_on(tmp_path: object) -> None:
+def test_save_keeps_order_the_matcher_relies_on(tmp_path: Path) -> None:
     """Interactions the matcher cannot tell apart must not be reordered.
 
     Replay takes the first unplayed match, so their order is what decides which
@@ -1179,7 +1179,7 @@ def test_save_keeps_order_the_matcher_relies_on(tmp_path: object) -> None:
     assert replayed.play("POST", uri, {}, b'{"q": "zebra"}').body.content == "first"
 
 
-def test_save_sorts_by_body_when_it_is_matched_on(tmp_path: object) -> None:
+def test_save_sorts_by_body_when_it_is_matched_on(tmp_path: Path) -> None:
     """Matching on the body makes it safe to order by, so it is used."""
     path = os.path.join(str(tmp_path), "by-body.yaml")
     uri = "https://api.example.com/chat"
@@ -1197,7 +1197,7 @@ def test_save_sorts_by_body_when_it_is_matched_on(tmp_path: object) -> None:
     assert [i.response.body.content for i in saved.interactions] == ["aardvark", "zebra"]
 
 
-def test_newly_recorded_interactions_follow_loaded_ones(tmp_path: object) -> None:
+def test_newly_recorded_interactions_follow_loaded_ones(tmp_path: Path) -> None:
     """An appended interaction sorts after the loaded one it ties with."""
     path = os.path.join(str(tmp_path), "appended.yaml")
     uri = "https://api.example.com/poll"
@@ -1216,7 +1216,7 @@ def test_newly_recorded_interactions_follow_loaded_ones(tmp_path: object) -> Non
     assert [i.response.body.content for i in saved.interactions] == ["loaded", "appended"]
 
 
-def test_uri_normalizer_collisions_keep_request_order(tmp_path: object) -> None:
+def test_uri_normalizer_collisions_keep_request_order(tmp_path: Path) -> None:
     """URIs the normalizer collapses into one must not be split by the sort.
 
     Matching compares the normalized URI, so these two are interchangeable at

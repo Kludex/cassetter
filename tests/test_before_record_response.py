@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -13,7 +14,7 @@ pytest_plugins = ("anyio",)
 
 
 @pytest.fixture
-def cassette_path(tmp_path: object) -> str:
+def cassette_path(tmp_path: Path) -> str:
     return os.path.join(str(tmp_path), "response_hook.yaml")
 
 
@@ -71,7 +72,7 @@ async def test_before_record_response_modifies_status(cassette_path: str) -> Non
 
 
 @pytest.mark.anyio
-async def test_before_record_response_not_called_on_replay(tmp_path: object) -> None:
+async def test_before_record_response_not_called_on_replay(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "replay.yaml")
     c = RustCassette()
     c.add_interaction(
@@ -96,7 +97,7 @@ async def test_before_record_response_not_called_on_replay(tmp_path: object) -> 
     assert calls == []
 
 
-def test_before_record_response_with_vcr_config(tmp_path: object) -> None:
+def test_before_record_response_with_vcr_config(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
 
     def my_hook(response: RawResponse) -> RawResponse:
@@ -106,7 +107,7 @@ def test_before_record_response_with_vcr_config(tmp_path: object) -> None:
     assert cassette.before_record_response is my_hook
 
 
-def test_before_record_response_default_is_none(tmp_path: object) -> None:
+def test_before_record_response_default_is_none(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     cassette = Cassette(path)
     assert cassette.before_record_response is None

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 import requests
@@ -33,7 +34,7 @@ def _preload_cassette(path: str) -> Cassette:
     return cassette
 
 
-def test_requests_interceptor_replay(tmp_path: object) -> None:
+def test_requests_interceptor_replay(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -43,7 +44,7 @@ def test_requests_interceptor_replay(tmp_path: object) -> None:
         assert response.json() == {"data": "hello"}
 
 
-def test_requests_interceptor_record(tmp_path: object, monkeypatch: object) -> None:
+def test_requests_interceptor_record(tmp_path: Path, monkeypatch: object) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
 
     fake_response = requests.Response()
@@ -87,7 +88,7 @@ def test_extract_headers_dict() -> None:
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
-def test_requests_interceptor_no_match(tmp_path: object) -> None:
+def test_requests_interceptor_no_match(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 

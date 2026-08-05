@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from pathlib import Path
 
 from cassetter import RecordedRequest
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
@@ -10,7 +11,7 @@ from cassetter.cassette import Cassette
 from cassetter.recording import RecordMode
 
 
-def _make_cassette(tmp_path: object) -> Cassette:
+def _make_cassette(tmp_path: Path) -> Cassette:
     path = os.path.join(str(tmp_path), "introspection.yaml")
     inner = RustCassette()
     inner.add_interaction(
@@ -38,7 +39,7 @@ def _make_cassette(tmp_path: object) -> Cassette:
     return cassette
 
 
-def test_requests_exposes_vcr_attributes(tmp_path: object) -> None:
+def test_requests_exposes_vcr_attributes(tmp_path: Path) -> None:
     cassette = _make_cassette(tmp_path)
     requests = cassette.requests
 
@@ -62,7 +63,7 @@ def test_requests_exposes_vcr_attributes(tmp_path: object) -> None:
     assert second.query == []
 
 
-def test_request_body_wire_forms(tmp_path: object) -> None:
+def test_request_body_wire_forms(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "bodies.yaml")
     inner = RustCassette()
     for body in (Body("binary", b"\x00\x01"), Body("none")):
@@ -81,7 +82,7 @@ def test_request_body_wire_forms(tmp_path: object) -> None:
     assert cassette.requests[1].body is None
 
 
-def test_play_count_lifecycle(tmp_path: object) -> None:
+def test_play_count_lifecycle(tmp_path: Path) -> None:
     cassette = _make_cassette(tmp_path)
 
     assert cassette.play_count == 0
@@ -108,7 +109,7 @@ def test_introspection_before_load() -> None:
     assert cassette.all_played
 
 
-def test_play_counts_track_repeats(tmp_path: object) -> None:
+def test_play_counts_track_repeats(tmp_path: Path) -> None:
     """Replaying the same interaction twice (matcher fallback) counts both plays."""
     path = os.path.join(str(tmp_path), "repeats.yaml")
     inner = RustCassette()

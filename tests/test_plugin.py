@@ -29,7 +29,7 @@ def test_configure_registers_marker() -> None:
     config.addinivalue_line.assert_called_once()
 
 
-def test_check_orphans_finds_orphaned_files(tmp_path: object) -> None:
+def test_check_orphans_finds_orphaned_files(tmp_path: Path) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "used.yaml")).write_text("---")
     Path(os.path.join(cassette_dir, "orphan.yaml")).write_text("---")
@@ -43,7 +43,7 @@ def test_check_orphans_finds_orphaned_files(tmp_path: object) -> None:
     assert "used.yaml" not in orphans
 
 
-def test_check_orphans_no_orphans(tmp_path: object) -> None:
+def test_check_orphans_no_orphans(tmp_path: Path) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "used.yaml")).write_text("---")
 
@@ -53,7 +53,7 @@ def test_check_orphans_no_orphans(tmp_path: object) -> None:
     assert orphans == []
 
 
-def test_check_orphans_ignores_non_yaml_files(tmp_path: object) -> None:
+def test_check_orphans_ignores_non_yaml_files(tmp_path: Path) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "readme.txt")).write_text("not a cassette")
     Path(os.path.join(cassette_dir, "data.json")).write_text("{}")
@@ -78,7 +78,7 @@ def test_session_finish_no_orphan_dir() -> None:
     session_finish(session)
 
 
-def test_session_finish_warns_on_orphans(tmp_path: object) -> None:
+def test_session_finish_warns_on_orphans(tmp_path: Path) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.yaml")).write_text("---")
 
@@ -91,7 +91,7 @@ def test_session_finish_warns_on_orphans(tmp_path: object) -> None:
         session_finish(session)
 
 
-def test_session_finish_no_warning_when_no_orphans(tmp_path: object) -> None:
+def test_session_finish_no_warning_when_no_orphans(tmp_path: Path) -> None:
     cassette_dir = str(tmp_path)
     yaml_path = os.path.join(cassette_dir, "used.yaml")
     Path(yaml_path).write_text("---")
@@ -105,7 +105,7 @@ def test_session_finish_no_warning_when_no_orphans(tmp_path: object) -> None:
     session_finish(session)
 
 
-def test_resolve_cassette_default_config(tmp_path: object) -> None:
+def test_resolve_cassette_default_config(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -146,7 +146,7 @@ def test_resolve_cassette_cli_rewrite_drops_the_cassette(tmp_path: Path) -> None
     assert not yaml_path.exists()
 
 
-def test_resolve_cassette_custom_cassette_name(tmp_path: object) -> None:
+def test_resolve_cassette_custom_cassette_name(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -164,7 +164,7 @@ def test_resolve_cassette_custom_cassette_name(tmp_path: object) -> None:
     assert cassette.path.endswith("custom.yaml")
 
 
-def test_resolve_cassette_marker_kwargs_override(tmp_path: object) -> None:
+def test_resolve_cassette_marker_kwargs_override(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     alt_dir = os.path.join(test_dir, "alt", "test_example")
     os.makedirs(alt_dir, exist_ok=True)
@@ -182,7 +182,7 @@ def test_resolve_cassette_marker_kwargs_override(tmp_path: object) -> None:
     assert "alt" in cassette.path
 
 
-def test_resolve_cassette_cli_record_mode_override(tmp_path: object) -> None:
+def test_resolve_cassette_cli_record_mode_override(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -200,7 +200,7 @@ def test_resolve_cassette_cli_record_mode_override(tmp_path: object) -> None:
     assert cassette.record_mode == RecordMode.NONE
 
 
-def test_resolve_cassette_security_config_from_vcr_config(tmp_path: object) -> None:
+def test_resolve_cassette_security_config_from_vcr_config(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -225,7 +225,7 @@ def test_resolve_cassette_security_config_from_vcr_config(tmp_path: object) -> N
     assert cassette is not None
 
 
-def test_resolve_cassette_max_age_from_vcr_config(tmp_path: object) -> None:
+def test_resolve_cassette_max_age_from_vcr_config(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -251,7 +251,7 @@ def test_resolve_cassette_max_age_from_vcr_config(tmp_path: object) -> None:
         )
 
 
-def test_resolve_cassette_max_age_marker_override(tmp_path: object) -> None:
+def test_resolve_cassette_max_age_marker_override(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -277,7 +277,7 @@ def test_resolve_cassette_max_age_marker_override(tmp_path: object) -> None:
         )
 
 
-def test_resolve_cassette_vcr_cassette_dir_fixture(tmp_path: object) -> None:
+def test_resolve_cassette_vcr_cassette_dir_fixture(tmp_path: Path) -> None:
     cassette_dir = os.path.join(str(tmp_path), "custom_cassettes")
     os.makedirs(cassette_dir, exist_ok=True)
     RustCassette().save(os.path.join(cassette_dir, "test_func.yaml"))
@@ -295,7 +295,7 @@ def test_resolve_cassette_vcr_cassette_dir_fixture(tmp_path: object) -> None:
     assert cassette.path == os.path.join(cassette_dir, "test_func.yaml")
 
 
-def test_resolve_cassette_marker_cassette_dir_overrides_fixture(tmp_path: object) -> None:
+def test_resolve_cassette_marker_cassette_dir_overrides_fixture(tmp_path: Path) -> None:
     marker_dir = os.path.join(str(tmp_path), "marker_dir", "test_example")
     os.makedirs(marker_dir, exist_ok=True)
     RustCassette().save(os.path.join(marker_dir, "test_func.yaml"))
@@ -313,7 +313,7 @@ def test_resolve_cassette_marker_cassette_dir_overrides_fixture(tmp_path: object
     assert "marker_dir" in cassette.path
 
 
-def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
+def test_resolve_cassette_filter_query_parameters(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -335,7 +335,7 @@ def test_resolve_cassette_filter_query_parameters(tmp_path: object) -> None:
     assert cassette is not None
 
 
-def test_resolve_cassette_from_cassetter(tmp_path: object) -> None:
+def test_resolve_cassette_from_cassetter(tmp_path: Path) -> None:
     library_dir = os.path.join(str(tmp_path), "shared_cassettes")
     os.makedirs(library_dir, exist_ok=True)
     RustCassette().save(os.path.join(library_dir, "test_func.yaml"))
@@ -353,7 +353,7 @@ def test_resolve_cassette_from_cassetter(tmp_path: object) -> None:
     assert cassette.path == os.path.join(library_dir, "test_func.yaml")
 
 
-def test_resolve_cassette_from_cassetter_defaults_to_none_record_mode(tmp_path: object) -> None:
+def test_resolve_cassette_from_cassetter_defaults_to_none_record_mode(tmp_path: Path) -> None:
     """An unset record mode means `none` under pytest, even though `use_cassette` defaults to `once`."""
     cassette_dir = os.path.join(str(tmp_path), "cassettes")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -372,7 +372,7 @@ def test_resolve_cassette_from_cassetter_defaults_to_none_record_mode(tmp_path: 
     assert cassette.record_mode == RecordMode.NONE
 
 
-def test_resolve_cassette_marker_dir_overrides_cassette_library_dir(tmp_path: object) -> None:
+def test_resolve_cassette_marker_dir_overrides_cassette_library_dir(tmp_path: Path) -> None:
     marker_dir = os.path.join(str(tmp_path), "marker_dir", "test_example")
     os.makedirs(marker_dir, exist_ok=True)
     RustCassette().save(os.path.join(marker_dir, "test_func.yaml"))
@@ -389,7 +389,7 @@ def test_resolve_cassette_marker_dir_overrides_cassette_library_dir(tmp_path: ob
     assert cassette.path == os.path.join(marker_dir, "test_func.yaml")
 
 
-def test_resolve_cassette_ini_on_expiry(tmp_path: object) -> None:
+def test_resolve_cassette_ini_on_expiry(tmp_path: Path) -> None:
     cassette_dir = os.path.join(str(tmp_path), "cassettes")
     os.makedirs(cassette_dir, exist_ok=True)
     path = os.path.join(cassette_dir, "test_func.yaml")
@@ -416,7 +416,7 @@ def test_resolve_cassette_ini_on_expiry(tmp_path: object) -> None:
         )
 
 
-def test_resolve_cassette_ignores_unknown_vcr_config_keys(tmp_path: object) -> None:
+def test_resolve_cassette_ignores_unknown_vcr_config_keys(tmp_path: Path) -> None:
     """Keys VCR.py supports but cassetter handles automatically are no-ops, not errors."""
     cassette_dir = os.path.join(str(tmp_path), "cassettes")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -449,13 +449,13 @@ def test_ini_options_registered() -> None:
     assert ini_names == ["vcr_max_age", "vcr_on_expiry"]
 
 
-def test_check_orphans_includes_toml(tmp_path: object) -> None:
+def test_check_orphans_includes_toml(tmp_path: Path) -> None:
     cassette_dir = str(tmp_path)
     Path(os.path.join(cassette_dir, "orphan.toml")).write_text("---")
     assert check_orphans(cassette_dir, set()) == ["orphan.toml"]
 
 
-def test_resolve_cassette_sanitizes_forbidden_filename_chars(tmp_path: object) -> None:
+def test_resolve_cassette_sanitizes_forbidden_filename_chars(tmp_path: Path) -> None:
     """Node names keep pytest-recording's sanitization so vcrpy-recorded cassettes resolve."""
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
@@ -477,7 +477,7 @@ def test_resolve_cassette_sanitizes_forbidden_filename_chars(tmp_path: object) -
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="':' is not a legal file name character")
-def test_resolve_cassette_keeps_existing_unsanitized_name(tmp_path: object) -> None:
+def test_resolve_cassette_keeps_existing_unsanitized_name(tmp_path: Path) -> None:
     """A cassette recorded before names were sanitized keeps replaying."""
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
@@ -498,7 +498,7 @@ def test_resolve_cassette_keeps_existing_unsanitized_name(tmp_path: object) -> N
     assert os.path.exists(cassette.path)
 
 
-def test_resolve_cassette_records_under_sanitized_name_when_neither_exists(tmp_path: object) -> None:
+def test_resolve_cassette_records_under_sanitized_name_when_neither_exists(tmp_path: Path) -> None:
     """With nothing on disk, a new cassette takes the sanitized name."""
     test_dir = str(tmp_path)
 
@@ -514,7 +514,7 @@ def test_resolve_cassette_records_under_sanitized_name_when_neither_exists(tmp_p
     assert os.path.basename(cassette.path) == "test_func[anthropic-claude].yaml"
 
 
-def test_resolve_cassette_passes_uri_normalizer(tmp_path: object) -> None:
+def test_resolve_cassette_passes_uri_normalizer(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
     cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
     os.makedirs(cassette_dir, exist_ok=True)
@@ -560,7 +560,7 @@ def test_worker_ships_loaded_cassettes_to_controller() -> None:
     assert config.workeroutput["vcr_loaded_cassettes"] == ["/cassettes/a.yaml"]
 
 
-def test_controller_aggregates_worker_shards(tmp_path: object) -> None:
+def test_controller_aggregates_worker_shards(tmp_path: Path) -> None:
     """Every worker's cassettes count as used, not just the controller's."""
     cassette_dir = str(tmp_path)
     for name in ("a.yaml", "b.yaml"):

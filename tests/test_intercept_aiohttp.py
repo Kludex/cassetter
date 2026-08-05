@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import aiohttp
@@ -44,7 +45,7 @@ def _preload_cassette(path: str) -> None:
 
 
 @pytest.mark.anyio
-async def test_interceptor_replay(tmp_path: object) -> None:
+async def test_interceptor_replay(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -57,7 +58,7 @@ async def test_interceptor_replay(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
+async def test_interceptor_no_match_cant_record(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -68,7 +69,7 @@ async def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
 
 
 @pytest.mark.anyio
-async def test_interceptor_record(tmp_path: object) -> None:
+async def test_interceptor_record(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "test.yaml")
 
