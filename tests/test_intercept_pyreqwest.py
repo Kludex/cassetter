@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pyreqwest_impersonate as pri
@@ -31,7 +32,7 @@ def _preload_cassette(path: str) -> None:
     c.save(path)
 
 
-def test_interceptor_replay(tmp_path: object) -> None:
+def test_interceptor_replay(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -42,7 +43,7 @@ def test_interceptor_replay(tmp_path: object) -> None:
         assert response.json() == {"data": "hello"}
 
 
-def test_interceptor_replay_via_request_method(tmp_path: object) -> None:
+def test_interceptor_replay_via_request_method(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -53,7 +54,7 @@ def test_interceptor_replay_via_request_method(tmp_path: object) -> None:
         assert response.json() == {"data": "hello"}
 
 
-def test_interceptor_no_match_cant_record(tmp_path: object) -> None:
+def test_interceptor_no_match_cant_record(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
@@ -146,7 +147,7 @@ def test_build_replay_response_none_body() -> None:
     assert resp.content == b""
 
 
-def test_record_uses_request_url_not_response_url(tmp_path: object) -> None:
+def test_record_uses_request_url_not_response_url(tmp_path: Path) -> None:
     """Recording must store the request URL: responses carry post-redirect URLs
     that would never match on replay."""
 
