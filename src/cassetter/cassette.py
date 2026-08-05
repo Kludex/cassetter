@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+import stat
 import threading
 import warnings
 from collections import Counter
@@ -141,6 +142,8 @@ class Cassette:
         self._record_orders: list[int] = []
         self._next_record_order = 0
         self._record_lock = threading.Lock()
+        # Mode of the cassette `rewrite` deleted, to put back on its replacement.
+        self._rewritten_file_mode: int | None = None
 
     @property
     def path(self) -> str:
@@ -222,8 +225,11 @@ class Cassette:
         exists = os.path.exists(self._path)
 
         # `rewrite` drops the file before recording, so a run that captures
-        # nothing leaves no stale cassette behind.
+        # nothing leaves no stale cassette behind. The writer copies the mode
+        # off the file it replaces, so with nothing there it has to be handed
+        # over - otherwise a 0600 cassette comes back at the process umask.
         if self._record_mode == RecordMode.REWRITE and exists:
+            self._rewritten_file_mode = stat.S_IMODE(os.stat(self._path).st_mode)
             os.remove(self._path)
             exists = False
 
@@ -332,8 +338,13 @@ class Cassette:
             # that URIs a normalizer collapses into one stay interchangeable
             # instead of being separated by the raw URI they were recorded with.
             matched = self._inner if self._match_inner is None else self._match_inner
-            self._inner.save(self._path, matched.output_order(self._match_config, self._record_orders))
+            self._inner.save(
+                self._path,
+                matched.output_order(self._match_config, self._record_orders),
+                self._rewritten_file_mode,
+            )
             self._dirty = False
+            self._rewritten_file_mode = None
 
     @property
     def can_record(self) -> bool:

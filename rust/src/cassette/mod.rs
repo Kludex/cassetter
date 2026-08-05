@@ -226,8 +226,14 @@ impl Cassette {
     }
 
     /// Save the cassette to disk, releasing the GIL for serialization and I/O.
-    #[pyo3(signature = (path, order=None))]
-    fn save(&self, py: Python<'_>, path: &str, order: Option<Vec<usize>>) -> PyResult<()> {
+    #[pyo3(signature = (path, order=None, mode=None))]
+    fn save(
+        &self,
+        py: Python<'_>,
+        path: &str,
+        order: Option<Vec<usize>>,
+        mode: Option<u32>,
+    ) -> PyResult<()> {
         let order = match order {
             Some(order) => {
                 ordering::validate(&order, self.interactions.len())
@@ -236,7 +242,7 @@ impl Cassette {
             }
             None => (0..self.interactions.len()).collect(),
         };
-        py.detach(|| self.save_impl(path, &order))
+        py.detach(|| self.save_impl(path, &order, mode))
     }
 
     fn __len__(&self) -> usize {
@@ -284,7 +290,7 @@ impl Cassette {
         format::from_raw(raw, &binaries)
     }
 
-    fn save_impl(&self, path: &str, order: &[usize]) -> PyResult<()> {
+    fn save_impl(&self, path: &str, order: &[usize], mode: Option<u32>) -> PyResult<()> {
         // Ensure parent directory exists
         let p = Path::new(path);
         if let Some(parent) = p.parent() {
@@ -319,13 +325,19 @@ impl Cassette {
         // Preserve the original file's permissions across the rename: the temp
         // file is created with the process umask, which would drop a
         // restrictive mode (e.g. 0600 on a cassette holding unscrubbed data).
+        // `mode` carries it for a caller that already removed the original -
+        // setting it after the rename would publish the file at the umask first.
         #[cfg(unix)]
-        if let Ok(meta) = std::fs::metadata(p) {
+        {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(
-                &tmp,
-                std::fs::Permissions::from_mode(meta.permissions().mode()),
-            );
+            let preserved = mode.or_else(|| {
+                std::fs::metadata(p)
+                    .ok()
+                    .map(|meta| meta.permissions().mode())
+            });
+            if let Some(preserved) = preserved {
+                let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(preserved));
+            }
         }
         std::fs::rename(&tmp, p)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("rename error: {e}")))?;

@@ -1026,6 +1026,31 @@ def test_rewrite_mode_without_existing_cassette(tmp_path: Path) -> None:
     assert not os.path.exists(path)
 
 
+def test_rewrite_mode_preserves_file_permissions(tmp_path: Path) -> None:
+    """The mode has to survive the delete: nothing is left for the writer to copy it from."""
+    if sys.platform == "win32":  # pragma: no cover
+        pytest.skip("POSIX permissions only")
+
+    path = os.path.join(str(tmp_path), "private.yaml")
+    _save_interaction(path, "GET", "https://example.com/old", "old")
+    os.chmod(path, 0o600)
+
+    rewrite = Cassette(path, record_mode=RecordMode.REWRITE)
+    rewrite.load()
+    rewrite.record(
+        method="GET",
+        uri="https://example.com/new",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+    rewrite.save()
+
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
 def test_save_preserves_file_permissions(tmp_path: Path) -> None:
     """Atomic save must keep a restrictive mode on an existing cassette."""
     if sys.platform == "win32":  # pragma: no cover
