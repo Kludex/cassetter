@@ -63,24 +63,24 @@ No `authorization` header. No API key. No password.
 Add your own headers, patterns, and replacement string:
 
 ```python
+from cassetter import (
+    DEFAULT_BODY_SCRUB_PATTERNS,
+    DEFAULT_FILTER_HEADERS,
+    DEFAULT_FILTER_QUERY_PARAMS,
+)
+
 with use_cassette(
     "cassette.yaml",
-    filter_headers=["x-custom-secret"],
-    filter_query_parameters=["signature"],
-    body_scrub_patterns=["my_secret_field"],
+    filter_headers=[*DEFAULT_FILTER_HEADERS, "x-custom-secret"],
+    filter_query_parameters=[*DEFAULT_FILTER_QUERY_PARAMS, "signature"],
+    body_scrub_patterns=[*DEFAULT_BODY_SCRUB_PATTERNS, "my_secret_field"],
     filter_replacement="***REDACTED***",
 ):
     ...
 ```
 
 !!! warning
-    Passing `filter_headers` **replaces** the default list, it does not extend it - the same as VCR.py, which starts from an empty list. Since cassetter's list is not empty, adding one header would otherwise drop the rest, so spread the defaults in:
-
-    ```python
-    from cassetter import DEFAULT_FILTER_HEADERS
-
-    filter_headers=[*DEFAULT_FILTER_HEADERS, "x-custom-secret"]
-    ```
+    `filter_headers`, `filter_query_parameters` and `body_scrub_patterns` each **replace** the default list rather than extending it - the same as VCR.py, which starts from empty lists. Cassetter's are not empty, so passing your own without spreading the defaults in silently stops filtering everything they covered.
 
 Body scrub patterns are matched case insensitively against JSON keys, at any depth. A pattern matches if the key contains it, so `token` matches `access_token` and `refresh_token` too.
 

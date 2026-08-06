@@ -132,12 +132,14 @@ Filtering applies to every protocol: HTTP headers, query params, and bodies; gRP
 Customize filtering:
 
 ```python
-from cassetter import use_cassette
+from cassetter import DEFAULT_BODY_SCRUB_PATTERNS, DEFAULT_FILTER_HEADERS, use_cassette
 
 with use_cassette(
     "cassette.yaml",
-    filter_headers=["x-custom-secret"],
-    body_scrub_patterns=["my_secret_field"],
+    # These options replace the defaults rather than extending them, so spread
+    # them in to keep them.
+    filter_headers=[*DEFAULT_FILTER_HEADERS, "x-custom-secret"],
+    body_scrub_patterns=[*DEFAULT_BODY_SCRUB_PATTERNS, "my_secret_field"],
     filter_replacement="***REDACTED***",
 ):
     ...

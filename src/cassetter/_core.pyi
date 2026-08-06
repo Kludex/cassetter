@@ -8,6 +8,8 @@ Direction = Literal["send", "recv"]
 Matcher = Literal["method", "uri", "headers", "body", "json_body"]
 
 DEFAULT_FILTER_HEADERS: list[str]
+DEFAULT_FILTER_QUERY_PARAMS: list[str]
+DEFAULT_BODY_SCRUB_PATTERNS: list[str]
 
 # The protocol types below are frozen: attributes are read-only and assignment
 # raises AttributeError. Use `replace()` to derive a modified copy.

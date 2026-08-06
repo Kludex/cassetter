@@ -3,7 +3,9 @@ from __future__ import annotations
 import pytest
 
 from cassetter._core import (
+    DEFAULT_BODY_SCRUB_PATTERNS,
     DEFAULT_FILTER_HEADERS,
+    DEFAULT_FILTER_QUERY_PARAMS,
     Body,
     GrpcInteraction,
     GrpcRequest,
@@ -31,9 +33,13 @@ def test_security_default_filter_headers() -> None:
     assert "x-amz-security-token" in config.filter_headers
 
 
-def test_default_filter_headers_is_what_the_default_config_uses() -> None:
-    """Exported so callers can add a header without silently dropping the rest."""
-    assert list(DEFAULT_FILTER_HEADERS) == SecurityConfig().filter_headers
+def test_exported_defaults_are_what_the_default_config_uses() -> None:
+    """Exported so callers can add one entry without silently dropping the rest."""
+    config = SecurityConfig()
+
+    assert list(DEFAULT_FILTER_HEADERS) == config.filter_headers
+    assert list(DEFAULT_FILTER_QUERY_PARAMS) == config.filter_query_parameters
+    assert list(DEFAULT_BODY_SCRUB_PATTERNS) == config.body_scrub_patterns
 
 
 def test_provider_credential_headers_are_scrubbed_by_default() -> None:
