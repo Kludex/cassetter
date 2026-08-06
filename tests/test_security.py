@@ -42,6 +42,33 @@ def test_exported_defaults_are_what_the_default_config_uses() -> None:
     assert list(DEFAULT_BODY_SCRUB_PATTERNS) == config.body_scrub_patterns
 
 
+def test_custom_entries_extend_the_defaults_rather_than_replacing_them() -> None:
+    """Naming one more thing to scrub never turns the built-ins back off."""
+    config = SecurityConfig(
+        filter_headers=["x-custom-secret"],
+        filter_query_parameters=["signature"],
+        body_scrub_patterns=["my_secret_field"],
+    )
+
+    assert config.filter_headers == [*DEFAULT_FILTER_HEADERS, "x-custom-secret"]
+    assert config.filter_query_parameters == [*DEFAULT_FILTER_QUERY_PARAMS, "signature"]
+    assert config.body_scrub_patterns == [*DEFAULT_BODY_SCRUB_PATTERNS, "my_secret_field"]
+
+
+def test_repeating_a_default_does_not_duplicate_it() -> None:
+    config = SecurityConfig(filter_headers=["AUTHORIZATION", "x-new"])
+
+    assert config.filter_headers == [*DEFAULT_FILTER_HEADERS, "x-new"]
+
+
+def test_assigning_the_attribute_defines_the_list_outright() -> None:
+    """The escape hatch for the rare case of wanting a default recorded."""
+    config = SecurityConfig()
+    config.filter_headers = ["only-this"]
+
+    assert config.filter_headers == ["only-this"]
+
+
 def test_provider_credential_headers_are_scrubbed_by_default() -> None:
     interaction = HttpInteraction(
         request=HttpRequest(
@@ -280,10 +307,11 @@ def test_oversized_scrub_pattern_is_rejected_at_construction() -> None:
 
 def test_oversized_scrub_pattern_is_rejected_on_reassignment() -> None:
     config = SecurityConfig(body_scrub_patterns=["password"])
+    unchanged = config.body_scrub_patterns
     with pytest.raises(ValueError, match="invalid body scrub pattern"):
         config.body_scrub_patterns = ["a" * 1024 * 1024]
 
-    assert config.body_scrub_patterns == ["password"]
+    assert config.body_scrub_patterns == unchanged
     assert _scrub_form_body(config, "password=hunter2") == "password=[FILTERED]"
 
 

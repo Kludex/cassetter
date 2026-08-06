@@ -63,24 +63,29 @@ No `authorization` header. No API key. No password.
 Add your own headers, patterns, and replacement string:
 
 ```python
-from cassetter import (
-    DEFAULT_BODY_SCRUB_PATTERNS,
-    DEFAULT_FILTER_HEADERS,
-    DEFAULT_FILTER_QUERY_PARAMS,
-)
-
 with use_cassette(
     "cassette.yaml",
-    filter_headers=[*DEFAULT_FILTER_HEADERS, "x-custom-secret"],
-    filter_query_parameters=[*DEFAULT_FILTER_QUERY_PARAMS, "signature"],
-    body_scrub_patterns=[*DEFAULT_BODY_SCRUB_PATTERNS, "my_secret_field"],
+    filter_headers=["x-custom-secret"],
+    filter_query_parameters=["signature"],
+    body_scrub_patterns=["my_secret_field"],
     filter_replacement="***REDACTED***",
 ):
     ...
 ```
 
-!!! warning
-    `filter_headers`, `filter_query_parameters` and `body_scrub_patterns` each **replace** the default list rather than extending it - the same as VCR.py, which starts from empty lists. Cassetter's are not empty, so passing your own without spreading the defaults in silently stops filtering everything they covered.
+`filter_headers`, `filter_query_parameters` and `body_scrub_patterns` **add to** the built-in lists rather than replacing them. Naming one more header to scrub is never a request to start recording the rest, so the defaults survive. Repeats are ignored, case insensitively.
+
+The lists themselves are importable as `DEFAULT_FILTER_HEADERS`, `DEFAULT_FILTER_QUERY_PARAMS` and `DEFAULT_BODY_SCRUB_PATTERNS`.
+
+!!! note
+    To define a list outright - to stop filtering something built in, say, because a test asserts on it - assign the attribute on a `SecurityConfig`:
+
+    ```python
+    from cassetter import SecurityConfig
+
+    config = SecurityConfig()
+    config.filter_headers = ["only-this"]
+    ```
 
 Body scrub patterns are matched case insensitively against JSON keys, at any depth. A pattern matches if the key contains it, so `token` matches `access_token` and `refresh_token` too.
 
