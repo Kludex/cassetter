@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from cassetter._core import (
-    DEFAULT_BODY_SCRUB_PATTERNS,
-    DEFAULT_FILTER_HEADERS,
-    DEFAULT_FILTER_QUERY_PARAMS,
     Body,
     GrpcInteraction,
     GrpcRequest,
@@ -36,9 +33,6 @@ from cassetter.introspection import RecordedRequest
 from cassetter.recording import RecordMode
 
 __all__ = [
-    "DEFAULT_BODY_SCRUB_PATTERNS",
-    "DEFAULT_FILTER_HEADERS",
-    "DEFAULT_FILTER_QUERY_PARAMS",
     "BeforeRecordRequest",
     "BeforeRecordResponse",
     "Body",

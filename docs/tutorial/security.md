@@ -75,8 +75,6 @@ with use_cassette(
 
 `filter_headers`, `filter_query_parameters` and `body_scrub_patterns` **add to** the built-in lists rather than replacing them. Naming one more header to scrub is never a request to start recording the rest, so the defaults survive. Repeats are ignored, case insensitively.
 
-The lists themselves are importable as `DEFAULT_FILTER_HEADERS`, `DEFAULT_FILTER_QUERY_PARAMS` and `DEFAULT_BODY_SCRUB_PATTERNS`.
-
 !!! note
     To define a list outright - to stop filtering something built in, say, because a test asserts on it - assign the attribute on a `SecurityConfig`:
 

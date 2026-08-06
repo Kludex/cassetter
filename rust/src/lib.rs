@@ -37,18 +37,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(matching::find_ws_match, m)?)?;
 
     // Security
-    m.add(
-        "DEFAULT_FILTER_HEADERS",
-        security::defaults::DEFAULT_FILTER_HEADERS,
-    )?;
-    m.add(
-        "DEFAULT_FILTER_QUERY_PARAMS",
-        security::defaults::DEFAULT_FILTER_QUERY_PARAMS,
-    )?;
-    m.add(
-        "DEFAULT_BODY_SCRUB_PATTERNS",
-        security::defaults::DEFAULT_BODY_SCRUB_PATTERNS,
-    )?;
     m.add_class::<security::SecurityConfig>()?;
     m.add_function(wrap_pyfunction!(security::scrub_interaction, m)?)?;
     m.add_function(wrap_pyfunction!(security::scrub_grpc_interaction, m)?)?;
