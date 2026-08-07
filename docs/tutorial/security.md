@@ -75,15 +75,14 @@ with use_cassette(
 
 `filter_headers`, `filter_query_parameters` and `body_scrub_patterns` **add to** the built-in lists rather than replacing them. Naming one more header to scrub is never a request to start recording the rest, so the defaults survive. Repeats are ignored, case insensitively.
 
-!!! note
-    To define a list outright - to stop filtering something built in, say, because a test asserts on it - assign the attribute on a `SecurityConfig`:
+To define a list outright - to stop filtering something built in, because a test asserts on it, say - assign the attribute on a `SecurityConfig`:
 
-    ```python
-    from cassetter import SecurityConfig
+```python
+from cassetter import SecurityConfig
 
-    config = SecurityConfig()
-    config.filter_headers = ["only-this"]
-    ```
+config = SecurityConfig()
+config.filter_headers = ["only-this"]
+```
 
 Body scrub patterns are matched case insensitively against JSON keys, at any depth. A pattern matches if the key contains it, so `token` matches `access_token` and `refresh_token` too.
 
