@@ -28,6 +28,22 @@ fn compile_scrubber(patterns: &[String]) -> PyResult<body::Scrubber> {
     })
 }
 
+/// Add `extra` to the built-in list rather than standing in for it.
+///
+/// Naming one more header to scrub is never a request to start recording the
+/// eight that were already covered, so the defaults always survive. Assign to
+/// the attribute afterwards to define the list outright.
+fn extend_defaults(defaults: &[&str], extra: Option<Vec<String>>) -> Vec<String> {
+    let mut merged: Vec<String> = defaults.iter().map(|s| s.to_string()).collect();
+    for value in extra.unwrap_or_default() {
+        // All three lists are compared case-insensitively, so dedupe that way too.
+        if !merged.iter().any(|kept| kept.eq_ignore_ascii_case(&value)) {
+            merged.push(value);
+        }
+    }
+    merged
+}
+
 #[pymethods]
 impl SecurityConfig {
     #[new]
@@ -43,25 +59,14 @@ impl SecurityConfig {
         body_scrub_patterns: Option<Vec<String>>,
         replacement: Option<String>,
     ) -> PyResult<Self> {
-        let body_scrub_patterns = body_scrub_patterns.unwrap_or_else(|| {
-            defaults::DEFAULT_BODY_SCRUB_PATTERNS
-                .iter()
-                .map(|s| s.to_string())
-                .collect()
-        });
+        let body_scrub_patterns =
+            extend_defaults(defaults::DEFAULT_BODY_SCRUB_PATTERNS, body_scrub_patterns);
         Ok(SecurityConfig {
-            filter_headers: filter_headers.unwrap_or_else(|| {
-                defaults::DEFAULT_FILTER_HEADERS
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect()
-            }),
-            filter_query_parameters: filter_query_parameters.unwrap_or_else(|| {
-                defaults::DEFAULT_FILTER_QUERY_PARAMS
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect()
-            }),
+            filter_headers: extend_defaults(defaults::DEFAULT_FILTER_HEADERS, filter_headers),
+            filter_query_parameters: extend_defaults(
+                defaults::DEFAULT_FILTER_QUERY_PARAMS,
+                filter_query_parameters,
+            ),
             scrubber: compile_scrubber(&body_scrub_patterns)?,
             body_scrub_patterns,
             replacement: replacement.unwrap_or_else(|| "[FILTERED]".to_string()),

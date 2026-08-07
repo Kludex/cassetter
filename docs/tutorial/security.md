@@ -8,7 +8,7 @@ Cassetter is designed so this cannot happen. Sensitive data is filtered **at wri
 
 These request and response **headers** are stripped automatically:
 
-`authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`
+`authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`, `x-goog-api-key`, `x-amz-security-token`
 
 These **query parameters** are replaced with `[FILTERED]`:
 
@@ -73,14 +73,16 @@ with use_cassette(
     ...
 ```
 
-!!! warning
-    Passing `filter_headers` **replaces** the default list, it does not extend it. If you want the defaults plus your own, get them from `SecurityConfig`:
+`filter_headers`, `filter_query_parameters` and `body_scrub_patterns` **add to** the built-in lists rather than replacing them. Naming one more header to scrub is never a request to start recording the rest, so the defaults survive. Repeats are ignored, case insensitively.
 
-    ```python
-    from cassetter import SecurityConfig
+To define a list outright - to stop filtering something built in, because a test asserts on it, say - assign the attribute on a `SecurityConfig`:
 
-    filter_headers=[*SecurityConfig().filter_headers, "x-custom-secret"]
-    ```
+```python
+from cassetter import SecurityConfig
+
+config = SecurityConfig()
+config.filter_headers = ["only-this"]
+```
 
 Body scrub patterns are matched case insensitively against JSON keys, at any depth. A pattern matches if the key contains it, so `token` matches `access_token` and `refresh_token` too.
 

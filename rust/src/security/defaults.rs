@@ -7,6 +7,10 @@ pub static DEFAULT_FILTER_HEADERS: &[&str] = &[
     "x-auth-token",
     "proxy-authorization",
     "www-authenticate",
+    // Provider-specific, and as much a credential as `x-api-key`: the Google
+    // SDKs put the API key here, and SigV4 puts temporary STS credentials here.
+    "x-goog-api-key",
+    "x-amz-security-token",
 ];
 
 pub static DEFAULT_FILTER_QUERY_PARAMS: &[&str] = &[

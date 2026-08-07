@@ -24,6 +24,55 @@ def test_security_default_filter_headers() -> None:
     assert "authorization" in config.filter_headers
     assert "cookie" in config.filter_headers
     assert "x-api-key" in config.filter_headers
+    # The Google SDKs and SigV4 put credentials in these, so they count as much
+    # as `x-api-key` does.
+    assert "x-goog-api-key" in config.filter_headers
+    assert "x-amz-security-token" in config.filter_headers
+
+
+def test_custom_entries_extend_the_defaults_rather_than_replacing_them() -> None:
+    """Naming one more thing to scrub never turns the built-ins back off."""
+    config = SecurityConfig(
+        filter_headers=["x-custom-secret"],
+        filter_query_parameters=["signature"],
+        body_scrub_patterns=["my_secret_field"],
+    )
+
+    defaults = SecurityConfig()
+    assert config.filter_headers == [*defaults.filter_headers, "x-custom-secret"]
+    assert config.filter_query_parameters == [*defaults.filter_query_parameters, "signature"]
+    assert config.body_scrub_patterns == [*defaults.body_scrub_patterns, "my_secret_field"]
+
+
+def test_repeating_a_default_does_not_duplicate_it() -> None:
+    config = SecurityConfig(filter_headers=["AUTHORIZATION", "x-new"])
+
+    assert config.filter_headers == [*SecurityConfig().filter_headers, "x-new"]
+
+
+def test_assigning_the_attribute_defines_the_list_outright() -> None:
+    """The escape hatch for the rare case of wanting a default recorded."""
+    config = SecurityConfig()
+    config.filter_headers = ["only-this"]
+
+    assert config.filter_headers == ["only-this"]
+
+
+def test_provider_credential_headers_are_scrubbed_by_default() -> None:
+    interaction = HttpInteraction(
+        request=HttpRequest(
+            "POST",
+            "https://api.example.com/v1/chat",
+            {"x-goog-api-key": ["AIzaSyREAL"], "x-amz-security-token": ["FwoGZXIvYXdzREAL"]},
+        ),
+        response=HttpResponse(200),
+        recorded_at="2026-01-01T00:00:00Z",
+    )
+
+    scrubbed = scrub_interaction(interaction, SecurityConfig())
+
+    assert "x-goog-api-key" not in scrubbed.request.headers
+    assert "x-amz-security-token" not in scrubbed.request.headers
 
 
 def test_security_default_filter_query_parameters() -> None:
@@ -247,10 +296,11 @@ def test_oversized_scrub_pattern_is_rejected_at_construction() -> None:
 
 def test_oversized_scrub_pattern_is_rejected_on_reassignment() -> None:
     config = SecurityConfig(body_scrub_patterns=["password"])
+    unchanged = config.body_scrub_patterns
     with pytest.raises(ValueError, match="invalid body scrub pattern"):
         config.body_scrub_patterns = ["a" * 1024 * 1024]
 
-    assert config.body_scrub_patterns == ["password"]
+    assert config.body_scrub_patterns == unchanged
     assert _scrub_form_body(config, "password=hunter2") == "password=[FILTERED]"
 
 
