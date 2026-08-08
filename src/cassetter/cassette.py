@@ -30,6 +30,7 @@ from cassetter._core import (
     scrub_interaction,
     scrub_ws_interaction,
 )
+from cassetter._wire import body_to_bytes
 from cassetter.intercept._base import is_localhost
 from cassetter.introspection import RecordedRequest, recorded_request
 from cassetter.recording import RecordMode
@@ -452,6 +453,7 @@ class Cassette:
 
         # Apply security filtering
         interaction = scrub_interaction(interaction, self._security_config)
+        interaction = _retag_content_length(interaction)
 
         if self._inner is None:
             self._inner = _RustCassette()
@@ -552,3 +554,29 @@ def _get_header(headers: dict[str, list[str]], name: str) -> str | None:
         if key.lower() == name_lower and values:
             return values[0]
     return None
+
+
+def _resized_headers(headers: dict[str, list[str]], body: Body) -> dict[str, list[str]] | None:
+    """Point `content-length` at the body that was stored, or None if it already does."""
+    length = str(len(body_to_bytes(body)))
+    resized = {key: ([length] if key.lower() == "content-length" else values) for key, values in headers.items()}
+    return resized if resized != headers else None
+
+
+def _retag_content_length(interaction: HttpInteraction) -> HttpInteraction:
+    """Restate `content-length` for the body as recorded, not as it arrived.
+
+    Decompressing a response, scrubbing a secret out of a body and rewriting one
+    in a hook all change its length, and a client that checks the header against
+    what it reads - botocore does - fails on replay when the two disagree.
+    """
+    request, response = interaction.request, interaction.response
+    request_headers = _resized_headers(request.headers, request.body)
+    response_headers = _resized_headers(response.headers, response.body)
+    if request_headers is None and response_headers is None:
+        return interaction
+    return HttpInteraction(
+        request if request_headers is None else request.replace(headers=request_headers),
+        response if response_headers is None else response.replace(headers=response_headers),
+        interaction.recorded_at,
+    )
