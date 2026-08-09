@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import re
@@ -1049,6 +1050,95 @@ def test_rewrite_mode_preserves_file_permissions(tmp_path: Path) -> None:
     rewrite.save()
 
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
+def _record_response(
+    tmp_path: Path,
+    headers: dict[str, list[str]],
+    body: bytes,
+    **kwargs: object,
+) -> HttpResponse:
+    cassette = Cassette(tmp_path / "recorded.yaml", record_mode=RecordMode.ALL, **kwargs)  # type: ignore[arg-type]
+    cassette.load()
+    return cassette.record(
+        method="GET",
+        uri="https://api.example.com/data",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers=headers,
+        response_body=body,
+    )
+
+
+def test_content_length_follows_a_decompressed_body(tmp_path: Path) -> None:
+    """A client that checks the header against what it reads fails when the two disagree."""
+    payload = b'{"message": "' + b"x" * 500 + b'"}'
+    compressed = gzip.compress(payload)
+
+    response = _record_response(
+        tmp_path,
+        {
+            "content-type": ["application/json"],
+            "content-encoding": ["gzip"],
+            "content-length": [str(len(compressed))],
+        },
+        compressed,
+    )
+
+    assert response.headers["content-length"] == [str(len(json.dumps(json.loads(payload)).encode()))]
+    assert "content-encoding" not in response.headers
+
+
+def test_content_length_follows_a_scrubbed_body(tmp_path: Path) -> None:
+    """Replacing a secret changes the body's length just as decompressing it does."""
+    payload = b'{"password": "hunter2"}'
+
+    response = _record_response(
+        tmp_path,
+        {"content-type": ["application/json"], "content-length": [str(len(payload))]},
+        payload,
+    )
+
+    assert response.body.content == {"password": "[FILTERED]"}
+    assert response.headers["content-length"] == [str(len(json.dumps(response.body.content).encode()))]
+
+
+def test_content_length_is_not_invented(tmp_path: Path) -> None:
+    response = _record_response(tmp_path, {"content-type": ["application/json"]}, b'{"ok": true}')
+
+    assert "content-length" not in response.headers
+
+
+def test_content_length_survives_a_bodyless_response(tmp_path: Path) -> None:
+    """On a HEAD or a 304 the header describes a representation that was never sent."""
+    head = _record_response(tmp_path, {"content-length": ["1048576"]}, b"")
+
+    assert head.headers["content-length"] == ["1048576"]
+
+
+def test_request_content_length_is_left_alone_so_the_same_request_still_matches(tmp_path: Path) -> None:
+    """`body_to_bytes` reformats JSON, so retagging a request would desync the `headers` matcher."""
+    wire = b'{"a":1}'
+    headers = {"content-type": ["application/json"], "content-length": [str(len(wire))]}
+    cassette = Cassette(
+        tmp_path / "match.yaml",
+        record_mode=RecordMode.ALL,
+        match_config=MatchConfig(match_on=["method", "uri", "headers"]),
+    )
+    cassette.load()
+    cassette.record(
+        method="POST",
+        uri="https://api.example.com/x",
+        request_headers=headers,
+        request_body=wire,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+
+    assert cassette.interactions[0].request.headers["content-length"] == [str(len(wire))]
+    assert cassette.play("POST", "https://api.example.com/x", headers, wire).status == 200
 
 
 def test_save_preserves_file_permissions(tmp_path: Path) -> None:

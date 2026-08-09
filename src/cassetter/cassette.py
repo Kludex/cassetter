@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import re
 import stat
@@ -452,6 +453,7 @@ class Cassette:
 
         # Apply security filtering
         interaction = scrub_interaction(interaction, self._security_config)
+        interaction = _retag_content_length(interaction)
 
         if self._inner is None:
             self._inner = _RustCassette()
@@ -545,6 +547,27 @@ class Cassette:
         self._dirty = True
 
 
+def body_to_bytes(body: Body) -> bytes:
+    """Serialize a recorded body to the wire bytes of a replayed response.
+
+    A JSON body is stored parsed, so the original bytes are gone by the time
+    this runs: the output is stdlib `json.dumps` formatting, not a byte-for-byte
+    reproduction of what the server sent. Callers that recompute Content-Length
+    must do so from these bytes.
+
+    `body.content` materializes a fresh Python object on every read, so each
+    branch reads it once.
+    """
+    content = body.content
+    if body.body_type == "json":
+        return json.dumps(content).encode()
+    if body.body_type == "text":
+        return content.encode() if isinstance(content, str) else b""
+    if body.body_type == "binary":
+        return content if isinstance(content, bytes) else b""
+    return b""
+
+
 def _get_header(headers: dict[str, list[str]], name: str) -> str | None:
     """Case-insensitive header lookup, returns first value or None."""
     name_lower = name.lower()
@@ -552,3 +575,34 @@ def _get_header(headers: dict[str, list[str]], name: str) -> str | None:
         if key.lower() == name_lower and values:
             return values[0]
     return None
+
+
+def _retag_content_length(interaction: HttpInteraction) -> HttpInteraction:
+    """Restate a response's `content-length` for the body as recorded.
+
+    Decompressing a response, scrubbing a secret out of a body and rewriting one
+    in a hook all change its length, and a client that checks the header against
+    what it reads - botocore does - fails on replay when the two disagree.
+
+    Only the response, and only when it carries a body. A request's header is
+    compared against the incoming one by the `headers` matcher, so rewriting it
+    would stop an identical request from replaying; and on a `HEAD` or `304` the
+    header describes a representation that was never sent, so there is no body
+    to measure it against.
+    """
+    body = interaction.response.body
+    served = body_to_bytes(body)
+    if not served:
+        return interaction
+    length = str(len(served))
+    headers = {
+        key: ([length] if key.lower() == "content-length" else values)
+        for key, values in interaction.response.headers.items()
+    }
+    if headers == interaction.response.headers:
+        return interaction
+    return HttpInteraction(
+        interaction.request,
+        interaction.response.replace(headers=headers),
+        interaction.recorded_at,
+    )
