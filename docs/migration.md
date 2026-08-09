@@ -41,7 +41,7 @@ $ pytest
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `before_record_request` | `before_record_request` | Same name. Receives a `RawRequest`, and raises `SkipRecording` where VCR.py returns `None`. Runs on live requests only - see below |
-| `before_record_response` | `before_record_response` | Same name. Receives a `RawResponse` dataclass, not the response dict VCR.py passes, so `response['headers']` becomes `response.headers` |
+| `before_record_response` | `before_record_response` | Same name. Receives a `RawResponse` dataclass, not the response dict VCR.py passes, so `response['headers']` becomes `response.headers`. Discard a response by raising `SkipRecording`, not by returning `None` |
 | `cassette.requests`, `play_count`, `play_counts`, `all_played`, `len(cassette)` | Same names | vcrpy-style introspection on the cassette object |
 | `decode_compressed_response` | automatic | Responses are always decompressed |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Pattern based instead of parameter name based |
