@@ -1110,6 +1110,37 @@ def test_content_length_is_not_invented(tmp_path: Path) -> None:
     assert "content-length" not in response.headers
 
 
+def test_content_length_survives_a_bodyless_response(tmp_path: Path) -> None:
+    """On a HEAD or a 304 the header describes a representation that was never sent."""
+    head = _record_response(tmp_path, {"content-length": ["1048576"]}, b"")
+
+    assert head.headers["content-length"] == ["1048576"]
+
+
+def test_request_content_length_is_left_alone_so_the_same_request_still_matches(tmp_path: Path) -> None:
+    """`body_to_bytes` reformats JSON, so retagging a request would desync the `headers` matcher."""
+    wire = b'{"a":1}'
+    headers = {"content-type": ["application/json"], "content-length": [str(len(wire))]}
+    cassette = Cassette(
+        tmp_path / "match.yaml",
+        record_mode=RecordMode.ALL,
+        match_config=MatchConfig(match_on=["method", "uri", "headers"]),
+    )
+    cassette.load()
+    cassette.record(
+        method="POST",
+        uri="https://api.example.com/x",
+        request_headers=headers,
+        request_body=wire,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+
+    assert cassette.interactions[0].request.headers["content-length"] == [str(len(wire))]
+    assert cassette.play("POST", "https://api.example.com/x", headers, wire).status == 200
+
+
 def test_save_preserves_file_permissions(tmp_path: Path) -> None:
     """Atomic save must keep a restrictive mode on an existing cassette."""
     if sys.platform == "win32":  # pragma: no cover
