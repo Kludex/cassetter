@@ -40,15 +40,19 @@ $ pytest
 | `vcr.VCR(...)` | [`Cassetter(...)`](tutorial/configuration.md) | Same idea, same `cassette_library_dir`, and it can be returned from `vcr_config` |
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
-| `before_record_request` | `before_record_request` | Same name, same behavior |
-| `before_record_response` | `before_record_response` | Same name, same behavior |
-| `cassette.requests`, `play_count`, `play_counts`, `all_played` | Same names | vcrpy-style introspection on the cassette object |
+| `before_record_request` | `before_record_request` | Same name. Receives a `RawRequest`, and raises `SkipRecording` where VCR.py returns `None`. Runs on live requests only - see below |
+| `before_record_response` | `before_record_response` | Same name. Receives a `RawResponse` dataclass, not the response dict VCR.py passes, so `response['headers']` becomes `response.headers`. Discard a response by raising `SkipRecording`, not by returning `None` |
+| `cassette.requests`, `play_count`, `play_counts`, `all_played`, `len(cassette)` | Same names | vcrpy-style introspection on the cassette object |
 | `decode_compressed_response` | automatic | Responses are always decompressed |
 | `filter_post_data_parameters` | `body_scrub_patterns` | Pattern based instead of parameter name based |
 
 ## What is intentionally different
 
 Filtering is **on by default**. VCR.py records `authorization` headers unless you configure `filter_headers` yourself. Cassetter strips the common sensitive headers, query parameters, and body fields without any configuration. If you relied on credentials being in the cassette (for example, asserting on them), you will need to adjust those tests.
+
+`filter_headers`, `filter_query_parameters` and `body_scrub_patterns` **add to** those built-in lists. VCR.py replaces its own, but its defaults are empty, so passing a list there means "filter this" and here means "filter this too". See [Safe by default](tutorial/security.md#customize-the-filters) for how to define a list outright.
+
+`before_record_request` runs on requests as they go out, not on interactions as they are read back. VCR.py applies it in both directions, so a hook that drops a request also drops any matching interaction already recorded in a cassette; under Cassetter that recording survives, and stays unplayable. If you skip a request that older cassettes still contain - an OAuth token exchange, say - delete those interactions when you migrate.
 
 ## Known limitation
 

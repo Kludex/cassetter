@@ -209,6 +209,10 @@ class Cassette:
         """Whether every recorded interaction has been replayed."""
         return all(self.played_indices)
 
+    def __len__(self) -> int:
+        """How many interactions the cassette holds, across every protocol."""
+        return 0 if self._inner is None else len(self._inner)
+
     @property
     def grpc_interactions(self) -> list[GrpcInteraction]:
         if self._inner is None:

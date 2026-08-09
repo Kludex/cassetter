@@ -160,6 +160,24 @@ def test_cassette_can_record() -> None:
     assert Cassette("/tmp/t.yaml", record_mode=RecordMode.NONE).can_record is False
 
 
+def test_cassette_len_counts_every_protocol(tmp_path: Path) -> None:
+    cassette = Cassette(tmp_path / "len.yaml", record_mode=RecordMode.ALL)
+    assert len(cassette) == 0, "an unloaded cassette holds nothing"
+
+    cassette.load()
+    cassette.record(
+        method="GET",
+        uri="https://api.example.com/a",
+        request_headers={},
+        request_body=None,
+        status=200,
+        response_headers={},
+        response_body=b"{}",
+    )
+
+    assert len(cassette) == len(cassette.interactions) == 1
+
+
 def test_cassette_play_before_load() -> None:
     cassette = Cassette("/tmp/test.yaml")
     with pytest.raises(NoMatchError, match="cassette not loaded"):
