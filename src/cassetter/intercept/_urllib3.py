@@ -10,8 +10,8 @@ import urllib3.response
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError
-from cassetter.intercept._shared import apply_before_record_request, body_to_bytes
+from cassetter.cassette import NoMatchError, body_to_bytes
+from cassetter.intercept._shared import apply_before_record_request
 
 
 class Urllib3Interceptor:

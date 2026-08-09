@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from cassetter.cassette import (
-    BeforeRecordRequest,
-    RawRequest,
-    SkipRecording,
-    body_to_bytes as body_to_bytes,
-)
+from cassetter.cassette import BeforeRecordRequest, RawRequest, SkipRecording
 
 
 def apply_before_record_request(
