@@ -11,4 +11,8 @@ def configure(config: pytest.Config) -> None:
         "markers",
         "vcr(cassette_name, **kwargs): Mark test to use VCR cassette recording/replay.",
     )
+    config.addinivalue_line(
+        "markers",
+        "default_cassette(cassette_name): Name the cassette, as pytest-recording spells it.",
+    )
     loaded_cassettes(config)
