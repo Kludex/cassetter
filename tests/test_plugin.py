@@ -131,6 +131,9 @@ def test_resolve_cassette_default_config(tmp_path: Path) -> None:
 def test_resolve_cassette_default_cassette_marker_names_the_file(tmp_path: Path) -> None:
     """pytest-recording spells the cassette name this way, so a migrated suite keeps working."""
     test_dir = str(tmp_path)
+    cassette_dir = tmp_path / "cassettes" / "test_example"
+    cassette_dir.mkdir(parents=True)
+    RustCassette().save(str(cassette_dir / "list_sets.yaml"))
 
     cassette, _ = _resolve_cassette(
         node_name="test_func",
@@ -145,8 +148,32 @@ def test_resolve_cassette_default_cassette_marker_names_the_file(tmp_path: Path)
     assert cassette.path.endswith(os.path.join("cassettes", "test_example", "list_sets.yaml"))
 
 
+def test_resolve_cassette_default_cassette_beats_a_node_named_file_on_disk(tmp_path: Path) -> None:
+    """The legacy-name fallback is for names derived from the node, not ones the test asked for."""
+    test_dir = str(tmp_path)
+    cassette_dir = tmp_path / "cassettes" / "test_example"
+    cassette_dir.mkdir(parents=True)
+    RustCassette().save(str(cassette_dir / "test_func.yaml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+        default_cassette="shared.yaml",
+    )
+
+    assert cassette.path.endswith("shared.yaml")
+
+
 def test_resolve_cassette_marker_arg_beats_default_cassette(tmp_path: Path) -> None:
     test_dir = str(tmp_path)
+
+    cassette_dir = tmp_path / "cassettes" / "test_example"
+    cassette_dir.mkdir(parents=True)
+    RustCassette().save(str(cassette_dir / "from_the_marker.yaml"))
 
     cassette, _ = _resolve_cassette(
         node_name="test_func",

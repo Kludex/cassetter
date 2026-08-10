@@ -118,7 +118,8 @@ def _resolve_cassette(
     else:  # pragma: no cover - the vcr_cassette_dir fixture always supplies a directory
         cassette_dir = os.path.join(test_dir, "cassettes", test_file.stem)
 
-    if not marker_args:
+    # Only a name derived from the node can be the sanitized form of a legacy one.
+    if not marker_args and default_cassette is None:
         cassette_name = _existing_file_name(cassette_dir, cassette_name, node_name + ".yaml")
 
     resolved = replace(
