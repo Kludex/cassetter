@@ -23,10 +23,13 @@ from cassetter.pytest_plugin.orphans import (
 from cassetter.recording import RecordMode
 
 
-def test_configure_registers_marker() -> None:
+def test_configure_registers_markers() -> None:
+    """Both are registered, so `--strict-markers` accepts a suite that uses either."""
     config = MagicMock()
     configure(config)
-    config.addinivalue_line.assert_called_once()
+
+    registered = [call.args[1].split("(")[0] for call in config.addinivalue_line.call_args_list]
+    assert registered == ["vcr", "default_cassette"]
 
 
 def test_check_orphans_finds_orphaned_files(tmp_path: Path) -> None:
@@ -123,6 +126,39 @@ def test_resolve_cassette_default_config(tmp_path: Path) -> None:
     assert cassette.path.endswith("test_func.yaml")
     assert cassette.record_mode == RecordMode.NONE
     assert len(interceptor_classes) >= 1
+
+
+def test_resolve_cassette_default_cassette_marker_names_the_file(tmp_path: Path) -> None:
+    """pytest-recording spells the cassette name this way, so a migrated suite keeps working."""
+    test_dir = str(tmp_path)
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+        default_cassette="list_sets.yaml",
+    )
+
+    assert cassette.path.endswith(os.path.join("cassettes", "test_example", "list_sets.yaml"))
+
+
+def test_resolve_cassette_marker_arg_beats_default_cassette(tmp_path: Path) -> None:
+    test_dir = str(tmp_path)
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=("from_the_marker.yaml",),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+        default_cassette="from_default_cassette.yaml",
+    )
+
+    assert cassette.path.endswith("from_the_marker.yaml")
 
 
 def test_resolve_cassette_cli_rewrite_drops_the_cassette(tmp_path: Path) -> None:

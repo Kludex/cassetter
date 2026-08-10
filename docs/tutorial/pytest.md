@@ -132,6 +132,17 @@ async def test_special_case():
 
 The first positional argument sets the cassette file name. The keyword arguments `record_mode`, `cassette_dir`, `max_age`, and `on_expiry` override the module configuration.
 
+pytest-recording's `default_cassette` marker names the cassette too, so suites that already use it keep working:
+
+```python
+@pytest.mark.default_cassette("custom_name.yaml")
+@pytest.mark.vcr
+async def test_special_case():
+    ...
+```
+
+The positional argument wins if a test carries both. Either way the name is resolved against the cassette directory, so pass a name rather than a path.
+
 The command line flag `--record-mode` overrides everything.
 
 ## Customize the cassette directory

@@ -39,6 +39,7 @@ $ pytest
 | `vcr` fixture | `cassette` fixture | `vcr` still works as an alias |
 | `vcr.VCR(...)` | [`Cassetter(...)`](tutorial/configuration.md) | Same idea, same `cassette_library_dir`, and it can be returned from `vcr_config` |
 | `vcr_cassette_dir` fixture | `vcr_cassette_dir` fixture | Same name, same behavior |
+| `@pytest.mark.default_cassette("name.yaml")` | Same marker, or `@pytest.mark.vcr("name.yaml")` | Both name the cassette; the positional argument wins if a test carries both |
 | `filter_query_parameters` | `filter_query_parameters` | Same name |
 | `before_record_request` | `before_record_request` | Same name. Receives a `RawRequest`, and raises `SkipRecording` where VCR.py returns `None`. Runs on live requests only - see below |
 | `before_record_response` | `before_record_response` | Same name. Receives a `RawResponse` dataclass, not the response dict VCR.py passes, so `response['headers']` becomes `response.headers`. Discard a response by raising `SkipRecording`, not by returning `None` |

@@ -85,11 +85,17 @@ def _resolve_cassette(
     vcr_cassette_dir: str | None = None,
     ini_max_age: str | None = None,
     ini_on_expiry: str | None = None,
+    default_cassette: str | None = None,
 ) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
     config, config_cassette_dir = _split_config(vcr_config)
 
-    cassette_name = marker_args[0] if marker_args else _sanitized_file_name(node_name)
+    if marker_args:
+        cassette_name = marker_args[0]
+    elif default_cassette is not None:
+        cassette_name = default_cassette
+    else:
+        cassette_name = _sanitized_file_name(node_name)
 
     record_mode = config.record_mode or "none"
     if "record_mode" in marker_kwargs:
@@ -144,6 +150,9 @@ def cassette(
     cls = request.node.cls
     node_name = f"{cls.__name__}.{request.node.name}" if cls else request.node.name
 
+    default_cassette_marker = request.node.get_closest_marker("default_cassette")
+    default_cassette = default_cassette_marker.args[0] if default_cassette_marker else None
+
     cassette, interceptor_classes = _resolve_cassette(
         node_name=node_name,
         marker_args=marker.args,
@@ -154,6 +163,7 @@ def cassette(
         vcr_cassette_dir=vcr_cassette_dir,
         ini_max_age=request.config.getini("vcr_max_age") or None,
         ini_on_expiry=request.config.getini("vcr_on_expiry") or None,
+        default_cassette=default_cassette,
     )
 
     # Track loaded cassette paths for orphan detection
