@@ -20,6 +20,7 @@ pub struct SecurityConfig {
     pub scrubber: body::Scrubber,
 }
 
+/// Compile the body-scrub patterns, reporting one that cannot.
 fn compile_scrubber(patterns: &[String]) -> Result<body::Scrubber> {
     body::Scrubber::new(patterns)
         .map_err(|e| CassetteError::Value(format!("invalid body scrub pattern: {e}")))
@@ -42,6 +43,7 @@ pub fn extend_defaults(defaults: &[&str], extra: Option<Vec<String>>) -> Vec<Str
 }
 
 impl SecurityConfig {
+    /// Build a SecurityConfig.
     pub fn new(
         filter_headers: Option<Vec<String>>,
         filter_query_parameters: Option<Vec<String>>,
@@ -62,6 +64,7 @@ impl SecurityConfig {
         })
     }
 
+    /// Replace the body-scrub patterns and recompile them.
     pub fn set_body_scrub_patterns(&mut self, patterns: Vec<String>) -> Result<()> {
         self.scrubber = compile_scrubber(&patterns)?;
         self.body_scrub_patterns = patterns;
@@ -73,6 +76,7 @@ impl SecurityConfig {
         SecurityConfig::new(None, None, None, None).expect("default patterns compile")
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "SecurityConfig(filter_headers={:?}, filter_query_parameters={:?}, body_scrub_patterns={:?}, replacement={:?})",
@@ -85,6 +89,7 @@ impl SecurityConfig {
 }
 
 impl Default for SecurityConfig {
+    /// The empty body.
     fn default() -> Self {
         SecurityConfig::with_defaults()
     }

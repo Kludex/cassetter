@@ -20,6 +20,7 @@ use crate::Result;
 
 // --- Body ---
 
+/// Render a body in the shape the cassette file uses.
 pub fn body_to_json(body: &Body) -> Value {
     match &body.inner {
         BodyContent::Json(v) => json!({ "type": "json", "content": v }),
@@ -29,6 +30,7 @@ pub fn body_to_json(body: &Body) -> Value {
     }
 }
 
+/// Read a body back from that shape.
 pub fn body_from_json(v: &Value) -> Body {
     let body_type = v.get("type").and_then(Value::as_str).unwrap_or("none");
     let content = v.get("content");
@@ -49,6 +51,7 @@ pub fn body_from_json(v: &Value) -> Body {
 
 // --- Headers ---
 
+/// Render a header map as a JSON object of name to values.
 fn headers_to_json(headers: &HashMap<String, Vec<String>>) -> Value {
     let mut map = Map::new();
     for (k, v) in headers {
@@ -60,6 +63,7 @@ fn headers_to_json(headers: &HashMap<String, Vec<String>>) -> Value {
     Value::Object(map)
 }
 
+/// Read a header map, tolerating a bare string for a single value.
 fn headers_from_json(v: Option<&Value>) -> HashMap<String, Vec<String>> {
     let mut out = HashMap::new();
     if let Some(Value::Object(map)) = v {
@@ -78,6 +82,7 @@ fn headers_from_json(v: Option<&Value>) -> HashMap<String, Vec<String>> {
     out
 }
 
+/// Read a string field, defaulting to empty when absent.
 fn str_field(v: &Value, key: &str) -> String {
     v.get(key)
         .and_then(Value::as_str)
@@ -87,6 +92,7 @@ fn str_field(v: &Value, key: &str) -> String {
 
 // --- HTTP ---
 
+/// Render a request in the shape the cassette file uses.
 pub fn request_to_json(r: &HttpRequest) -> Value {
     json!({
         "method": r.method,
@@ -96,6 +102,7 @@ pub fn request_to_json(r: &HttpRequest) -> Value {
     })
 }
 
+/// Read a request back from that shape.
 pub fn request_from_json(v: &Value) -> HttpRequest {
     HttpRequest {
         method: str_field(v, "method"),
@@ -105,6 +112,7 @@ pub fn request_from_json(v: &Value) -> HttpRequest {
     }
 }
 
+/// Render a response in the shape the cassette file uses.
 pub fn response_to_json(r: &HttpResponse) -> Value {
     json!({
         "status": r.status,
@@ -113,6 +121,7 @@ pub fn response_to_json(r: &HttpResponse) -> Value {
     })
 }
 
+/// Read a response back from that shape.
 pub fn response_from_json(v: &Value) -> HttpResponse {
     HttpResponse {
         status: v.get("status").and_then(Value::as_u64).unwrap_or(0) as u16,
@@ -121,6 +130,7 @@ pub fn response_from_json(v: &Value) -> HttpResponse {
     }
 }
 
+/// Render a interaction in the shape the cassette file uses.
 pub fn interaction_to_json(i: &HttpInteraction) -> Value {
     json!({
         "request": request_to_json(&i.request),
@@ -129,6 +139,7 @@ pub fn interaction_to_json(i: &HttpInteraction) -> Value {
     })
 }
 
+/// Read a interaction back from that shape.
 pub fn interaction_from_json(v: &Value) -> HttpInteraction {
     HttpInteraction {
         request: v
@@ -145,6 +156,7 @@ pub fn interaction_from_json(v: &Value) -> HttpInteraction {
 
 // --- gRPC ---
 
+/// Render a grpc interaction in the shape the cassette file uses.
 pub fn grpc_interaction_to_json(i: &GrpcInteraction) -> Value {
     json!({
         "request": {
@@ -163,6 +175,7 @@ pub fn grpc_interaction_to_json(i: &GrpcInteraction) -> Value {
     })
 }
 
+/// Read a grpc interaction back from that shape.
 pub fn grpc_interaction_from_json(v: &Value) -> GrpcInteraction {
     let req = v.get("request");
     let resp = v.get("response");
@@ -198,6 +211,7 @@ pub fn grpc_interaction_from_json(v: &Value) -> GrpcInteraction {
 
 // --- WebSocket ---
 
+/// Render a ws interaction in the shape the cassette file uses.
 pub fn ws_interaction_to_json(i: &WsInteraction) -> Value {
     json!({
         "uri": i.uri,
@@ -212,6 +226,7 @@ pub fn ws_interaction_to_json(i: &WsInteraction) -> Value {
     })
 }
 
+/// Read a ws interaction back from that shape.
 pub fn ws_interaction_from_json(v: &Value) -> WsInteraction {
     let frames = v
         .get("frames")
@@ -238,6 +253,7 @@ pub fn ws_interaction_from_json(v: &Value) -> WsInteraction {
 
 // --- Config ---
 
+/// Read a list of strings, or `None` when the field is absent.
 fn string_list(v: Option<&Value>) -> Option<Vec<String>> {
     match v {
         Some(Value::Array(items)) => Some(
@@ -250,6 +266,7 @@ fn string_list(v: Option<&Value>) -> Option<Vec<String>> {
     }
 }
 
+/// Read a match config back from that shape.
 pub fn match_config_from_json(v: &Value) -> Result<MatchConfig> {
     MatchConfig::new(
         string_list(v.get("matchOn")),

@@ -16,6 +16,7 @@ const LOCALHOST_HOSTS = new Set([
   "::1",
 ]);
 
+/** Whether a URI points at the local machine. */
 export function isLocalhost(uri: string): boolean {
   try {
     const url = new URL(uri);

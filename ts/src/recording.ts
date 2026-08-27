@@ -29,6 +29,7 @@ export const DISCARDING_MODES: readonly RecordMode[] = [
   RecordMode.REWRITE,
 ];
 
+/** Parse a record mode name, accepting hyphens for underscores. */
 export function parseRecordMode(value: string): RecordMode {
   const mode = RECORD_MODES[value.toLowerCase().replace(/-/g, "_")];
   if (mode === undefined) {
@@ -46,6 +47,7 @@ const UNIT_MS: Record<string, number> = {
   w: 7 * 24 * 60 * 60 * 1000,
 };
 
+/** Parse a duration like `30d`, `24h`, or `4w` into milliseconds. */
 export function parseDuration(s: string): number {
   const m = DURATION_RE.exec(s);
   if (!m) {

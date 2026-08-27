@@ -44,6 +44,7 @@ pub struct Body {
 }
 
 impl Body {
+    /// An empty body.
     pub fn none() -> Self {
         Body {
             body_type: "none".to_string(),
@@ -51,6 +52,7 @@ impl Body {
         }
     }
 
+    /// A body holding parsed JSON.
     pub fn json(value: serde_json::Value) -> Self {
         Body {
             body_type: "json".to_string(),
@@ -58,6 +60,7 @@ impl Body {
         }
     }
 
+    /// A body holding text.
     pub fn text(s: String) -> Self {
         Body {
             body_type: "text".to_string(),
@@ -65,6 +68,7 @@ impl Body {
         }
     }
 
+    /// A body holding raw bytes.
     pub fn binary(b: Vec<u8>) -> Self {
         Body {
             body_type: "binary".to_string(),
@@ -98,6 +102,7 @@ impl Body {
 }
 
 impl Default for Body {
+    /// The empty body.
     fn default() -> Self {
         Body::none()
     }
@@ -112,6 +117,7 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
+    /// Build a HttpRequest.
     pub fn new(
         method: String,
         uri: String,
@@ -126,6 +132,7 @@ impl HttpRequest {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!("HttpRequest(method={:?}, uri={:?})", self.method, self.uri)
     }
@@ -139,6 +146,7 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    /// Build a HttpResponse.
     pub fn new(
         status: u16,
         headers: Option<HashMap<String, Vec<String>>>,
@@ -151,6 +159,7 @@ impl HttpResponse {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!("HttpResponse(status={})", self.status)
     }
@@ -164,6 +173,7 @@ pub struct HttpInteraction {
 }
 
 impl HttpInteraction {
+    /// Build a HttpInteraction.
     pub fn new(request: HttpRequest, response: HttpResponse, recorded_at: String) -> Self {
         HttpInteraction {
             request,
@@ -172,6 +182,7 @@ impl HttpInteraction {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "HttpInteraction(request={}, response={})",

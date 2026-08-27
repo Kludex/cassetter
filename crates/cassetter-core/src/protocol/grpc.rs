@@ -12,6 +12,7 @@ pub struct GrpcRequest {
 }
 
 impl GrpcRequest {
+    /// Build a GrpcRequest.
     pub fn new(
         method: String,
         metadata: Option<HashMap<String, Vec<String>>>,
@@ -24,6 +25,7 @@ impl GrpcRequest {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!("GrpcRequest(method={:?})", self.method)
     }
@@ -38,6 +40,7 @@ pub struct GrpcResponse {
 }
 
 impl GrpcResponse {
+    /// Build a GrpcResponse.
     pub fn new(
         status_code: u32,
         status_message: Option<String>,
@@ -52,6 +55,7 @@ impl GrpcResponse {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "GrpcResponse(status_code={}, status_message={:?})",
@@ -70,6 +74,7 @@ pub struct GrpcInteraction {
 }
 
 impl GrpcInteraction {
+    /// Build a GrpcInteraction.
     pub fn new(
         request: GrpcRequest,
         response: GrpcResponse,
@@ -84,6 +89,7 @@ impl GrpcInteraction {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "GrpcInteraction(request={}, response={})",

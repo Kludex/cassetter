@@ -11,6 +11,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde_json::{json, Value};
 
+/// Map a core error onto the JS error a caller sees.
 fn to_napi_err(e: CassetteError) -> Error {
     let status = match e {
         CassetteError::IndexOutOfRange(_) | CassetteError::Value(_) => Status::InvalidArg,
@@ -19,6 +20,7 @@ fn to_napi_err(e: CassetteError) -> Error {
     Error::new(status, e.to_string())
 }
 
+/// Collect values into a JSON array.
 fn to_array(values: impl IntoIterator<Item = Value>) -> Value {
     Value::Array(values.into_iter().collect())
 }
@@ -30,6 +32,7 @@ pub struct JsCassette {
 
 #[napi]
 impl JsCassette {
+    /// Start an empty cassette.
     #[napi(constructor)]
     pub fn new() -> Self {
         JsCassette {
@@ -46,6 +49,7 @@ impl JsCassette {
             .map_err(to_napi_err)
     }
 
+    /// Parse a cassette from YAML text.
     #[napi(factory)]
     pub fn from_yaml(content: String) -> Result<Self> {
         core::cassette::Cassette::from_yaml(&content)
@@ -53,6 +57,7 @@ impl JsCassette {
             .map_err(to_napi_err)
     }
 
+    /// Parse a cassette from TOML text.
     #[napi(factory)]
     pub fn from_toml(content: String) -> Result<Self> {
         core::cassette::Cassette::from_toml(&content)
@@ -71,12 +76,14 @@ impl JsCassette {
             .map_err(to_napi_err)
     }
 
+    /// Serialize to YAML without touching the filesystem.
     #[napi]
     pub fn to_yaml(&self, order: Option<Vec<u32>>) -> Result<String> {
         let order = self.resolve_order(order);
         self.inner.to_yaml(&order).map_err(to_napi_err)
     }
 
+    /// Serialize to TOML without touching the filesystem.
     #[napi]
     pub fn to_toml(&self, order: Option<Vec<u32>>) -> Result<String> {
         let order = self.resolve_order(order);
@@ -104,11 +111,13 @@ impl JsCassette {
             .collect())
     }
 
+    /// The cassette file format version.
     #[napi(getter)]
     pub fn version(&self) -> u32 {
         self.inner.version
     }
 
+    /// How many interactions this holds, across all protocols.
     #[napi(getter)]
     pub fn length(&self) -> u32 {
         self.inner.len() as u32
@@ -116,6 +125,7 @@ impl JsCassette {
 
     // --- HTTP ---
 
+    /// The recorded HTTP interactions.
     #[napi(getter)]
     pub fn interactions(&self) -> Value {
         to_array(
@@ -126,22 +136,26 @@ impl JsCassette {
         )
     }
 
+    /// Which HTTP interactions have been played, by index.
     #[napi(getter)]
     pub fn played_indices(&self) -> Vec<bool> {
         self.inner.played_indices.clone()
     }
 
+    /// How many HTTP interactions have not been played.
     #[napi(getter)]
     pub fn unplayed_count(&self) -> u32 {
         self.inner.unplayed_count() as u32
     }
 
+    /// Append an HTTP interaction, unplayed.
     #[napi]
     pub fn add_interaction(&mut self, interaction: Value) {
         self.inner
             .add_interaction(core::interop::interaction_from_json(&interaction));
     }
 
+    /// Mark an HTTP interaction played.
     #[napi]
     pub fn mark_played(&mut self, index: u32) -> Result<()> {
         self.inner.mark_played(index as usize).map_err(to_napi_err)
@@ -169,6 +183,7 @@ impl JsCassette {
 
     // --- gRPC ---
 
+    /// The recorded gRPC interactions.
     #[napi(getter)]
     pub fn grpc_interactions(&self) -> Value {
         to_array(
@@ -179,17 +194,20 @@ impl JsCassette {
         )
     }
 
+    /// Which gRPC interactions have been played, by index.
     #[napi(getter)]
     pub fn grpc_played(&self) -> Vec<bool> {
         self.inner.grpc_played.clone()
     }
 
+    /// Append a gRPC interaction, unplayed.
     #[napi]
     pub fn add_grpc_interaction(&mut self, interaction: Value) {
         self.inner
             .add_grpc_interaction(core::interop::grpc_interaction_from_json(&interaction));
     }
 
+    /// Mark a gRPC interaction played.
     #[napi]
     pub fn mark_grpc_played(&mut self, index: u32) -> Result<()> {
         self.inner
@@ -197,6 +215,7 @@ impl JsCassette {
             .map_err(to_napi_err)
     }
 
+    /// Find a gRPC interaction for `method` and mark it played, in one step.
     #[napi]
     pub fn take_grpc_match(&mut self, method: String) -> Option<Value> {
         self.inner.take_grpc_match(&method).map(|(index, i)| {
@@ -209,6 +228,7 @@ impl JsCassette {
 
     // --- WebSocket ---
 
+    /// The recorded WebSocket interactions.
     #[napi(getter)]
     pub fn ws_interactions(&self) -> Value {
         to_array(
@@ -219,17 +239,20 @@ impl JsCassette {
         )
     }
 
+    /// Which WebSocket interactions have been played, by index.
     #[napi(getter)]
     pub fn ws_played(&self) -> Vec<bool> {
         self.inner.ws_played.clone()
     }
 
+    /// Append a WebSocket interaction, unplayed.
     #[napi]
     pub fn add_ws_interaction(&mut self, interaction: Value) {
         self.inner
             .add_ws_interaction(core::interop::ws_interaction_from_json(&interaction));
     }
 
+    /// Mark a WebSocket interaction played.
     #[napi]
     pub fn mark_ws_played(&mut self, index: u32) -> Result<()> {
         self.inner
@@ -237,6 +260,7 @@ impl JsCassette {
             .map_err(to_napi_err)
     }
 
+    /// Find a WebSocket interaction for `uri` and mark it played, in one step.
     #[napi]
     pub fn take_ws_match(&mut self, uri: String) -> Option<Value> {
         self.inner.take_ws_match(&uri).map(|(index, i)| {
@@ -249,6 +273,7 @@ impl JsCassette {
 }
 
 impl JsCassette {
+    /// The given write order, or the recorded order when none is given.
     fn resolve_order(&self, order: Option<Vec<u32>>) -> Vec<usize> {
         match order {
             Some(o) => o.into_iter().map(|i| i as usize).collect(),
@@ -258,6 +283,7 @@ impl JsCassette {
 }
 
 impl Default for JsCassette {
+    /// The empty body.
     fn default() -> Self {
         Self::new()
     }
@@ -316,6 +342,7 @@ pub fn scrub_ws_interaction(interaction: Value, config: Option<Value>) -> Result
     ))
 }
 
+/// Build a security config from JS, falling back to the built-in defaults.
 fn security_config(config: Option<Value>) -> Result<core::security::SecurityConfig> {
     match config {
         Some(v) => core::interop::security_config_from_json(&v).map_err(to_napi_err),
@@ -327,6 +354,7 @@ fn security_config(config: Option<Value>) -> Result<core::security::SecurityConf
 //
 // Exposed so bindings never keep their own copies of these lists.
 
+/// The header names filtered unless a caller adds to them.
 #[napi]
 pub fn default_filter_headers() -> Vec<String> {
     core::security::defaults::DEFAULT_FILTER_HEADERS
@@ -335,6 +363,7 @@ pub fn default_filter_headers() -> Vec<String> {
         .collect()
 }
 
+/// The query parameter names filtered unless a caller adds to them.
 #[napi]
 pub fn default_filter_query_parameters() -> Vec<String> {
     core::security::defaults::DEFAULT_FILTER_QUERY_PARAMS
@@ -343,6 +372,7 @@ pub fn default_filter_query_parameters() -> Vec<String> {
         .collect()
 }
 
+/// The body field names scrubbed unless a caller adds to them.
 #[napi]
 pub fn default_body_scrub_patterns() -> Vec<String> {
     core::security::defaults::DEFAULT_BODY_SCRUB_PATTERNS
@@ -351,6 +381,7 @@ pub fn default_body_scrub_patterns() -> Vec<String> {
         .collect()
 }
 
+/// The fields matched on when a caller names none.
 #[napi]
 pub fn default_match_on() -> Vec<String> {
     core::matching::config::DEFAULT_MATCH_ON
@@ -359,6 +390,7 @@ pub fn default_match_on() -> Vec<String> {
         .collect()
 }
 
+/// Every matcher name a `matchOn` list may contain.
 #[napi]
 pub fn known_matchers() -> Vec<String> {
     core::matching::config::KNOWN_MATCHERS
@@ -367,6 +399,7 @@ pub fn known_matchers() -> Vec<String> {
         .collect()
 }
 
+/// The placeholder written in place of a filtered value.
 #[napi]
 pub fn default_replacement() -> String {
     core::security::DEFAULT_REPLACEMENT.to_string()

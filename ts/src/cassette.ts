@@ -28,28 +28,36 @@ import type {
 
 // --- Errors ---
 
+/** Raised when a cassette file is required but absent. */
 export class CassetteNotFoundError extends Error {
+  /** Configure a cassette. Nothing is read until `load()`. */
   constructor(message: string) {
     super(message);
     this.name = "CassetteNotFoundError";
   }
 }
 
+/** Raised when a cassette exists but cannot be parsed. */
 export class CassetteLoadError extends Error {
+  /** Configure a cassette. Nothing is read until `load()`. */
   constructor(message: string) {
     super(message);
     this.name = "CassetteLoadError";
   }
 }
 
+/** Raised when a cassette is older than `maxAge` and `onExpiry` is `fail`. */
 export class CassetteExpiredError extends Error {
+  /** Configure a cassette. Nothing is read until `load()`. */
   constructor(message: string) {
     super(message);
     this.name = "CassetteExpiredError";
   }
 }
 
+/** Raised when no recorded interaction matches, and none may be recorded. */
 export class NoMatchError extends Error {
+  /** Configure a cassette. Nothing is read until `load()`. */
   constructor(message: string) {
     super(message);
     this.name = "NoMatchError";
@@ -85,6 +93,7 @@ export class Cassette {
   /** Mode of the cassette `rewrite` deleted, to put back on its replacement. */
   private _rewrittenFileMode: number | null = null;
 
+  /** Configure a cassette. Nothing is read until `load()`. */
   constructor(path: string, options: CassetteOptions = {}) {
     this._path = path;
     this._recordMode = options.recordMode ?? RecordMode.ONCE;
@@ -95,30 +104,37 @@ export class Cassette {
     this._ignoreLocalhost = options.ignoreLocalhost ?? false;
   }
 
+  /** Where this cassette is read from and written to. */
   get path(): string {
     return this._path;
   }
 
+  /** The record mode in force. */
   get recordMode(): RecordMode {
     return this._recordMode;
   }
 
+  /** Whether localhost traffic bypasses the cassette entirely. */
   get ignoreLocalhost(): boolean {
     return this._ignoreLocalhost;
   }
 
+  /** The recorded HTTP interactions, empty before `load()`. */
   get interactions(): HttpInteraction[] {
     return this._inner ? this._inner.interactions : [];
   }
 
+  /** The recorded gRPC interactions, empty before `load()`. */
   get grpcInteractions(): GrpcInteraction[] {
     return this._inner ? this._inner.grpcInteractions : [];
   }
 
+  /** The recorded WebSocket interactions, empty before `load()`. */
   get wsInteractions(): WsInteraction[] {
     return this._inner ? this._inner.wsInteractions : [];
   }
 
+  /** Whether an unmatched request may go to the network and be recorded. */
   get canRecord(): boolean {
     if (
       this._recordMode === RecordMode.ALL ||
@@ -306,6 +322,7 @@ export class Cassette {
 
   // --- gRPC ---
 
+  /** Replay a gRPC response for `method`, or throw `NoMatchError`. */
   playGrpc(method: string): GrpcResponse {
     if (!this._inner) {
       throw new NoMatchError("cassette not loaded");
@@ -351,6 +368,7 @@ export class Cassette {
 
   // --- WebSocket ---
 
+  /** Replay a WebSocket interaction for `uri`, or throw `NoMatchError`. */
   playWs(uri: string): WsInteraction {
     if (!this._inner) {
       throw new NoMatchError("cassette not loaded");
@@ -362,6 +380,7 @@ export class Cassette {
     return hit.interaction;
   }
 
+  /** Record a WebSocket connection and its frames, scrubbed. */
   recordWs(uri: string, headers: HeaderMap, frames: WsFrame[]): void {
     const interaction = scrubWsInteraction(
       { uri, headers, frames, recordedAt: new Date().toISOString() },
@@ -373,11 +392,13 @@ export class Cassette {
 
   // --- Internals ---
 
+  /** The native cassette, created on first use if `load()` never ran. */
   private _ensureInner(): NativeCassette {
     this._inner ??= new native.Cassette();
     return this._inner;
   }
 
+  /** Apply `onExpiry` when the newest recording predates `maxAge`. */
   private _checkExpiry(): void {
     if (this._maxAge === null || !this._inner) return;
 
@@ -403,6 +424,7 @@ export class Cassette {
     process.emitWarning(msg, "CassetteExpiredWarning");
   }
 
+  /** The most recent `recordedAt` across every protocol, if any. */
   private _newestRecordedAt(): Date | null {
     if (!this._inner) return null;
 

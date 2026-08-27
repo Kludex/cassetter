@@ -13,6 +13,7 @@ pub struct WsFrame {
 }
 
 impl WsFrame {
+    /// Build a WsFrame.
     pub fn new(direction: String, frame_type: String, body: Body, offset_ms: u64) -> Self {
         WsFrame {
             direction,
@@ -22,6 +23,7 @@ impl WsFrame {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "WsFrame(direction={:?}, frame_type={:?}, offset_ms={})",
@@ -39,6 +41,7 @@ pub struct WsInteraction {
 }
 
 impl WsInteraction {
+    /// Build a WsInteraction.
     pub fn new(
         uri: String,
         headers: Option<HashMap<String, Vec<String>>>,
@@ -53,6 +56,7 @@ impl WsInteraction {
         }
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "WsInteraction(uri={:?}, frames={})",

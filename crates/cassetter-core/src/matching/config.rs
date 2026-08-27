@@ -11,6 +11,7 @@ pub const KNOWN_MATCHERS: &[&str] = &["method", "uri", "headers", "body", "json_
 /// Fields matched on when the caller does not name any.
 pub const DEFAULT_MATCH_ON: &[&str] = &["method", "uri"];
 
+/// Reject an empty or unrecognised matcher list.
 pub fn validate_matchers(match_on: &[String]) -> Result<()> {
     if match_on.is_empty() {
         return Err(CassetteError::Value(format!(
@@ -30,6 +31,7 @@ pub fn validate_matchers(match_on: &[String]) -> Result<()> {
 }
 
 impl MatchConfig {
+    /// Build a MatchConfig.
     pub fn new(
         match_on: Option<Vec<String>>,
         ignore_json_paths: Option<Vec<String>>,
@@ -57,6 +59,7 @@ impl MatchConfig {
         self.match_on.iter().any(|f| f == "method") && self.match_on.iter().any(|f| f == "uri")
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "MatchConfig(match_on={:?}, ignore_json_paths={:?})",
@@ -66,6 +69,7 @@ impl MatchConfig {
 }
 
 impl Default for MatchConfig {
+    /// The empty body.
     fn default() -> Self {
         MatchConfig::new(None, None).expect("default matchers are valid")
     }

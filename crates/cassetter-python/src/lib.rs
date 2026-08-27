@@ -18,12 +18,14 @@ type Headers = HashMap<String, Vec<String>>;
 
 // --- Body ---
 
+/// A request or response body, typed as `json`, `text`, `binary`, or `none`.
 #[pyclass(frozen, eq, from_py_object, name = "Body", module = "cassetter._core")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Body(pub core::protocol::http::Body);
 
 #[pymethods]
 impl Body {
+    /// Build a body of `body_type` from `content`.
     #[new]
     #[pyo3(signature = (body_type, content=None))]
     fn new(body_type: String, content: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
@@ -54,11 +56,13 @@ impl Body {
         Ok(Body(core::protocol::http::Body { body_type, inner }))
     }
 
+    /// Which of `json`, `text`, `binary`, or `none` this body holds.
     #[getter]
     fn body_type(&self) -> &str {
         &self.0.body_type
     }
 
+    /// The body's value: parsed JSON, a string, bytes, or `None`.
     #[getter]
     fn content(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         use core::protocol::http::BodyContent;
@@ -70,6 +74,7 @@ impl Body {
         }
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -84,11 +89,13 @@ impl Body {
     name = "HttpRequest",
     module = "cassetter._core"
 )]
+/// A recorded HTTP request. Frozen: use `replace()` to derive a copy.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HttpRequest(pub core::protocol::http::HttpRequest);
 
 #[pymethods]
 impl HttpRequest {
+    /// Build a request. `headers` and `body` default to empty.
     #[new]
     #[pyo3(signature = (method, uri, headers=None, body=None))]
     fn new(method: String, uri: String, headers: Option<Headers>, body: Option<Body>) -> Self {
@@ -100,21 +107,25 @@ impl HttpRequest {
         ))
     }
 
+    /// The method this request was made with.
     #[getter]
     fn method(&self) -> &str {
         &self.0.method
     }
 
+    /// The URI, as recorded - filtered query parameters already replaced.
     #[getter]
     fn uri(&self) -> &str {
         &self.0.uri
     }
 
+    /// Headers, each name mapped to the list of values sent under it.
     #[getter]
     fn headers(&self) -> Headers {
         self.0.headers.clone()
     }
 
+    /// The body, as recorded.
     #[getter]
     fn body(&self) -> Body {
         Body(self.0.body.clone())
@@ -137,6 +148,7 @@ impl HttpRequest {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -149,11 +161,13 @@ impl HttpRequest {
     name = "HttpResponse",
     module = "cassetter._core"
 )]
+/// A recorded HTTP response. Frozen: use `replace()` to derive a copy.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HttpResponse(pub core::protocol::http::HttpResponse);
 
 #[pymethods]
 impl HttpResponse {
+    /// Build a response. `headers` and `body` default to empty.
     #[new]
     #[pyo3(signature = (status, headers=None, body=None))]
     fn new(status: u16, headers: Option<Headers>, body: Option<Body>) -> Self {
@@ -164,16 +178,19 @@ impl HttpResponse {
         ))
     }
 
+    /// The HTTP status code.
     #[getter]
     fn status(&self) -> u16 {
         self.0.status
     }
 
+    /// Headers, each name mapped to the list of values sent under it.
     #[getter]
     fn headers(&self) -> Headers {
         self.0.headers.clone()
     }
 
+    /// The body, as recorded.
     #[getter]
     fn body(&self) -> Body {
         Body(self.0.body.clone())
@@ -189,6 +206,7 @@ impl HttpResponse {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -201,11 +219,13 @@ impl HttpResponse {
     name = "HttpInteraction",
     module = "cassetter._core"
 )]
+/// One recorded request/response pair.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HttpInteraction(pub core::protocol::http::HttpInteraction);
 
 #[pymethods]
 impl HttpInteraction {
+    /// Pair a request and response with the time they were recorded.
     #[new]
     fn new(request: HttpRequest, response: HttpResponse, recorded_at: String) -> Self {
         HttpInteraction(core::protocol::http::HttpInteraction::new(
@@ -215,16 +235,19 @@ impl HttpInteraction {
         ))
     }
 
+    /// The request side of this interaction.
     #[getter]
     fn request(&self) -> HttpRequest {
         HttpRequest(self.0.request.clone())
     }
 
+    /// The response side of this interaction.
     #[getter]
     fn response(&self) -> HttpResponse {
         HttpResponse(self.0.response.clone())
     }
 
+    /// When this was recorded, ISO 8601.
     #[getter]
     fn recorded_at(&self) -> &str {
         &self.0.recorded_at
@@ -249,6 +272,7 @@ impl HttpInteraction {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -263,11 +287,13 @@ impl HttpInteraction {
     name = "GrpcRequest",
     module = "cassetter._core"
 )]
+/// A recorded gRPC request, body held as the raw protobuf bytes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GrpcRequest(pub core::protocol::grpc::GrpcRequest);
 
 #[pymethods]
 impl GrpcRequest {
+    /// Build a gRPC request. `metadata` and `body` default to empty.
     #[new]
     #[pyo3(signature = (method, metadata=None, body=None))]
     fn new(method: String, metadata: Option<Headers>, body: Option<Body>) -> Self {
@@ -278,16 +304,19 @@ impl GrpcRequest {
         ))
     }
 
+    /// The method this request was made with.
     #[getter]
     fn method(&self) -> &str {
         &self.0.method
     }
 
+    /// Metadata, each name mapped to the list of values sent under it.
     #[getter]
     fn metadata(&self) -> Headers {
         self.0.metadata.clone()
     }
 
+    /// The body, as recorded.
     #[getter]
     fn body(&self) -> Body {
         Body(self.0.body.clone())
@@ -308,6 +337,7 @@ impl GrpcRequest {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -320,11 +350,13 @@ impl GrpcRequest {
     name = "GrpcResponse",
     module = "cassetter._core"
 )]
+/// A recorded gRPC response, with its status and trailing metadata.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GrpcResponse(pub core::protocol::grpc::GrpcResponse);
 
 #[pymethods]
 impl GrpcResponse {
+    /// Build a gRPC response, defaulting the message to `OK`.
     #[new]
     #[pyo3(signature = (status_code, status_message=None, metadata=None, body=None))]
     fn new(
@@ -341,21 +373,25 @@ impl GrpcResponse {
         ))
     }
 
+    /// The gRPC status code, 0 for OK.
     #[getter]
     fn status_code(&self) -> u32 {
         self.0.status_code
     }
 
+    /// The gRPC status message.
     #[getter]
     fn status_message(&self) -> &str {
         &self.0.status_message
     }
 
+    /// Metadata, each name mapped to the list of values sent under it.
     #[getter]
     fn metadata(&self) -> Headers {
         self.0.metadata.clone()
     }
 
+    /// The body, as recorded.
     #[getter]
     fn body(&self) -> Body {
         Body(self.0.body.clone())
@@ -378,6 +414,7 @@ impl GrpcResponse {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -390,11 +427,13 @@ impl GrpcResponse {
     name = "GrpcInteraction",
     module = "cassetter._core"
 )]
+/// One recorded gRPC call, optionally with a readable `json_debug`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GrpcInteraction(pub core::protocol::grpc::GrpcInteraction);
 
 #[pymethods]
 impl GrpcInteraction {
+    /// Pair a gRPC request and response with the time they were recorded.
     #[new]
     #[pyo3(signature = (request, response, recorded_at, json_debug=None))]
     fn new(
@@ -415,6 +454,7 @@ impl GrpcInteraction {
         )))
     }
 
+    /// A readable rendering of the protobuf payloads, when available.
     #[getter]
     fn json_debug(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match &self.0.json_debug {
@@ -423,16 +463,19 @@ impl GrpcInteraction {
         }
     }
 
+    /// The request side of this interaction.
     #[getter]
     fn request(&self) -> GrpcRequest {
         GrpcRequest(self.0.request.clone())
     }
 
+    /// The response side of this interaction.
     #[getter]
     fn response(&self) -> GrpcResponse {
         GrpcResponse(self.0.response.clone())
     }
 
+    /// When this was recorded, ISO 8601.
     #[getter]
     fn recorded_at(&self) -> &str {
         &self.0.recorded_at
@@ -464,6 +507,7 @@ impl GrpcInteraction {
         }))
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -478,11 +522,13 @@ impl GrpcInteraction {
     name = "WsFrame",
     module = "cassetter._core"
 )]
+/// A single WebSocket frame, with the offset it arrived at.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WsFrame(pub core::protocol::ws::WsFrame);
 
 #[pymethods]
 impl WsFrame {
+    /// Build a frame at `offset_ms` into the connection.
     #[new]
     #[pyo3(signature = (direction, frame_type, body, offset_ms=0))]
     fn new(direction: String, frame_type: String, body: Body, offset_ms: u64) -> Self {
@@ -491,21 +537,25 @@ impl WsFrame {
         ))
     }
 
+    /// `send` for a frame this side sent, `recv` for one it received.
     #[getter]
     fn direction(&self) -> &str {
         &self.0.direction
     }
 
+    /// `text` or `binary`.
     #[getter]
     fn frame_type(&self) -> &str {
         &self.0.frame_type
     }
 
+    /// The body, as recorded.
     #[getter]
     fn body(&self) -> Body {
         Body(self.0.body.clone())
     }
 
+    /// Milliseconds after the connection opened that this frame moved.
     #[getter]
     fn offset_ms(&self) -> u64 {
         self.0.offset_ms
@@ -528,6 +578,7 @@ impl WsFrame {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -540,11 +591,13 @@ impl WsFrame {
     name = "WsInteraction",
     module = "cassetter._core"
 )]
+/// One recorded WebSocket connection and every frame on it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WsInteraction(pub core::protocol::ws::WsInteraction);
 
 #[pymethods]
 impl WsInteraction {
+    /// Build a WebSocket interaction from its frames.
     #[new]
     #[pyo3(signature = (uri, headers=None, frames=None, recorded_at=None))]
     fn new(
@@ -561,21 +614,25 @@ impl WsInteraction {
         ))
     }
 
+    /// The URI, as recorded - filtered query parameters already replaced.
     #[getter]
     fn uri(&self) -> &str {
         &self.0.uri
     }
 
+    /// Headers, each name mapped to the list of values sent under it.
     #[getter]
     fn headers(&self) -> Headers {
         self.0.headers.clone()
     }
 
+    /// Every frame on the connection, in order.
     #[getter]
     fn frames(&self) -> Vec<WsFrame> {
         self.0.frames.iter().cloned().map(WsFrame).collect()
     }
 
+    /// When this was recorded, ISO 8601.
     #[getter]
     fn recorded_at(&self) -> &str {
         &self.0.recorded_at
@@ -600,6 +657,7 @@ impl WsInteraction {
         })
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -607,12 +665,14 @@ impl WsInteraction {
 
 // --- Configuration ---
 
+/// Which fields a request is matched on, and which JSON paths to ignore.
 #[pyclass(skip_from_py_object, name = "MatchConfig", module = "cassetter._core")]
 #[derive(Clone, Debug)]
 pub struct MatchConfig(pub core::matching::config::MatchConfig);
 
 #[pymethods]
 impl MatchConfig {
+    /// Build a match config, defaulting to matching on method and URI.
     #[new]
     #[pyo3(signature = (match_on=None, ignore_json_paths=None))]
     fn new(
@@ -624,6 +684,7 @@ impl MatchConfig {
             .map_err(to_pyerr)
     }
 
+    /// The fields a request is matched on.
     #[getter]
     fn match_on(&self) -> Vec<String> {
         self.0.match_on.clone()
@@ -637,16 +698,19 @@ impl MatchConfig {
         self.0.set_match_on(match_on).map_err(to_pyerr)
     }
 
+    /// JSON paths ignored by the `json_body` matcher.
     #[getter]
     fn ignore_json_paths(&self) -> Vec<String> {
         self.0.ignore_json_paths.clone()
     }
 
+    /// Set jSON paths ignored by the `json_body` matcher.
     #[setter]
     fn set_ignore_json_paths(&mut self, paths: Vec<String>) {
         self.0.ignore_json_paths = paths;
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -657,6 +721,7 @@ impl MatchConfig {
     name = "SecurityConfig",
     module = "cassetter._core"
 )]
+/// What gets filtered out of a cassette at write time.
 #[derive(Clone, Debug)]
 pub struct SecurityConfig(pub core::security::SecurityConfig);
 
@@ -669,6 +734,7 @@ impl SecurityConfig {
         body_scrub_patterns=None,
         replacement=None,
     ))]
+    /// Build a security config. Each list *adds to* the built-in defaults.
     fn new(
         filter_headers: Option<Vec<String>>,
         filter_query_parameters: Option<Vec<String>>,
@@ -685,46 +751,55 @@ impl SecurityConfig {
         .map_err(to_pyerr)
     }
 
+    /// Header names stripped at write time.
     #[getter]
     fn filter_headers(&self) -> Vec<String> {
         self.0.filter_headers.clone()
     }
 
+    /// Set header names stripped at write time.
     #[setter]
     fn set_filter_headers(&mut self, v: Vec<String>) {
         self.0.filter_headers = v;
     }
 
+    /// Query parameter names whose values are replaced at write time.
     #[getter]
     fn filter_query_parameters(&self) -> Vec<String> {
         self.0.filter_query_parameters.clone()
     }
 
+    /// Set query parameter names whose values are replaced at write time.
     #[setter]
     fn set_filter_query_parameters(&mut self, v: Vec<String>) {
         self.0.filter_query_parameters = v;
     }
 
+    /// Body field names whose values are replaced at write time.
     #[getter]
     fn body_scrub_patterns(&self) -> Vec<String> {
         self.0.body_scrub_patterns.clone()
     }
 
+    /// Set body field names whose values are replaced at write time.
     #[setter]
     fn set_body_scrub_patterns(&mut self, patterns: Vec<String>) -> PyResult<()> {
         self.0.set_body_scrub_patterns(patterns).map_err(to_pyerr)
     }
 
+    /// The placeholder written in place of a filtered value.
     #[getter]
     fn replacement(&self) -> &str {
         &self.0.replacement
     }
 
+    /// Set the placeholder written in place of a filtered value.
     #[setter]
     fn set_replacement(&mut self, v: String) {
         self.0.replacement = v;
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -732,22 +807,26 @@ impl SecurityConfig {
 
 // --- Cassette ---
 
+/// A cassette's interactions and their played state.
 #[pyclass(skip_from_py_object, name = "Cassette", module = "cassetter._core")]
 #[derive(Clone, Debug, Default)]
 pub struct Cassette(pub core::cassette::Cassette);
 
 #[pymethods]
 impl Cassette {
+    /// Start an empty cassette.
     #[new]
     fn new() -> Self {
         Cassette(core::cassette::Cassette::new())
     }
 
+    /// The cassette file format version.
     #[getter]
     fn version(&self) -> u32 {
         self.0.version
     }
 
+    /// Set the cassette file format version.
     #[setter]
     fn set_version(&mut self, v: u32) {
         self.0.version = v;
@@ -755,6 +834,7 @@ impl Cassette {
 
     // --- HTTP ---
 
+    /// The recorded HTTP interactions.
     #[getter]
     fn interactions(&self) -> Vec<HttpInteraction> {
         self.0
@@ -765,25 +845,30 @@ impl Cassette {
             .collect()
     }
 
+    /// Set the recorded HTTP interactions.
     #[setter]
     fn set_interactions(&mut self, interactions: Vec<HttpInteraction>) {
         self.0
             .set_interactions(interactions.into_iter().map(|i| i.0).collect());
     }
 
+    /// Which HTTP interactions have been played, by index.
     #[getter]
     fn played_indices(&self) -> Vec<bool> {
         self.0.played_indices.clone()
     }
 
+    /// Append an HTTP interaction, unplayed.
     fn add_interaction(&mut self, interaction: HttpInteraction) {
         self.0.add_interaction(interaction.0);
     }
 
+    /// Mark an HTTP interaction played. Raises `IndexError` if out of range.
     fn mark_played(&mut self, index: usize) -> PyResult<()> {
         self.0.mark_played(index).map_err(to_pyerr)
     }
 
+    /// How many HTTP interactions have not been played.
     #[getter]
     fn unplayed_count(&self) -> usize {
         self.0.unplayed_count()
@@ -807,6 +892,7 @@ impl Cassette {
 
     // --- gRPC ---
 
+    /// The recorded gRPC interactions.
     #[getter]
     fn grpc_interactions(&self) -> Vec<GrpcInteraction> {
         self.0
@@ -817,25 +903,30 @@ impl Cassette {
             .collect()
     }
 
+    /// Set the recorded gRPC interactions.
     #[setter]
     fn set_grpc_interactions(&mut self, interactions: Vec<GrpcInteraction>) {
         self.0
             .set_grpc_interactions(interactions.into_iter().map(|i| i.0).collect());
     }
 
+    /// Which gRPC interactions have been played, by index.
     #[getter]
     fn grpc_played(&self) -> Vec<bool> {
         self.0.grpc_played.clone()
     }
 
+    /// Append a gRPC interaction, unplayed.
     fn add_grpc_interaction(&mut self, interaction: GrpcInteraction) {
         self.0.add_grpc_interaction(interaction.0);
     }
 
+    /// Mark a gRPC interaction played. Raises `IndexError` if out of range.
     fn mark_grpc_played(&mut self, index: usize) -> PyResult<()> {
         self.0.mark_grpc_played(index).map_err(to_pyerr)
     }
 
+    /// Find a gRPC interaction for `method` and mark it played, in one step.
     fn take_grpc_match(&mut self, method: &str) -> Option<(usize, GrpcInteraction)> {
         self.0
             .take_grpc_match(method)
@@ -844,6 +935,7 @@ impl Cassette {
 
     // --- WebSocket ---
 
+    /// The recorded WebSocket interactions.
     #[getter]
     fn ws_interactions(&self) -> Vec<WsInteraction> {
         self.0
@@ -854,25 +946,30 @@ impl Cassette {
             .collect()
     }
 
+    /// Set the recorded WebSocket interactions.
     #[setter]
     fn set_ws_interactions(&mut self, interactions: Vec<WsInteraction>) {
         self.0
             .set_ws_interactions(interactions.into_iter().map(|i| i.0).collect());
     }
 
+    /// Which WebSocket interactions have been played, by index.
     #[getter]
     fn ws_played(&self) -> Vec<bool> {
         self.0.ws_played.clone()
     }
 
+    /// Append a WebSocket interaction, unplayed.
     fn add_ws_interaction(&mut self, interaction: WsInteraction) {
         self.0.add_ws_interaction(interaction.0);
     }
 
+    /// Mark a WebSocket interaction played. Raises `IndexError` if out of range.
     fn mark_ws_played(&mut self, index: usize) -> PyResult<()> {
         self.0.mark_ws_played(index).map_err(to_pyerr)
     }
 
+    /// Find a WebSocket interaction for `uri` and mark it played, in one step.
     fn take_ws_match(&mut self, uri: &str) -> Option<(usize, WsInteraction)> {
         self.0
             .take_ws_match(uri)
@@ -916,10 +1013,12 @@ impl Cassette {
             .map_err(to_pyerr)
     }
 
+    /// How many interactions the cassette holds, across all protocols.
     fn __len__(&self) -> usize {
         self.0.len()
     }
 
+    /// A short, readable rendering for debugging.
     fn __repr__(&self) -> String {
         self.0.describe()
     }
@@ -941,6 +1040,7 @@ fn find_match(
         .map(|(idx, i)| (idx, HttpInteraction(i)))
 }
 
+/// Find a gRPC interaction by method. Prefer `Cassette.take_grpc_match`.
 #[pyfunction]
 fn find_grpc_match(
     method: &str,
@@ -952,6 +1052,7 @@ fn find_grpc_match(
         .map(|(idx, i)| (idx, GrpcInteraction(i)))
 }
 
+/// Find a WebSocket interaction by URI. Prefer `Cassette.take_ws_match`.
 #[pyfunction]
 fn find_ws_match(
     uri: &str,
@@ -962,11 +1063,13 @@ fn find_ws_match(
     core::matching::find_ws_match(uri, &inner, &played).map(|(idx, i)| (idx, WsInteraction(i)))
 }
 
+/// Strip filtered headers, query parameters, and body fields from an interaction.
 #[pyfunction]
 fn scrub_interaction(interaction: &HttpInteraction, config: &SecurityConfig) -> HttpInteraction {
     HttpInteraction(core::security::scrub_interaction(&interaction.0, &config.0))
 }
 
+/// Strip filtered metadata and `json_debug` fields from a gRPC interaction.
 #[pyfunction]
 fn scrub_grpc_interaction(
     interaction: &GrpcInteraction,
@@ -978,6 +1081,7 @@ fn scrub_grpc_interaction(
     ))
 }
 
+/// Strip filtered handshake headers and frame-body fields from a WebSocket interaction.
 #[pyfunction]
 fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig) -> WsInteraction {
     WsInteraction(core::security::scrub_ws_interaction(

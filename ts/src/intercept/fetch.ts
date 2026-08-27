@@ -12,6 +12,7 @@ export class FetchInterceptor implements Interceptor {
   /** The function this interceptor put on the global, to recognise it later. */
   private _patched: typeof globalThis.fetch | null = null;
 
+  /** Replace the global `fetch` with one backed by `cassette`. */
   install(cassette: Cassette): void {
     const originalFetch = globalThis.fetch;
     this._cassette = cassette;
@@ -76,6 +77,7 @@ export class FetchInterceptor implements Interceptor {
     globalThis.fetch = patched;
   }
 
+  /** Put the previous `fetch` back, if this interceptor still owns the global. */
   uninstall(): void {
     // Only take the global back if it is still ours. Two overlapping scopes
     // tear down in whatever order they finish, and restoring unconditionally
@@ -95,6 +97,7 @@ function extractHeadersSkipEncoding(headers: Headers): HeaderMap {
   return out;
 }
 
+/** Collect a `Headers` into name-to-values, lowercasing names. */
 function extractHeaders(headers: Headers): HeaderMap {
   const out: HeaderMap = {};
   headers.forEach((value, key) => {
@@ -104,6 +107,7 @@ function extractHeaders(headers: Headers): HeaderMap {
   return out;
 }
 
+/** Turn a recorded response back into a `Response`. */
 function buildResponse(response: HttpResponse): Response {
   const headers: [string, string][] = [];
   for (const [key, values] of Object.entries(response.headers)) {

@@ -21,6 +21,12 @@ const INTERCEPTORS: Record<string, () => Interceptor> = {
   fetch: () => new FetchInterceptor(),
 };
 
+/**
+ * Record or replay every `fetch` made inside `fn`.
+ *
+ * Interceptors are installed before the callback and removed after it, even
+ * if it throws; the cassette is written on the way out.
+ */
 export async function useCassette(
   path: string,
   fn: (cassette: Cassette) => Promise<void> | void,
@@ -83,6 +89,7 @@ export async function useCassette(
   return cassette;
 }
 
+/** Instantiate the named interceptors, or the default set. */
 function resolveInterceptors(names?: string[]): Interceptor[] {
   if (!names || names.length === 0) {
     return [new FetchInterceptor()];

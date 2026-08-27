@@ -31,6 +31,7 @@ pub fn find_match_index(
     }
 }
 
+/// Walk candidates, returning the first unplayed match or falling back to a played one.
 fn scan<I: Iterator<Item = usize>>(
     candidates: I,
     request: &HttpRequest,
@@ -88,6 +89,7 @@ pub fn find_grpc_match(
     Some((idx, interactions[idx].clone()))
 }
 
+/// Index of a gRPC interaction matching `method`, preferring unplayed.
 pub fn find_grpc_match_index(
     method: &str,
     interactions: &[GrpcInteraction],
@@ -119,6 +121,7 @@ pub fn find_ws_match(
     Some((idx, interactions[idx].clone()))
 }
 
+/// Index of a WebSocket interaction matching `uri`, preferring unplayed.
 pub fn find_ws_match_index(
     uri: &str,
     interactions: &[WsInteraction],
@@ -139,6 +142,7 @@ pub fn find_ws_match_index(
     fallback
 }
 
+/// Whether a request satisfies every matcher the config names.
 fn matches_all(incoming: &HttpRequest, recorded: &HttpRequest, config: &MatchConfig) -> bool {
     for field in &config.match_on {
         let matched = match field.as_str() {

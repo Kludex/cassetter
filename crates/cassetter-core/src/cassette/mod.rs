@@ -28,6 +28,7 @@ pub struct Cassette {
 }
 
 impl Cassette {
+    /// Start an empty cassette.
     pub fn new() -> Self {
         Cassette {
             version: FORMAT_VERSION,
@@ -37,18 +38,21 @@ impl Cassette {
 
     // --- HTTP ---
 
+    /// Replace the HTTP interactions, resetting played state.
     pub fn set_interactions(&mut self, interactions: Vec<HttpInteraction>) {
         self.played_indices = vec![false; interactions.len()];
         self.interactions = interactions;
         self.index = None;
     }
 
+    /// Append an HTTP interaction, unplayed.
     pub fn add_interaction(&mut self, interaction: HttpInteraction) {
         self.interactions.push(interaction);
         self.played_indices.push(false);
         self.index = None;
     }
 
+    /// Mark an HTTP interaction played.
     pub fn mark_played(&mut self, index: usize) -> Result<()> {
         if index >= self.played_indices.len() {
             return Err(CassetteError::IndexOutOfRange(
@@ -59,6 +63,7 @@ impl Cassette {
         Ok(())
     }
 
+    /// How many HTTP interactions have not been played.
     pub fn unplayed_count(&self) -> usize {
         self.played_indices.iter().filter(|&&p| !p).count()
     }
@@ -95,16 +100,19 @@ impl Cassette {
 
     // --- gRPC ---
 
+    /// Replace the gRPC interactions, resetting played state.
     pub fn set_grpc_interactions(&mut self, interactions: Vec<GrpcInteraction>) {
         self.grpc_played = vec![false; interactions.len()];
         self.grpc_interactions = interactions;
     }
 
+    /// Append a gRPC interaction, unplayed.
     pub fn add_grpc_interaction(&mut self, interaction: GrpcInteraction) {
         self.grpc_interactions.push(interaction);
         self.grpc_played.push(false);
     }
 
+    /// Mark a gRPC interaction played.
     pub fn mark_grpc_played(&mut self, index: usize) -> Result<()> {
         if index >= self.grpc_played.len() {
             return Err(CassetteError::IndexOutOfRange(
@@ -130,16 +138,19 @@ impl Cassette {
 
     // --- WebSocket ---
 
+    /// Replace the WebSocket interactions, resetting played state.
     pub fn set_ws_interactions(&mut self, interactions: Vec<WsInteraction>) {
         self.ws_played = vec![false; interactions.len()];
         self.ws_interactions = interactions;
     }
 
+    /// Append a WebSocket interaction, unplayed.
     pub fn add_ws_interaction(&mut self, interaction: WsInteraction) {
         self.ws_interactions.push(interaction);
         self.ws_played.push(false);
     }
 
+    /// Mark a WebSocket interaction played.
     pub fn mark_ws_played(&mut self, index: usize) -> Result<()> {
         if index >= self.ws_played.len() {
             return Err(CassetteError::IndexOutOfRange(
@@ -300,14 +311,17 @@ impl Cassette {
         Ok(())
     }
 
+    /// How many interactions this holds, across all protocols.
     pub fn len(&self) -> usize {
         self.interactions.len() + self.grpc_interactions.len() + self.ws_interactions.len()
     }
 
+    /// Whether it holds no interactions at all.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// A short, readable rendering for a binding to surface.
     pub fn describe(&self) -> String {
         format!(
             "Cassette(version={}, http={}, grpc={}, ws={})",
@@ -319,6 +333,7 @@ impl Cassette {
     }
 }
 
+/// Whether this path names a TOML cassette rather than a YAML one.
 pub fn is_toml(path: &str) -> bool {
     Path::new(path)
         .extension()
