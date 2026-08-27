@@ -1,0 +1,216 @@
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", content = "content")]
+pub enum BodyContent {
+    #[serde(rename = "json")]
+    Json(serde_json::Value),
+    #[serde(rename = "text")]
+    Text(String),
+    #[serde(rename = "binary")]
+    Binary(Vec<u8>),
+    #[serde(rename = "none")]
+    None,
+}
+
+impl BodyContent {
+    /// The type discriminator as it appears in the cassette file.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            BodyContent::Json(_) => "json",
+            BodyContent::Text(_) => "text",
+            BodyContent::Binary(_) => "binary",
+            BodyContent::None => "none",
+        }
+    }
+}
+
+/// Trim a string to at most `max` characters, on a character boundary.
+fn preview(s: &str, max: usize) -> (&str, bool) {
+    match s.char_indices().nth(max) {
+        Some((idx, _)) => (&s[..idx], true),
+        None => (s, false),
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Body {
+    #[serde(rename = "type")]
+    pub body_type: String,
+    #[serde(flatten)]
+    pub inner: BodyContent,
+}
+
+impl Body {
+    pub fn none() -> Self {
+        Body {
+            body_type: "none".to_string(),
+            inner: BodyContent::None,
+        }
+    }
+
+    pub fn json(value: serde_json::Value) -> Self {
+        Body {
+            body_type: "json".to_string(),
+            inner: BodyContent::Json(value),
+        }
+    }
+
+    pub fn text(s: String) -> Self {
+        Body {
+            body_type: "text".to_string(),
+            inner: BodyContent::Text(s),
+        }
+    }
+
+    pub fn binary(b: Vec<u8>) -> Self {
+        Body {
+            body_type: "binary".to_string(),
+            inner: BodyContent::Binary(b),
+        }
+    }
+
+    /// Build a body from an already-constructed content value, keeping the
+    /// discriminator in sync.
+    pub fn from_content(inner: BodyContent) -> Self {
+        Body {
+            body_type: inner.type_name().to_string(),
+            inner,
+        }
+    }
+
+    /// Short human-readable summary. Bindings surface this as `__repr__`,
+    /// `toString`, and the like.
+    pub fn describe(&self) -> String {
+        match &self.inner {
+            BodyContent::Json(_) => "Body(type='json', ...)".to_string(),
+            BodyContent::Text(s) => {
+                let (head, truncated) = preview(s, 50);
+                let ellipsis = if truncated { ", ..." } else { "" };
+                format!("Body(type='text', content={head:?}{ellipsis})")
+            }
+            BodyContent::Binary(b) => format!("Body(type='binary', len={})", b.len()),
+            BodyContent::None => "Body(type='none')".to_string(),
+        }
+    }
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        Body::none()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct HttpRequest {
+    pub method: String,
+    pub uri: String,
+    pub headers: HashMap<String, Vec<String>>,
+    pub body: Body,
+}
+
+impl HttpRequest {
+    pub fn new(
+        method: String,
+        uri: String,
+        headers: Option<HashMap<String, Vec<String>>>,
+        body: Option<Body>,
+    ) -> Self {
+        HttpRequest {
+            method,
+            uri,
+            headers: headers.unwrap_or_default(),
+            body: body.unwrap_or_else(Body::none),
+        }
+    }
+
+    pub fn describe(&self) -> String {
+        format!("HttpRequest(method={:?}, uri={:?})", self.method, self.uri)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub headers: HashMap<String, Vec<String>>,
+    pub body: Body,
+}
+
+impl HttpResponse {
+    pub fn new(
+        status: u16,
+        headers: Option<HashMap<String, Vec<String>>>,
+        body: Option<Body>,
+    ) -> Self {
+        HttpResponse {
+            status,
+            headers: headers.unwrap_or_default(),
+            body: body.unwrap_or_else(Body::none),
+        }
+    }
+
+    pub fn describe(&self) -> String {
+        format!("HttpResponse(status={})", self.status)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct HttpInteraction {
+    pub request: HttpRequest,
+    pub response: HttpResponse,
+    pub recorded_at: String,
+}
+
+impl HttpInteraction {
+    pub fn new(request: HttpRequest, response: HttpResponse, recorded_at: String) -> Self {
+        HttpInteraction {
+            request,
+            response,
+            recorded_at,
+        }
+    }
+
+    pub fn describe(&self) -> String {
+        format!(
+            "HttpInteraction(request={}, response={})",
+            self.request.describe(),
+            self.response.describe()
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_repr_does_not_append_ellipsis_to_short_text() {
+        let body = Body::text("short".to_string());
+        assert_eq!(body.describe(), r#"Body(type='text', content="short")"#);
+    }
+
+    #[test]
+    fn test_repr_escapes_quotes_and_newlines() {
+        let body = Body::text("a\"b\nc".to_string());
+        let repr = body.describe();
+        assert!(!repr.contains('\n'), "{repr}");
+        assert!(repr.contains(r#"\"b\nc"#), "{repr}");
+    }
+
+    #[test]
+    fn test_repr_truncates_long_text_on_char_boundary() {
+        let body = Body::text("é".repeat(80));
+        let repr = body.describe();
+        assert!(repr.ends_with(", ...)"), "{repr}");
+    }
+
+    #[test]
+    fn test_repr_handles_empty_text() {
+        assert_eq!(
+            Body::text(String::new()).describe(),
+            r#"Body(type='text', content="")"#
+        );
+    }
+}

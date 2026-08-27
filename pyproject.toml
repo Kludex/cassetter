@@ -50,7 +50,7 @@ build-backend = "maturin"
 python-source = "src"
 module-name = "cassetter._core"
 features = ["pyo3/extension-module"]
-manifest-path = "rust/Cargo.toml"
+manifest-path = "crates/cassetter-python/Cargo.toml"
 
 [dependency-groups]
 dev = [

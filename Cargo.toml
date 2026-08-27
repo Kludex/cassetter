@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cassetter-core",
+    "crates/cassetter-python",
+    "crates/cassetter-node",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.83"
+license = "MIT"
+
+[workspace.dependencies]
+cassetter-core = { path = "crates/cassetter-core" }
+serde = { version = "1", features = ["derive"] }
+# `preserve_order` keeps a recorded JSON body in the order the server sent it, so a
+# cassette stays a faithful recording rather than an alphabetized rewrite of one.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+todo = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+# `panic = "abort"` must NOT be set: PyO3 wraps every pymethod body in
+# `catch_unwind` to turn a panic into a Python exception, and aborting would
+# take the whole interpreter down instead.
+strip = "symbols"

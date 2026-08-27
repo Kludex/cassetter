@@ -1,0 +1,22 @@
+[package]
+name = "cassetter-core"
+description = "Language-agnostic core for cassetter: cassette format, matching, security filtering, and body processing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde-saphyr = "1.0.0"
+flate2 = "1"
+brotli = { version = "8", default-features = false, features = ["std"] }
+zstd = { version = "0.13", default-features = false }
+regex = "1"
+unicode-normalization = "0.1"
+toml = "1.1"
+base64 = "0.23"
+
+[lints]
+workspace = true
