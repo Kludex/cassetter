@@ -39,6 +39,11 @@ export class FetchInterceptor implements Interceptor {
         if (!(e instanceof NoMatchError) || !cassette.canRecord) throw e;
       }
 
+      // Claim the slot before going out: under concurrency the responses come
+      // back in whatever order they finish, and recording in that order would
+      // write a different cassette on every run.
+      const order = cassette.reserveRecordOrder();
+
       const real = await originalFetch(request.clone());
       const responseBody = Buffer.from(await real.clone().arrayBuffer());
 
@@ -48,8 +53,12 @@ export class FetchInterceptor implements Interceptor {
         headers,
         requestBody,
         real.status,
-        extractHeaders(real.headers),
+        // `arrayBuffer()` hands back decoded bytes while the upstream
+        // content-encoding header survives on the response. Passing it through
+        // would have the recorder try to decompress what is already plain.
+        extractHeadersSkipEncoding(real.headers),
         responseBody,
+        order,
       );
 
       return real;
@@ -63,6 +72,12 @@ export class FetchInterceptor implements Interceptor {
     }
     this._cassette = null;
   }
+}
+
+function extractHeadersSkipEncoding(headers: Headers): HeaderMap {
+  const out = extractHeaders(headers);
+  delete out["content-encoding"];
+  return out;
 }
 
 function extractHeaders(headers: Headers): HeaderMap {

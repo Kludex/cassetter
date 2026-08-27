@@ -12,6 +12,7 @@ import { existsSync, rmSync, statSync } from "node:fs";
 import { native, processBody, scrubInteraction, scrubGrpcInteraction, scrubWsInteraction } from "./binding.js";
 import type { NativeCassette } from "./binding.js";
 import { DISCARDING_MODES, RecordMode, parseDuration } from "./recording.js";
+import { NONE_BODY, bodyToBuffer } from "./types.js";
 import type {
   Body,
   GrpcInteraction,
@@ -77,6 +78,8 @@ export class Cassette {
   private _dirty = false;
   /** Order interactions were recorded in, to break ties in the output order. */
   private _recordOrders: number[] = [];
+  /** Next position `reserveRecordOrder` will hand out. */
+  private _nextRecordOrder = 0;
   /** `once` replays without recording when the cassette already existed. */
   private _onceReplayOnly = false;
   /** Mode of the cassette `rewrite` deleted, to put back on its replacement. */
@@ -153,6 +156,7 @@ export class Cassette {
     if (discarding || !exists) {
       this._inner = new native.Cassette();
       this._recordOrders = [];
+      this._nextRecordOrder = 0;
       if (discarding) {
         this._dirty = true;
       }
@@ -168,6 +172,7 @@ export class Cassette {
     }
     this._onceReplayOnly = true;
     this._recordOrders = this._inner.interactions.map((_, i) => i);
+    this._nextRecordOrder = this._recordOrders.length;
     this._checkExpiry();
   }
 
@@ -205,6 +210,17 @@ export class Cassette {
 
   // --- HTTP ---
 
+  /**
+   * Claim this interaction's position before its request is issued.
+   *
+   * Interceptors record once the response is back, so under concurrency the
+   * cassette would otherwise be written in whatever order responses arrived
+   * in - different on every run.
+   */
+  reserveRecordOrder(): number {
+    return this._nextRecordOrder++;
+  }
+
   play(
     method: string,
     uri: string,
@@ -221,10 +237,20 @@ export class Cassette {
       getHeader(headers, "content-encoding"),
     );
 
-    const hit = this._inner.takeMatch(
-      { method, uri, headers, body: processed },
-      this._matchConfig,
-    );
+    // Interactions are scrubbed at write time, so the live request has to be
+    // scrubbed with the same config before matching: a URI recorded as
+    // api_key=[FILTERED] would otherwise never match the real query string,
+    // and a scrubbed body field would never match the real one.
+    const probe = scrubInteraction(
+      {
+        request: { method, uri, headers, body: processed },
+        response: { status: 0, headers: {}, body: NONE_BODY },
+        recordedAt: "",
+      },
+      this._securityConfig,
+    ).request;
+
+    const hit = this._inner.takeMatch(probe, this._matchConfig);
 
     if (hit === null) {
       throw new NoMatchError(`no matching interaction for ${method} ${uri}`);
@@ -240,6 +266,7 @@ export class Cassette {
     status: number,
     responseHeaders: HeaderMap,
     responseBody: Buffer | null,
+    order?: number,
   ): HttpResponse {
     const reqBody = processBody(
       requestBody ?? Buffer.alloc(0),
@@ -260,17 +287,19 @@ export class Cassette {
       }
     }
 
-    const interaction = scrubInteraction(
-      {
-        request: { method, uri, headers: requestHeaders, body: reqBody },
-        response: { status, headers: cleanRespHeaders, body: respBody },
-        recordedAt: new Date().toISOString(),
-      },
-      this._securityConfig,
+    const interaction = retagContentLength(
+      scrubInteraction(
+        {
+          request: { method, uri, headers: requestHeaders, body: reqBody },
+          response: { status, headers: cleanRespHeaders, body: respBody },
+          recordedAt: new Date().toISOString(),
+        },
+        this._securityConfig,
+      ),
     );
 
     this._ensureInner().addInteraction(interaction);
-    this._recordOrders.push(this._recordOrders.length);
+    this._recordOrders.push(order ?? this.reserveRecordOrder());
     this._dirty = true;
     return interaction.response;
   }
@@ -391,6 +420,42 @@ export class Cassette {
       return newest === null || d > newest ? d : newest;
     }, null);
   }
+}
+
+/**
+ * Restate a response's `content-length` for the body as recorded.
+ *
+ * Decompressing a response and scrubbing a secret out of a body both change
+ * its length, and a client that checks the header against what it reads fails
+ * on replay when the two disagree.
+ *
+ * Only the response, and only when it carries a body. A request's header is
+ * compared against the incoming one by the `headers` matcher, so rewriting it
+ * would stop an identical request from replaying; and on a HEAD or 304 the
+ * header describes a representation that was never sent, so there is no body
+ * to measure it against.
+ */
+function retagContentLength(interaction: HttpInteraction): HttpInteraction {
+  const served = bodyToBuffer(interaction.response.body);
+  if (served.length === 0) return interaction;
+
+  const length = String(served.length);
+  let changed = false;
+  const headers: HeaderMap = {};
+  for (const [key, values] of Object.entries(interaction.response.headers)) {
+    if (key.toLowerCase() === "content-length") {
+      if (values.length !== 1 || values[0] !== length) changed = true;
+      headers[key] = [length];
+    } else {
+      headers[key] = values;
+    }
+  }
+  if (!changed) return interaction;
+
+  return {
+    ...interaction,
+    response: { ...interaction.response, headers },
+  };
 }
 
 /** Case-insensitive header lookup returning the first value. */

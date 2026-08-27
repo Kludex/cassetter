@@ -333,19 +333,24 @@ describe("save", () => {
     expect(b.interactions[0].response.body.content).toEqual({ ok: true });
   });
 
-  it("preserves file permissions across a rewrite", () => {
-    const p = write("perm.yaml");
-    chmodSync(p, 0o600);
+  // POSIX only: Windows chmod toggles the read-only bit and nothing else, and
+  // the Rust writer only restores a mode under #[cfg(unix)].
+  it.skipIf(process.platform === "win32")(
+    "preserves file permissions across a rewrite",
+    () => {
+      const p = write("perm.yaml");
+      chmodSync(p, 0o600);
 
-    const c = new Cassette(p, { recordMode: RecordMode.REWRITE });
-    c.load();
-    c.record("GET", "https://api.example.com/p", {}, null, 200, {}, Buffer.from("x"));
-    c.save();
+      const c = new Cassette(p, { recordMode: RecordMode.REWRITE });
+      c.load();
+      c.record("GET", "https://api.example.com/p", {}, null, 200, {}, Buffer.from("x"));
+      c.save();
 
-    // The temp file is created at the process umask, so without carrying the
-    // mode over a 0600 cassette would come back world-readable.
-    expect(statSync(p).mode & 0o777).toBe(0o600);
-  });
+      // The temp file is created at the process umask, so without carrying
+      // the mode over a 0600 cassette would come back world-readable.
+      expect(statSync(p).mode & 0o777).toBe(0o600);
+    },
+  );
 });
 
 describe("expiry", () => {
@@ -391,5 +396,138 @@ describe("getHeader", () => {
     );
     expect(getHeader({}, "content-type")).toBeNull();
     expect(getHeader({ "x-a": [] }, "x-a")).toBeNull();
+  });
+});
+
+describe("scrubbed values still replay", () => {
+  // Recording writes a scrubbed interaction, so the live request has to be
+  // scrubbed the same way before it is matched against one.
+  it("matches a URI whose query param was filtered at write time", () => {
+    const p = join(dir, "q.yaml");
+    const a = new Cassette(p, { recordMode: RecordMode.ALL });
+    a.load();
+    a.record(
+      "GET",
+      "https://api.example.com/data?api_key=s3cret&page=2",
+      {},
+      null,
+      200,
+      { "content-type": ["application/json"] },
+      Buffer.from(JSON.stringify({ ok: true })),
+    );
+    a.save();
+    // What landed on disk is the filtered URI, not the live one.
+    expect(a.interactions[0].request.uri).toContain("[FILTERED]");
+
+    const b = new Cassette(p, { recordMode: RecordMode.NONE });
+    b.load();
+    const res = b.play(
+      "GET",
+      "https://api.example.com/data?api_key=s3cret&page=2",
+      {},
+      null,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("matches a body whose fields were scrubbed at write time", () => {
+    const p = join(dir, "b.yaml");
+    const headers = { "content-type": ["application/json"] };
+    const live = Buffer.from(JSON.stringify({ user: "kate", password: "hunter2" }));
+
+    const a = new Cassette(p, {
+      recordMode: RecordMode.ALL,
+      matchConfig: { matchOn: ["method", "uri", "json_body"] },
+    });
+    a.load();
+    a.record(
+      "POST",
+      "https://api.example.com/login",
+      headers,
+      live,
+      200,
+      headers,
+      Buffer.from(JSON.stringify({ ok: true })),
+    );
+    a.save();
+
+    const b = new Cassette(p, {
+      recordMode: RecordMode.NONE,
+      matchConfig: { matchOn: ["method", "uri", "json_body"] },
+    });
+    b.load();
+    expect(b.play("POST", "https://api.example.com/login", headers, live).status).toBe(
+      200,
+    );
+  });
+});
+
+describe("record order", () => {
+  it("writes interactions in the order requests were issued", () => {
+    const p = join(dir, "order.yaml");
+    const c = new Cassette(p, { recordMode: RecordMode.ALL });
+    c.load();
+
+    // Two indistinguishable requests whose responses land out of order.
+    const first = c.reserveRecordOrder();
+    const second = c.reserveRecordOrder();
+
+    const headers = { "content-type": ["application/json"] };
+    c.record("GET", "https://api.example.com/n", {}, null, 200, headers,
+      Buffer.from(JSON.stringify({ n: 2 })), second);
+    c.record("GET", "https://api.example.com/n", {}, null, 200, headers,
+      Buffer.from(JSON.stringify({ n: 1 })), first);
+    c.save();
+
+    const replayed = new Cassette(p, { recordMode: RecordMode.NONE });
+    replayed.load();
+    // The one issued first is served first, not the one that finished first.
+    expect(replayed.play("GET", "https://api.example.com/n", {}, null).body.content)
+      .toEqual({ n: 1 });
+    expect(replayed.play("GET", "https://api.example.com/n", {}, null).body.content)
+      .toEqual({ n: 2 });
+  });
+
+  it("hands out increasing positions", () => {
+    const c = new Cassette(join(dir, "o.yaml"), { recordMode: RecordMode.ALL });
+    c.load();
+    expect([c.reserveRecordOrder(), c.reserveRecordOrder()]).toEqual([0, 1]);
+  });
+});
+
+describe("content-length", () => {
+  it("restates the header for the body actually recorded", () => {
+    const c = new Cassette(join(dir, "cl.yaml"), { recordMode: RecordMode.ALL });
+    c.load();
+
+    const plain = JSON.stringify({ ok: true });
+    c.record(
+      "GET",
+      "https://api.example.com/z",
+      {},
+      null,
+      200,
+      {
+        "content-type": ["application/json"],
+        "content-encoding": ["gzip"],
+        // The compressed length, which no longer describes what we store.
+        "content-length": ["999"],
+      },
+      gzipSync(Buffer.from(plain)),
+    );
+
+    const rec = c.interactions[0];
+    expect(rec.response.headers["content-encoding"]).toBeUndefined();
+    expect(rec.response.headers["content-length"]).toEqual([
+      String(Buffer.byteLength(plain)),
+    ]);
+  });
+
+  it("leaves a body-less response alone", () => {
+    const c = new Cassette(join(dir, "cl2.yaml"), { recordMode: RecordMode.ALL });
+    c.load();
+    c.record("HEAD", "https://api.example.com/h", {}, null, 204,
+      { "content-length": ["42"] }, null);
+    expect(c.interactions[0].response.headers["content-length"]).toEqual(["42"]);
   });
 });

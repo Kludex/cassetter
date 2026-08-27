@@ -264,3 +264,32 @@ describe("useCassette options", () => {
     ).rejects.toThrow(NoMatchError);
   });
 });
+
+describe("response decoding", () => {
+  it("records a response whose content-encoding header outlived the decoding", async () => {
+    const path = join(dir, "gz.yaml");
+    const payload = JSON.stringify({ compressed: false });
+
+    // What Node's fetch hands back: bytes already decoded, upstream
+    // content-encoding still on the response.
+    stubUpstream(
+      () =>
+        new Response(payload, {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "content-encoding": "gzip",
+          },
+        }),
+    );
+
+    const cassette = await useCassette(path, async () => {
+      const res = await fetch("https://api.example.com/gz");
+      expect(res.status).toBe(200);
+    });
+
+    const rec = cassette.interactions[0];
+    expect(rec.response.body.content).toEqual({ compressed: false });
+    expect(rec.response.headers["content-encoding"]).toBeUndefined();
+  });
+});
