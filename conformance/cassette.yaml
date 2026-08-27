@@ -114,6 +114,8 @@ ws_interactions:
     frame_type: binary
     body:
       type: binary
-      content: 00010203
+      # Quoted: an all-digit hex string is a YAML number unquoted, and the
+      # binary body would decode to nothing. Cassetter quotes it when writing.
+      content: '00010203'
     offset_ms: 250
   recorded_at: '2026-01-05T00:00:00Z'

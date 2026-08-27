@@ -140,7 +140,8 @@
         },
         {
           "body": {
-            "type": "none"
+            "content": "00010203",
+            "type": "binary"
           },
           "direction": "recv",
           "frameType": "binary",

@@ -4,7 +4,9 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { NoMatchError } from "../src/cassette.js";
+import { Cassette, NoMatchError } from "../src/cassette.js";
+import { FetchInterceptor } from "../src/intercept/fetch.js";
+import { RecordMode } from "../src/recording.js";
 import { useCassette } from "../src/context.js";
 
 let dir: string;
@@ -291,5 +293,56 @@ describe("response decoding", () => {
     const rec = cassette.interactions[0];
     expect(rec.response.body.content).toEqual({ compressed: false });
     expect(rec.response.headers["content-encoding"]).toBeUndefined();
+  });
+});
+
+describe("overlapping scopes", () => {
+  function scope(name: string) {
+    const cassette = new Cassette(join(dir, name), { recordMode: RecordMode.ALL });
+    cassette.load();
+    return cassette;
+  }
+
+  it("does not take the global back from a scope that is still live", () => {
+    stubUpstream(() => new Response("{}", { status: 200 }));
+    const outer = new FetchInterceptor();
+    const inner = new FetchInterceptor();
+    const cassette = scope("a.yaml");
+
+    outer.install(cassette);
+    inner.install(cassette);
+    const innerPatched = globalThis.fetch;
+
+    // Out-of-order teardown: the outer scope finishes first. Restoring
+    // unconditionally would drop the inner interceptor, which is still live.
+    outer.uninstall();
+    expect(globalThis.fetch).toBe(innerPatched);
+
+    inner.uninstall();
+  });
+
+  it("stops intercepting once every scope has ended", async () => {
+    let upstream = 0;
+    stubUpstream(() => {
+      upstream += 1;
+      return new Response("{}", { status: 200 });
+    });
+
+    const outer = new FetchInterceptor();
+    const inner = new FetchInterceptor();
+    const cassette = scope("b.yaml");
+
+    outer.install(cassette);
+    inner.install(cassette);
+    outer.uninstall();
+    inner.uninstall();
+
+    // Interleaved teardown can leave a spent closure on the global - it has no
+    // stack to restore identity from. It must delegate to the real fetch
+    // rather than record into a cassette whose scope has ended.
+    await fetch("https://api.example.com/after");
+
+    expect(upstream).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
   });
 });

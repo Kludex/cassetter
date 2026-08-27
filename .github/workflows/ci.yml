@@ -81,6 +81,10 @@ jobs:
 
   node:
     runs-on: ${{ matrix.os }}
+    # `npm ci` and the native build run dependency lifecycle and build scripts,
+    # so keep the checkout token away from them.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -97,6 +101,8 @@ jobs:
         working-directory: ts
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v6
         with:

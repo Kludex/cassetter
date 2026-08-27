@@ -9,17 +9,25 @@ import { isLocalhost, type Interceptor } from "./base.js";
 export class FetchInterceptor implements Interceptor {
   private _cassette: Cassette | null = null;
   private _originalFetch: typeof globalThis.fetch | null = null;
+  /** The function this interceptor put on the global, to recognise it later. */
+  private _patched: typeof globalThis.fetch | null = null;
 
   install(cassette: Cassette): void {
+    const originalFetch = globalThis.fetch;
     this._cassette = cassette;
-    this._originalFetch = globalThis.fetch;
+    this._originalFetch = originalFetch;
 
-    const originalFetch = this._originalFetch;
-
-    globalThis.fetch = async (
+    const patched = async (
       input: string | URL | Request,
       init?: RequestInit,
     ): Promise<Response> => {
+      // Another scope may have patched over this one and then left, putting
+      // this closure back on the global after its own scope ended. Pass
+      // straight through rather than recording into a finished cassette.
+      if (this._cassette === null) {
+        return originalFetch(input, init);
+      }
+
       const request = new Request(input, init);
       const { method, url: uri } = request;
 
@@ -63,14 +71,21 @@ export class FetchInterceptor implements Interceptor {
 
       return real;
     };
+
+    this._patched = patched;
+    globalThis.fetch = patched;
   }
 
   uninstall(): void {
-    if (this._originalFetch) {
+    // Only take the global back if it is still ours. Two overlapping scopes
+    // tear down in whatever order they finish, and restoring unconditionally
+    // would drop an interceptor that is still live.
+    if (this._patched && globalThis.fetch === this._patched && this._originalFetch) {
       globalThis.fetch = this._originalFetch;
-      this._originalFetch = null;
     }
     this._cassette = null;
+    this._originalFetch = null;
+    this._patched = null;
   }
 }
 
