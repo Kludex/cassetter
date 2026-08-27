@@ -173,6 +173,9 @@ export class Cassette {
       this._inner = new native.Cassette();
       this._recordOrders = [];
       this._nextRecordOrder = 0;
+      // Loading again onto the same object must not inherit the last load's
+      // replay-only state: with no file there, `once` may record afresh.
+      this._onceReplayOnly = false;
       if (discarding) {
         this._dirty = true;
       }

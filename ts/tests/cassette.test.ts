@@ -531,3 +531,20 @@ describe("content-length", () => {
     expect(c.interactions[0].response.headers["content-length"]).toEqual(["42"]);
   });
 });
+
+describe("re-loading the same cassette object", () => {
+  it("records again once the file it replayed from is gone", () => {
+    const p = write("reload.yaml");
+    const c = new Cassette(p, { recordMode: RecordMode.ONCE });
+
+    c.load();
+    // The file was there, so `once` replays only.
+    expect(c.canRecord).toBe(false);
+
+    rmSync(p, { force: true });
+    c.load();
+    // With nothing to replay from, it must be free to record again.
+    expect(c.canRecord).toBe(true);
+    expect(c.interactions).toHaveLength(0);
+  });
+});
