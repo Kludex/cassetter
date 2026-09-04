@@ -25,7 +25,7 @@
     "expected": "empty.json"
   },
   {
-    "name": "unknown fields",
+    "name": "accepts unknown fields",
     "cassette": "unknown-fields.yaml",
     "expected": "unknown-fields.json"
   }

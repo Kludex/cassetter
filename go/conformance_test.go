@@ -48,6 +48,26 @@ func TestFormatConformance(t *testing.T) {
 	}
 }
 
+func TestUnknownTopLevelFieldConformance(t *testing.T) {
+	t.Parallel()
+	fixtures := formatFixtures(t)
+	cassette, err := cassetter.Load(filepath.Join(fixtures, "unknown-fields.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "unknown-fields.yaml")
+	if err := cassette.Save(output); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(content, []byte("future_protocol:")) {
+		t.Fatal("Go save removed an unknown top-level field")
+	}
+}
+
 func TestInvalidFormatConformance(t *testing.T) {
 	t.Parallel()
 	fixtures := formatFixtures(t)

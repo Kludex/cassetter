@@ -50,6 +50,8 @@ A format case passes when an SDK parses its cassette into the corresponding cano
 - Timestamps pass through without reformatting.
 - Saving and reloading a cassette produces the same canonical value.
 - Every case in `format/invalid/cases.json` fails to load.
+- Unknown fields do not prevent known data from loading or round-tripping.
+- Preservation of unknown fields is SDK-specific.
 
 ## SDK coverage
 
