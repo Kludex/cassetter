@@ -30,6 +30,7 @@ func (t *Transport) recordGRPC(interaction GRPCInteraction, order uint64) (err e
 	output := *t.cassette
 	output.Interactions = orderedRecordings(t.cassette.Interactions, t.orders)
 	output.GRPCInteractions = orderedRecordings(candidateInteractions, candidateOrders)
+	output.WebSocketInteractions = orderedRecordings(t.cassette.WebSocketInteractions, t.webSocketOrders)
 	if saveErr := output.Save(t.config.path); saveErr != nil {
 		t.saveEmpty = false
 		return saveErr

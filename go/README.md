@@ -1,6 +1,6 @@
 # cassetter-go
 
-Record and replay Go HTTP and gRPC requests with the same structured cassette format as
+Record and replay Go HTTP, gRPC, and WebSocket traffic with the same structured cassette format as
 [`cassetter`](https://github.com/Kludex/cassetter).
 
 ## Install
@@ -113,6 +113,55 @@ the same configuration as HTTP recording.
 Use YAML for cassettes that contain gRPC interactions. TOML supports HTTP only.
 Call `NewGRPCRecorder` instead of `NewTestGRPCRecorder` outside a test, then call
 `Transport.Close` to surface incomplete streams and save errors.
+
+## Record and replay WebSockets
+
+```go
+package example_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/Kludex/cassetter/go"
+    "github.com/coder/websocket"
+)
+
+func TestEvents(t *testing.T) {
+    recorder := cassetter.NewTestWebSocketRecorder(
+        t,
+        cassetter.WithPath("testdata/cassettes/events.yaml"),
+    )
+    connection, _, err := recorder.DialWebSocket(
+        context.Background(),
+        "wss://api.example.com/events",
+        nil,
+    )
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer connection.Close(websocket.StatusNormalClosure, "")
+
+    if err := connection.Write(context.Background(), websocket.MessageText, []byte("subscribe")); err != nil {
+        t.Fatal(err)
+    }
+    if _, _, err := connection.Read(context.Background()); err != nil {
+        t.Fatal(err)
+    }
+}
+```
+
+`DialWebSocket` uses [`github.com/coder/websocket`](https://github.com/coder/websocket).
+It records successful text and binary messages until the connection closes. It
+replays received messages in order without opening a network connection. Sent
+messages do not participate in matching, which matches the other SDKs.
+
+WebSocket matching uses the filtered URI. It supports `WithURINormalizer`,
+repeated playback, host bypass options, header filtering, JSON secret scrubbing,
+and Unicode NFC normalization. Use YAML because TOML supports HTTP only. Always
+close the connection or read through the remote close so save errors are
+reported. Test cleanup reports a connection left open as an incomplete
+recording.
 
 ## Configure HTTP request matching
 
@@ -279,8 +328,8 @@ preserve the source values. TOML supports HTTP interactions only.
 
 ## Scope
 
-The first release supports HTTP through `http.RoundTripper` and gRPC through
-unary and streaming client interceptors. `Load` accepts structured Cassetter
-YAML, VCR.py YAML, and Cassetter TOML. It exposes typed HTTP, gRPC, and WebSocket
-interactions. YAML rewrites preserve unrecognized top-level protocol sections.
-WebSocket recording is planned.
+The first release supports HTTP through `http.RoundTripper`, gRPC through unary
+and streaming client interceptors, and WebSockets through `DialWebSocket`.
+`Load` accepts structured Cassetter YAML, VCR.py YAML, and Cassetter TOML. It
+exposes typed HTTP, gRPC, and WebSocket interactions. YAML rewrites preserve
+unrecognized top-level protocol sections.

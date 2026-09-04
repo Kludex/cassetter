@@ -2,48 +2,10 @@ package cassetter
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"sort"
 	"testing"
 )
-
-// ErrIncompleteRecording identifies a response body that was not fully consumed.
-var ErrIncompleteRecording = errors.New("incomplete cassette recording")
-
-// ErrTransportClosed identifies a request sent after Transport.Close.
-var ErrTransportClosed = errors.New("cassetter transport is closed")
-
-// IncompleteRecordingError describes a response that could not be recorded completely.
-type IncompleteRecordingError struct {
-	Method string
-	URI    string
-}
-
-// Error implements error.
-func (e *IncompleteRecordingError) Error() string {
-	return fmt.Sprintf("%s for %s %s", ErrIncompleteRecording, e.Method, e.URI)
-}
-
-// Unwrap allows errors.Is(err, ErrIncompleteRecording).
-func (e *IncompleteRecordingError) Unwrap() error {
-	return ErrIncompleteRecording
-}
-
-// IncompleteGRPCRecordingError describes a gRPC stream that did not finish.
-type IncompleteGRPCRecordingError struct {
-	Method string
-}
-
-// Error implements error.
-func (e *IncompleteGRPCRecordingError) Error() string {
-	return fmt.Sprintf("%s for gRPC method %s", ErrIncompleteRecording, e.Method)
-}
-
-// Unwrap allows errors.Is(err, ErrIncompleteRecording).
-func (e *IncompleteGRPCRecordingError) Unwrap() error {
-	return ErrIncompleteRecording
-}
 
 // Initialize loads the cassette before the first request.
 func (t *Transport) Initialize() error {
@@ -84,6 +46,16 @@ func (t *Transport) Close() error {
 	for _, order := range grpcOrders {
 		err = errors.Join(err, &IncompleteGRPCRecordingError{Method: t.grpcPending[order]})
 	}
+	webSocketOrders := make([]uint64, 0, len(t.webSocketPending))
+	for order := range t.webSocketPending {
+		webSocketOrders = append(webSocketOrders, order)
+	}
+	sort.Slice(webSocketOrders, func(left int, right int) bool {
+		return webSocketOrders[left] < webSocketOrders[right]
+	})
+	for _, order := range webSocketOrders {
+		err = errors.Join(err, &IncompleteWebSocketRecordingError{URI: t.webSocketPending[order]})
+	}
 	if t.saveEmpty {
 		err = errors.Join(err, t.cassette.Save(t.config.path))
 		t.saveEmpty = false
@@ -99,6 +71,17 @@ func NewGRPCRecorder(options ...Option) *Transport {
 
 // NewTestGRPCRecorder creates a gRPC recorder whose lifecycle is managed by a Go test.
 func NewTestGRPCRecorder(tb testing.TB, options ...Option) *Transport {
+	tb.Helper()
+	return NewTestTransport(tb, nil, options...)
+}
+
+// NewWebSocketRecorder creates a transport for WebSocket dialing.
+func NewWebSocketRecorder(options ...Option) *Transport {
+	return NewTransport(nil, options...)
+}
+
+// NewTestWebSocketRecorder creates a WebSocket recorder whose lifecycle is managed by a Go test.
+func NewTestWebSocketRecorder(tb testing.TB, options ...Option) *Transport {
 	tb.Helper()
 	return NewTestTransport(tb, nil, options...)
 }

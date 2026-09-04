@@ -9,28 +9,31 @@ import (
 	"time"
 )
 
-// Transport records and replays HTTP and gRPC exchanges.
+// Transport records and replays HTTP, gRPC, and WebSocket exchanges.
 type Transport struct {
 	base   http.RoundTripper
 	config transportConfig
 
-	initialize  sync.Once
-	initErr     error
-	mu          sync.Mutex
-	cassette    *Cassette
-	played      []bool
-	grpcPlayed  []bool
-	index       map[string][]int
-	orders      []uint64
-	grpcOrders  []uint64
-	nextOrder   uint64
-	canRecord   bool
-	pending     map[uint64]pendingRecording
-	grpcPending map[uint64]string
-	recordErr   error
-	saveEmpty   bool
-	closed      bool
-	closeErr    error
+	initialize       sync.Once
+	initErr          error
+	mu               sync.Mutex
+	cassette         *Cassette
+	played           []bool
+	grpcPlayed       []bool
+	webSocketPlayed  []bool
+	index            map[string][]int
+	orders           []uint64
+	grpcOrders       []uint64
+	webSocketOrders  []uint64
+	nextOrder        uint64
+	canRecord        bool
+	pending          map[uint64]pendingRecording
+	grpcPending      map[uint64]string
+	webSocketPending map[uint64]string
+	recordErr        error
+	saveEmpty        bool
+	closed           bool
+	closeErr         error
 }
 
 type pendingRecording struct {
