@@ -104,9 +104,10 @@ match the full gRPC method. They prefer unused interactions and then reuse the
 first matching interaction.
 
 The recorder stores protobuf messages as binary bodies. Unary interactions also
-include scrubbed protobuf JSON for inspection. Outgoing metadata, response
-headers and trailers, status codes, and status messages are preserved. Header
-and JSON secret filtering use the same configuration as HTTP recording.
+include scrubbed protobuf JSON for inspection. The v1 format stores response
+headers and trailers in one combined metadata map. Replay exposes that map from
+both metadata accessors. Status codes and messages remain separate. Header and
+JSON secret filtering use the same configuration as HTTP recording.
 
 Use YAML for cassettes that contain gRPC interactions. TOML supports HTTP only.
 Call `NewGRPCRecorder` instead of `NewTestGRPCRecorder` outside a test, then call

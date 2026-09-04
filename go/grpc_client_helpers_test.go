@@ -14,7 +14,7 @@ import (
 )
 
 func unaryRequest() *grpc_testing.SimpleRequest {
-	return &grpc_testing.SimpleRequest{Payload: grpcPayload("unary")}
+	return &grpc_testing.SimpleRequest{Payload: grpcPayload("unary"), FillOauthScope: true}
 }
 
 func newGRPCClientConnection(

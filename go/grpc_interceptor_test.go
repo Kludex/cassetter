@@ -18,7 +18,7 @@ func TestGRPCInterceptorsRecordAndReplayUnaryAndStreamingCalls(t *testing.T) {
 	recorder := cassetter.NewGRPCRecorder(
 		cassetter.WithPath(path),
 		cassetter.WithRecordMode(cassetter.RecordModeAll),
-		cassetter.WithBodyScrubPatterns("body"),
+		cassetter.WithBodyScrubPatterns("body", "fill_oauth_scope"),
 	)
 	recordingConnection := newGRPCClientConnection(t, target, dialer, recorder)
 	exerciseGRPCClient(t, grpc_testing.NewTestServiceClient(recordingConnection))
@@ -45,6 +45,9 @@ func TestGRPCInterceptorsRecordAndReplayUnaryAndStreamingCalls(t *testing.T) {
 	payloadDebug := requestDebug["payload"].(map[string]any)
 	if got := payloadDebug["body"]; got != "[FILTERED]" {
 		t.Fatalf("recorded debug payload body = %v, want [FILTERED]", got)
+	}
+	if got := requestDebug["fill_oauth_scope"]; got != "[FILTERED]" {
+		t.Fatalf("recorded debug fill_oauth_scope = %v, want [FILTERED]", got)
 	}
 	serverStreamRequest := cassette.GRPCInteractions[2].Request.Body.Content.([]byte)
 	if len(serverStreamRequest) != 0 {

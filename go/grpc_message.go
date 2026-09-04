@@ -55,7 +55,7 @@ func grpcJSONValue(message any) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("cassetter: gRPC message %T does not implement proto.Message", message)
 	}
-	content, err := protojson.Marshal(protobuf)
+	content, err := (protojson.MarshalOptions{UseProtoNames: true}).Marshal(protobuf)
 	if err != nil {
 		return nil, fmt.Errorf("marshal gRPC debug JSON: %w", err)
 	}
