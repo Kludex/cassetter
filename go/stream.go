@@ -38,20 +38,35 @@ func (b *requestBody) content() []byte {
 }
 
 type recordingBody struct {
-	source        io.ReadCloser
-	content       bytes.Buffer
-	contentLength int64
-	finalize      func([]byte) error
-	mu            sync.Mutex
+	source          io.ReadCloser
+	content         bytes.Buffer
+	contentLength   int64
+	finalize        func([]byte) error
+	incompleteError error
+	onComplete      func(error)
+	mu              sync.Mutex
 
-	finishOnce sync.Once
-	finishErr  error
-	closeOnce  sync.Once
-	closeErr   error
+	finishOnce   sync.Once
+	finishErr    error
+	completeOnce sync.Once
+	closeOnce    sync.Once
+	closeErr     error
 }
 
-func newRecordingBody(source io.ReadCloser, contentLength int64, finalize func([]byte) error) io.ReadCloser {
-	return &recordingBody{source: source, contentLength: contentLength, finalize: finalize}
+func newRecordingBody(
+	source io.ReadCloser,
+	contentLength int64,
+	finalize func([]byte) error,
+	incompleteError error,
+	onComplete func(error),
+) io.ReadCloser {
+	return &recordingBody{
+		source:          source,
+		contentLength:   contentLength,
+		finalize:        finalize,
+		incompleteError: incompleteError,
+		onComplete:      onComplete,
+	}
 }
 
 func (b *recordingBody) Read(target []byte) (int, error) {
@@ -62,7 +77,9 @@ func (b *recordingBody) Read(target []byte) (int, error) {
 		b.mu.Unlock()
 	}
 	if errors.Is(err, io.EOF) {
-		if finishErr := b.finish(); finishErr != nil {
+		finishErr := b.finish()
+		b.complete(finishErr)
+		if finishErr != nil {
 			return count, finishErr
 		}
 	}
@@ -73,8 +90,11 @@ func (b *recordingBody) Close() error {
 	b.closeOnce.Do(func() {
 		closeErr := b.source.Close()
 		if b.hasCompleteBody() {
-			b.closeErr = errors.Join(closeErr, b.finish())
+			finishErr := b.finish()
+			b.complete(finishErr)
+			b.closeErr = errors.Join(closeErr, finishErr)
 		} else {
+			b.complete(b.incompleteError)
 			b.closeErr = closeErr
 		}
 	})
@@ -88,6 +108,12 @@ func (b *recordingBody) hasCompleteBody() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return int64(b.content.Len()) >= b.contentLength
+}
+
+func (b *recordingBody) complete(err error) {
+	b.completeOnce.Do(func() {
+		b.onComplete(err)
+	})
 }
 
 func (b *recordingBody) finish() error {

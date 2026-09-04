@@ -42,6 +42,7 @@ func (t *Transport) load() {
 	t.played = make([]bool, len(t.cassette.Interactions))
 	t.orders = make([]uint64, len(t.cassette.Interactions))
 	t.index = make(map[string][]int, len(t.cassette.Interactions))
+	t.pending = make(map[uint64]pendingRecording)
 	for index, interaction := range t.cassette.Interactions {
 		t.orders[index] = uint64(index)
 		key := matchKey(interaction.Request.Method, interaction.Request.URI)
@@ -52,24 +53,40 @@ func (t *Transport) load() {
 		t.config.mode == RecordModeRewrite || t.config.mode == RecordModeOnce && !exists
 }
 
-func (t *Transport) takeMatch(method string, uri string) (HTTPInteraction, bool) {
+func (t *Transport) takeMatch(method string, uri string) (HTTPInteraction, bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed {
+		return HTTPInteraction{}, false, ErrTransportClosed
+	}
 	for _, candidate := range t.index[matchKey(method, uri)] {
 		if !t.played[candidate] {
 			t.played[candidate] = true
-			return t.cassette.Interactions[candidate], true
+			return t.cassette.Interactions[candidate], true, nil
 		}
 	}
-	return HTTPInteraction{}, false
+	return HTTPInteraction{}, false, nil
 }
 
-func (t *Transport) reserveOrder() uint64 {
+func (t *Transport) reserveRecording(method string, uri string) (uint64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed {
+		return 0, ErrTransportClosed
+	}
 	order := t.nextOrder
 	t.nextOrder++
-	return order
+	t.pending[order] = pendingRecording{method: method, uri: uri}
+	return order, nil
+}
+
+func (t *Transport) finishRecording(order uint64, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.pending, order)
+	if err != nil {
+		t.recordErr = errors.Join(t.recordErr, err)
+	}
 }
 
 func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
@@ -79,6 +96,9 @@ func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed {
+		return ErrTransportClosed
+	}
 	candidateInteractions := append([]HTTPInteraction(nil), t.cassette.Interactions...)
 	candidateInteractions = append(candidateInteractions, interaction)
 	candidateOrders := append([]uint64(nil), t.orders...)

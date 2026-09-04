@@ -57,6 +57,42 @@ It only replays when the cassette already exists.
 | `RecordModeAll` | Record every request and replace existing interactions. |
 | `RecordModeRewrite` | Remove the cassette first, then record every request. |
 
+## Use cassettes in tests
+
+```go
+package example_test
+
+import (
+    "io"
+    "net/http"
+    "testing"
+
+    "github.com/Kludex/cassetter/go"
+)
+
+func TestUsers(t *testing.T) {
+    transport := cassetter.NewTestTransport(
+        t,
+        http.DefaultTransport,
+        cassetter.WithPath("testdata/cassettes/users.yaml"),
+    )
+    client := &http.Client{Transport: transport}
+
+    response, err := client.Get("https://api.example.com/users")
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer response.Body.Close()
+    if _, err := io.ReadAll(response.Body); err != nil {
+        t.Fatal(err)
+    }
+}
+```
+
+`NewTestTransport` loads the cassette immediately and registers test cleanup.
+Cleanup reports failed saves and response bodies that were not fully consumed.
+Call `Transport.Initialize` and `Transport.Close` directly when you need the same lifecycle outside a test.
+
 ## Secret filtering
 
 Filtering happens before the cassette is written. Authorization headers,
