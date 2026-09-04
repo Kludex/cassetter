@@ -1,0 +1,160 @@
+{
+  "grpc": [
+    {
+      "jsonDebug": {
+        "request": {
+          "message": "hello"
+        },
+        "response": {
+          "message": "world"
+        }
+      },
+      "metadata": {
+        "x-trace": [
+          "abc123"
+        ]
+      },
+      "method": "/demo.Greeter/SayHello",
+      "recordedAt": "2026-01-04T00:00:00Z",
+      "requestBody": {
+        "content": "0a0568656c6c6f",
+        "type": "binary"
+      },
+      "responseBody": {
+        "content": "0a05776f726c64",
+        "type": "binary"
+      },
+      "responseMetadata": {},
+      "statusCode": 0,
+      "statusMessage": "OK"
+    }
+  ],
+  "http": [
+    {
+      "method": "GET",
+      "recordedAt": "2026-01-01T00:00:00Z",
+      "requestBody": {
+        "type": "none"
+      },
+      "requestHeaders": {
+        "accept": [
+          "application/json"
+        ],
+        "x-multi": [
+          "one",
+          "two"
+        ]
+      },
+      "responseBody": {
+        "content": {
+          "total": 2,
+          "users": [
+            {
+              "active": true,
+              "id": 1,
+              "name": "Ada",
+              "score": 9.5
+            },
+            {
+              "active": false,
+              "id": 2,
+              "name": "Grace",
+              "score": null
+            }
+          ]
+        },
+        "type": "json"
+      },
+      "responseHeaders": {
+        "content-type": [
+          "application/json"
+        ]
+      },
+      "status": 200,
+      "uri": "https://api.example.com/users?page=2"
+    },
+    {
+      "method": "POST",
+      "recordedAt": "2026-01-02T03:04:05Z",
+      "requestBody": {
+        "content": "café — naïve ✓",
+        "type": "text"
+      },
+      "requestHeaders": {
+        "content-type": [
+          "text/plain; charset=utf-8"
+        ]
+      },
+      "responseBody": {
+        "content": "line one\nline two\n",
+        "type": "text"
+      },
+      "responseHeaders": {
+        "content-type": [
+          "text/plain"
+        ]
+      },
+      "status": 201,
+      "uri": "https://api.example.com/echo"
+    },
+    {
+      "method": "PUT",
+      "recordedAt": "2026-01-03T00:00:00Z",
+      "requestBody": {
+        "content": "deadbeef00ff",
+        "type": "binary"
+      },
+      "requestHeaders": {},
+      "responseBody": {
+        "type": "none"
+      },
+      "responseHeaders": {},
+      "status": 204,
+      "uri": "https://api.example.com/blob"
+    }
+  ],
+  "version": 1,
+  "ws": [
+    {
+      "frames": [
+        {
+          "body": {
+            "content": "{\"subscribe\":\"ticker\"}",
+            "type": "text"
+          },
+          "direction": "send",
+          "frameType": "text",
+          "offsetMs": 0
+        },
+        {
+          "body": {
+            "content": {
+              "price": 42.5,
+              "symbol": "ACME"
+            },
+            "type": "json"
+          },
+          "direction": "recv",
+          "frameType": "text",
+          "offsetMs": 120
+        },
+        {
+          "body": {
+            "content": "00010203",
+            "type": "binary"
+          },
+          "direction": "recv",
+          "frameType": "binary",
+          "offsetMs": 250
+        }
+      ],
+      "headers": {
+        "origin": [
+          "https://example.com"
+        ]
+      },
+      "recordedAt": "2026-01-05T00:00:00Z",
+      "uri": "wss://ws.example.com/stream"
+    }
+  ]
+}

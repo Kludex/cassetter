@@ -1,0 +1,121 @@
+# Cross-language conformance fixture.
+#
+# Every cassetter binding must parse this file into the canonical structure in
+# expected.json. It deliberately exercises each body type, multi-value headers,
+# unicode, nested JSON, and all three protocols.
+version: 1
+interactions:
+- request:
+    method: GET
+    uri: https://api.example.com/users?page=2
+    headers:
+      accept:
+      - application/json
+      x-multi:
+      - one
+      - two
+    body:
+      type: none
+  response:
+    status: 200
+    headers:
+      content-type:
+      - application/json
+    body:
+      type: json
+      content:
+        users:
+        - id: 1
+          name: Ada
+          active: true
+          score: 9.5
+        - id: 2
+          name: Grace
+          active: false
+          score: null
+        total: 2
+  recorded_at: '2026-01-01T00:00:00Z'
+- request:
+    method: POST
+    uri: https://api.example.com/echo
+    headers:
+      content-type:
+      - text/plain; charset=utf-8
+    body:
+      type: text
+      content: "caf\xE9 — na\xEFve ✓"
+  response:
+    status: 201
+    headers:
+      content-type:
+      - text/plain
+    body:
+      type: text
+      content: |
+        line one
+        line two
+  recorded_at: '2026-01-02T03:04:05Z'
+- request:
+    method: PUT
+    uri: https://api.example.com/blob
+    headers: {}
+    body:
+      type: binary
+      content: deadbeef00ff
+  response:
+    status: 204
+    headers: {}
+    body:
+      type: none
+  recorded_at: '2026-01-03T00:00:00Z'
+grpc_interactions:
+- request:
+    method: /demo.Greeter/SayHello
+    metadata:
+      x-trace:
+      - abc123
+    body:
+      type: binary
+      content: 0a0568656c6c6f
+  response:
+    status_code: 0
+    status_message: OK
+    metadata: {}
+    body:
+      type: binary
+      content: 0a05776f726c64
+  json_debug:
+    request:
+      message: hello
+    response:
+      message: world
+  recorded_at: '2026-01-04T00:00:00Z'
+ws_interactions:
+- uri: wss://ws.example.com/stream
+  headers:
+    origin:
+    - https://example.com
+  frames:
+  - direction: send
+    frame_type: text
+    body:
+      type: text
+      content: '{"subscribe":"ticker"}'
+    offset_ms: 0
+  - direction: recv
+    frame_type: text
+    body:
+      type: json
+      content:
+        price: 42.5
+        symbol: ACME
+    offset_ms: 120
+  - direction: recv
+    frame_type: binary
+    body:
+      type: binary
+      # Quoted: an all-digit hex string is a YAML number unquoted, and the
+      # binary body would decode to nothing. Cassetter quotes it when writing.
+      content: '00010203'
+    offset_ms: 250
+  recorded_at: '2026-01-05T00:00:00Z'

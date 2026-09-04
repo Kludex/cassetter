@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/Kludex/cassetter/go"
@@ -23,7 +24,7 @@ func inspectCommand(arguments []string, stdout io.Writer) error {
 		return err
 	}
 	var output strings.Builder
-	fmt.Fprintf(&output, "Cassette: %s\n", arguments[0])
+	fmt.Fprintf(&output, "Cassette: %s\n", terminalText(arguments[0]))
 	fmt.Fprintf(&output, "Version: %d\n", cassette.Version)
 	fmt.Fprintf(&output, "HTTP interactions: %d\n", len(cassette.Interactions))
 	for index, interaction := range cassette.Interactions {
@@ -31,19 +32,45 @@ func inspectCommand(arguments []string, stdout io.Writer) error {
 			&output,
 			"%d. %s %s -> %d",
 			index+1,
-			interaction.Request.Method,
-			interaction.Request.URI,
+			terminalText(interaction.Request.Method),
+			terminalText(interaction.Request.URI),
 			interaction.Response.Status,
 		)
-		if interaction.RecordedAt != "" {
-			fmt.Fprintf(&output, " (%s)", interaction.RecordedAt)
-		}
-		output.WriteByte('\n')
+		writeRecordedAt(&output, interaction.RecordedAt)
+	}
+	fmt.Fprintf(&output, "gRPC interactions: %d\n", len(cassette.GRPCInteractions))
+	for index, interaction := range cassette.GRPCInteractions {
+		fmt.Fprintf(
+			&output,
+			"%d. %s -> %d %s",
+			index+1,
+			terminalText(interaction.Request.Method),
+			interaction.Response.StatusCode,
+			terminalText(interaction.Response.StatusMessage),
+		)
+		writeRecordedAt(&output, interaction.RecordedAt)
+	}
+	fmt.Fprintf(&output, "WebSocket interactions: %d\n", len(cassette.WebSocketInteractions))
+	for index, interaction := range cassette.WebSocketInteractions {
+		fmt.Fprintf(&output, "%d. %s -> %d frame(s)", index+1, terminalText(interaction.URI), len(interaction.Frames))
+		writeRecordedAt(&output, interaction.RecordedAt)
 	}
 	if _, err := io.WriteString(stdout, output.String()); err != nil {
 		return fmt.Errorf("write output: %w", err)
 	}
 	return nil
+}
+
+func writeRecordedAt(output *strings.Builder, recordedAt string) {
+	if recordedAt != "" {
+		fmt.Fprintf(output, " (%s)", terminalText(recordedAt))
+	}
+	output.WriteByte('\n')
+}
+
+func terminalText(value string) string {
+	quoted := strconv.QuoteToGraphic(value)
+	return quoted[1 : len(quoted)-1]
 }
 
 func diffCommand(arguments []string, stdout io.Writer) error {

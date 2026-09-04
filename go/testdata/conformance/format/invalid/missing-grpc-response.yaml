@@ -1,0 +1,7 @@
+version: 1
+interactions: []
+grpc_interactions:
+  - request:
+      method: /example.Service/Get
+      body:
+        type: none
