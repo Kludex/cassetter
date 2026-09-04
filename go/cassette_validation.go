@@ -21,6 +21,9 @@ func (c *Cassette) validate() error {
 		if interaction.Request.Method == "" {
 			return fmt.Errorf("gRPC interaction %d has an empty request method", index+1)
 		}
+		if err := validateJSONDebug(interaction.JSONDebug); err != nil {
+			return fmt.Errorf("gRPC interaction %d: %w", index+1, err)
+		}
 	}
 	for index, interaction := range c.WebSocketInteractions {
 		if interaction.URI == "" {

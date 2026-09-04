@@ -1,0 +1,24 @@
+{
+  "grpc": [
+    {
+      "jsonDebug": {
+        "1": "value"
+      },
+      "metadata": {},
+      "method": "/example.Service/Get",
+      "recordedAt": "",
+      "requestBody": {
+        "type": "none"
+      },
+      "responseBody": {
+        "type": "none"
+      },
+      "responseMetadata": {},
+      "statusCode": 0,
+      "statusMessage": "OK"
+    }
+  ],
+  "http": [],
+  "version": 1,
+  "ws": []
+}

@@ -24,8 +24,15 @@ type GRPCResponse struct {
 
 // UnmarshalYAML reads a gRPC response and applies the shared status-message default.
 func (r *GRPCResponse) UnmarshalYAML(node *yaml.Node) error {
+	statusMessageNode, found := mappingValue(node, "status_message")
+	if found && statusMessageNode.Tag == "!!null" {
+		return errors.New("gRPC response status_message cannot be null")
+	}
 	type response GRPCResponse
-	value := response{StatusMessage: "OK"}
+	value := response{}
+	if !found {
+		value.StatusMessage = "OK"
+	}
 	if err := node.Decode(&value); err != nil {
 		return err
 	}
@@ -59,6 +66,11 @@ func (i *GRPCInteraction) UnmarshalYAML(node *yaml.Node) error {
 	if err := node.Decode(&value); err != nil {
 		return err
 	}
+	normalizedDebug, err := normalizeJSONDebug(value.JSONDebug)
+	if err != nil {
+		return err
+	}
+	value.JSONDebug = normalizedDebug
 	*i = GRPCInteraction(value)
 	return nil
 }

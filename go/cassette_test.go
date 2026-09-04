@@ -3,6 +3,7 @@ package cassetter_test
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -155,6 +156,20 @@ func TestSaveRejectsInvalidBody(t *testing.T) {
 		if err := cassette.Save(path); err == nil {
 			t.Fatal("Save accepted an invalid body")
 		}
+	}
+}
+
+func TestSaveRejectsNonFiniteGRPCDebugData(t *testing.T) {
+	t.Parallel()
+	cassette := &cassetter.Cassette{
+		Version: 1,
+		GRPCInteractions: []cassetter.GRPCInteraction{{
+			Request:   cassetter.GRPCRequest{Method: "/example.Service/Get"},
+			JSONDebug: map[string]any{"value": math.NaN()},
+		}},
+	}
+	if err := cassette.Save(filepath.Join(t.TempDir(), "invalid.yaml")); err == nil {
+		t.Fatal("Save accepted non-finite gRPC debug data")
 	}
 }
 

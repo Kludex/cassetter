@@ -12,6 +12,14 @@
     "cassette": "null-grpc-status-code.yaml"
   },
   {
+    "name": "null gRPC status message",
+    "cassette": "null-grpc-status-message.yaml"
+  },
+  {
+    "name": "non-finite gRPC debug number",
+    "cassette": "non-finite-grpc-debug-number.yaml"
+  },
+  {
     "name": "missing WebSocket frame direction",
     "cassette": "missing-ws-direction.yaml"
   },
