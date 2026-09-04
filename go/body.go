@@ -14,9 +14,9 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-func bodyFromBytes(content []byte, contentType string) Body {
+func bodyFromBytes(content []byte, contentType string) (Body, error) {
 	if len(content) == 0 {
-		return Body{Type: BodyTypeNone}
+		return Body{Type: BodyTypeNone}, nil
 	}
 	validText := utf8.Valid(content)
 	if validText {
@@ -30,15 +30,18 @@ func bodyFromBytes(content []byte, contentType string) Body {
 		if decoder.Decode(&value) == nil {
 			var extra any
 			if decoder.Decode(&extra) == io.EOF {
-				content := normalizeJSONUnicode(materializeJSONNumbers(value))
-				return Body{Type: BodyTypeJSON, Content: content}
+				content, err := normalizeJSONUnicode(materializeJSONNumbers(value))
+				if err != nil {
+					return Body{}, fmt.Errorf("normalize JSON body: %w", err)
+				}
+				return Body{Type: BodyTypeJSON, Content: content}, nil
 			}
 		}
 	}
 	if validText {
-		return Body{Type: BodyTypeText, Content: string(content)}
+		return Body{Type: BodyTypeText, Content: string(content)}, nil
 	}
-	return Body{Type: BodyTypeBinary, Content: bytes.Clone(content)}
+	return Body{Type: BodyTypeBinary, Content: bytes.Clone(content)}, nil
 }
 
 func bodyBytes(body Body) ([]byte, error) {

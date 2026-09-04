@@ -20,7 +20,10 @@ func (t *Transport) requestForMatching(request *http.Request) (HTTPRequest, erro
 		if err != nil {
 			return HTTPRequest{}, err
 		}
-		body = bodyFromBytes(content, headerValue(headers, "content-type"))
+		body, err = bodyFromBytes(content, headerValue(headers, "content-type"))
+		if err != nil {
+			return HTTPRequest{}, err
+		}
 	}
 	probe := HTTPRequest{
 		Method:  request.Method,

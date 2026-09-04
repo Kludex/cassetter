@@ -63,7 +63,10 @@ func bodyFromTOML(bodyType BodyType, content *string) (Body, error) {
 		if err := decoder.Decode(&extra); err != io.EOF {
 			return Body{}, fmt.Errorf("invalid JSON content after the first value")
 		}
-		content := normalizeJSONUnicode(materializeJSONNumbers(value))
+		content, err := normalizeJSONUnicode(materializeJSONNumbers(value))
+		if err != nil {
+			return Body{}, fmt.Errorf("normalize JSON content: %w", err)
+		}
 		return Body{Type: bodyType, Content: content}, nil
 	case BodyTypeText:
 		return Body{Type: bodyType, Content: norm.NFC.String(*content)}, nil

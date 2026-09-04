@@ -40,7 +40,11 @@ func decodeYAMLBody(node *yaml.Node) (Body, error) {
 	if err != nil {
 		return Body{}, fmt.Errorf("JSON body content: %w", err)
 	}
-	return Body{Type: BodyTypeJSON, Content: normalizeJSONUnicode(normalized)}, nil
+	normalized, err = normalizeJSONUnicode(normalized)
+	if err != nil {
+		return Body{}, fmt.Errorf("JSON body content: %w", err)
+	}
+	return Body{Type: BodyTypeJSON, Content: normalized}, nil
 }
 
 func decodeYAMLBodyScalar(node *yaml.Node) (Body, error) {
@@ -63,7 +67,10 @@ func decodeYAMLBodyScalar(node *yaml.Node) (Body, error) {
 	if decoder.Decode(&value) == nil {
 		var extra any
 		if decoder.Decode(&extra) == io.EOF {
-			content := normalizeJSONUnicode(materializeJSONNumbers(value))
+			content, err := normalizeJSONUnicode(materializeJSONNumbers(value))
+			if err != nil {
+				return Body{}, fmt.Errorf("JSON body content: %w", err)
+			}
 			return Body{Type: BodyTypeJSON, Content: content}, nil
 		}
 	}
@@ -81,7 +88,11 @@ func decodeYAMLBodyEnvelope(bodyType BodyType, contentNode *yaml.Node) (Body, er
 		if err != nil {
 			return Body{}, fmt.Errorf("JSON body content: %w", err)
 		}
-		return Body{Type: bodyType, Content: normalizeJSONUnicode(normalized)}, nil
+		normalized, err = normalizeJSONUnicode(normalized)
+		if err != nil {
+			return Body{}, fmt.Errorf("JSON body content: %w", err)
+		}
+		return Body{Type: bodyType, Content: normalized}, nil
 	case BodyTypeText:
 		var content string
 		if contentNode.Tag != "!!str" || contentNode.Decode(&content) != nil {
