@@ -106,8 +106,9 @@ first matching interaction.
 The recorder stores protobuf messages as binary bodies. Unary interactions also
 include scrubbed protobuf JSON for inspection. The v1 format stores response
 headers and trailers in one combined metadata map. Replay exposes that map from
-both metadata accessors. Status codes and messages remain separate. Header and
-JSON secret filtering use the same configuration as HTTP recording.
+both metadata accessors. Binary `-bin` metadata values use base64 in the cassette.
+Status codes and messages remain separate. Header and JSON secret filtering use
+the same configuration as HTTP recording.
 
 Use YAML for cassettes that contain gRPC interactions. TOML supports HTTP only.
 Call `NewGRPCRecorder` instead of `NewTestGRPCRecorder` outside a test, then call

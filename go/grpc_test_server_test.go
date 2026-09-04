@@ -26,7 +26,8 @@ func (cassetteTestService) UnaryCall(
 	ctx context.Context,
 	request *grpc_testing.SimpleRequest,
 ) (*grpc_testing.SimpleResponse, error) {
-	if err := grpc.SetHeader(ctx, metadata.Pairs("x-server", "header")); err != nil {
+	header := metadata.Pairs("x-server", "header", "x-binary-bin", string([]byte{0xff, 0x00}))
+	if err := grpc.SetHeader(ctx, header); err != nil {
 		return nil, err
 	}
 	if err := grpc.SetTrailer(ctx, metadata.Pairs("x-server-trailer", "trailer")); err != nil {

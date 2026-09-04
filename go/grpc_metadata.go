@@ -1,6 +1,7 @@
 package cassetter
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strings"
 
@@ -11,8 +12,14 @@ import (
 func grpcMetadataHeader(values metadata.MD) http.Header {
 	headers := make(http.Header, len(values))
 	for name, entries := range values {
+		name = strings.ToLower(name)
 		for _, entry := range entries {
-			headers[strings.ToLower(name)] = append(headers[strings.ToLower(name)], strings.ToValidUTF8(entry, "�"))
+			if strings.HasSuffix(name, "-bin") {
+				entry = base64.StdEncoding.EncodeToString([]byte(entry))
+			} else {
+				entry = strings.ToValidUTF8(entry, "�")
+			}
+			headers[name] = append(headers[name], entry)
 		}
 	}
 	return headers
@@ -31,7 +38,17 @@ func mergeGRPCMetadata(values ...metadata.MD) http.Header {
 func replayGRPCMetadata(headers http.Header) metadata.MD {
 	values := make(metadata.MD, len(headers))
 	for name, entries := range headers {
-		values[strings.ToLower(name)] = append([]string(nil), entries...)
+		name = strings.ToLower(name)
+		for _, entry := range entries {
+			if strings.HasSuffix(name, "-bin") {
+				if decoded, err := base64.StdEncoding.DecodeString(entry); err == nil {
+					entry = string(decoded)
+				} else if decoded, err := base64.RawStdEncoding.DecodeString(entry); err == nil {
+					entry = string(decoded)
+				}
+			}
+			values[name] = append(values[name], entry)
+		}
 	}
 	return values
 }

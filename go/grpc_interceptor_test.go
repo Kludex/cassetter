@@ -40,6 +40,9 @@ func TestGRPCInterceptorsRecordAndReplayUnaryAndStreamingCalls(t *testing.T) {
 	if got := grpcHeaderValues(unary.Request.Metadata, "x-request"); len(got) != 1 || got[0] != "request" {
 		t.Fatalf("recorded x-request = %v, want request", got)
 	}
+	if got := grpcHeaderValues(unary.Response.Metadata, "x-binary-bin"); len(got) != 1 || got[0] != "/wA=" {
+		t.Fatalf("recorded x-binary-bin = %v, want base64 value", got)
+	}
 	debug := unary.JSONDebug.(map[string]any)
 	requestDebug := debug["request"].(map[string]any)
 	payloadDebug := requestDebug["payload"].(map[string]any)

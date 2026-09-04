@@ -1,6 +1,7 @@
 package cassetter_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -30,6 +31,9 @@ func exerciseGRPCClient(t *testing.T, client grpc_testing.TestServiceClient) {
 	}
 	if got := header.Get("x-server"); len(got) != 1 || got[0] != "header" {
 		t.Fatalf("unary header = %v, want header", got)
+	}
+	if got := header.Get("x-binary-bin"); len(got) != 1 || !bytes.Equal([]byte(got[0]), []byte{0xff, 0x00}) {
+		t.Fatalf("unary binary header = %q, want ff00", got)
 	}
 	if got := trailer.Get("x-server-trailer"); len(got) != 1 || got[0] != "trailer" {
 		t.Fatalf("unary trailer = %v, want trailer", got)

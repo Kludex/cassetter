@@ -33,12 +33,15 @@ func (s *recordingGRPCClientStream) SendMsg(message any) error {
 		return s.failRecording(err)
 	}
 	s.requestMu.Lock()
-	defer s.requestMu.Unlock()
-	if err := s.ClientStream.SendMsg(message); err != nil {
+	err = s.ClientStream.SendMsg(message)
+	if err == nil {
+		s.requestChunks = append(s.requestChunks, content)
+	}
+	s.requestMu.Unlock()
+	if err == nil || errors.Is(err, io.EOF) {
 		return err
 	}
-	s.requestChunks = append(s.requestChunks, content)
-	return nil
+	return joinGRPCErrors(err, s.finalize(err))
 }
 
 func (s *recordingGRPCClientStream) RecvMsg(message any) error {
