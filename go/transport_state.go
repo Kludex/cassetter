@@ -66,9 +66,12 @@ func (t *Transport) load() {
 		t.saveEmpty = exists && t.config.mode == RecordModeAll
 	}
 	t.played = make([]bool, len(t.cassette.Interactions))
+	t.grpcPlayed = make([]bool, len(t.cassette.GRPCInteractions))
 	t.orders = make([]uint64, len(t.cassette.Interactions))
+	t.grpcOrders = make([]uint64, len(t.cassette.GRPCInteractions))
 	t.index = make(map[string][]int, len(t.cassette.Interactions))
 	t.pending = make(map[uint64]pendingRecording)
+	t.grpcPending = make(map[uint64]string)
 	for index, interaction := range t.cassette.Interactions {
 		t.orders[index] = uint64(index)
 		if t.usesMethodURIIndex() {
@@ -77,7 +80,12 @@ func (t *Transport) load() {
 			t.index[key] = append(t.index[key], index)
 		}
 	}
-	t.nextOrder = uint64(len(t.cassette.Interactions))
+	for index := range t.cassette.GRPCInteractions {
+		t.grpcOrders[index] = uint64(index)
+	}
+	t.nextOrder = uint64(
+		len(t.cassette.Interactions) + len(t.cassette.GRPCInteractions) + len(t.cassette.WebSocketInteractions),
+	)
 	t.canRecord = t.config.mode == RecordModeNewEpisodes || t.config.mode == RecordModeAll ||
 		t.config.mode == RecordModeRewrite || t.config.mode == RecordModeOnce && !exists
 }

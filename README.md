@@ -26,15 +26,15 @@ uv add cassetter
 
 ## Go
 
-Use the Go module when you need cassette recording through `http.RoundTripper`:
+Use the Go module when you need HTTP recording through `http.RoundTripper` or gRPC client interceptors:
 
 ```bash
 go get github.com/Kludex/cassetter/go
 ```
 
-It reads and writes the same structured YAML and TOML formats, including VCR.py YAML migration. It also provides
-`inspect`, `diff`, `scrub`, and `convert` commands. See the [Go documentation](go/README.md) for the complete example
-and record modes.
+It reads and writes the same structured YAML and TOML formats, including VCR.py YAML migration. It supports all four
+gRPC call patterns with YAML cassettes. It also provides `inspect`, `diff`, `scrub`, and `convert` commands. See the
+[Go documentation](go/README.md) for complete examples and record modes.
 
 ## Quick start
 
