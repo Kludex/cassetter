@@ -11,6 +11,8 @@ version = "0.0.0"
 edition = "2021"
 rust-version = "1.83"
 license = "MIT"
+repository = "https://github.com/Kludex/cassetter"
+homepage = "https://kludex.github.io/cassetter/"
 
 [workspace.dependencies]
 cassetter-core = { path = "crates/cassetter-core" }

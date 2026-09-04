@@ -5,6 +5,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/cassetter-core"
+readme = "README.md"
+keywords = ["cassette", "http", "recording", "replay", "testing"]
+categories = ["development-tools::testing"]
 
 [dependencies]
 serde.workspace = true

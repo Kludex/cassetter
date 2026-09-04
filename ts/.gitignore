@@ -3,5 +3,4 @@ dist/
 
 # Built by `npm run build:native`; native/package.json is committed.
 native/*.node
-native/index.js
 native/index.d.ts

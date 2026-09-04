@@ -13,6 +13,9 @@ package, so cassettes are interchangeable between them.
 npm install --save-dev cassetter
 ```
 
+The package includes native addons for macOS and Windows on x64 and ARM64. It
+also includes Linux x64 and ARM64 addons for glibc and musl.
+
 ## Quick start
 
 ```ts
@@ -52,7 +55,7 @@ await useCassette("cassette.yaml", async (cassette) => {
 ## Record modes
 
 | Mode | Behavior |
-|------|----------|
+| --- | --- |
 | `none` | Replay only. Throws `NoMatchError` if nothing matches. |
 | `once` | Record if the cassette doesn't exist, otherwise replay. (default) |
 | `new_episodes` | Replay what exists, record what doesn't. |
@@ -71,7 +74,9 @@ rather than silently reaching the network and appending to the file.
 Secrets are filtered **at write time**, so they never reach disk. The defaults
 come from the Rust core - the same lists the Python package uses:
 
-- **Headers**: `authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`, `x-auth-token`, `proxy-authorization`, `www-authenticate`, `x-goog-api-key`, `x-amz-security-token`
+- **Headers**: `authorization`, `cookie`, `set-cookie`, `x-api-key`, `api-key`,
+  `x-auth-token`, `proxy-authorization`, `www-authenticate`, `x-goog-api-key`,
+  `x-amz-security-token`
 - **Query params**: `api_key`, `apikey`, `token`, `access_token`, `client_secret`
 - **JSON body fields**: `access_token`, `refresh_token`, `client_secret`, `password`
 
@@ -135,9 +140,9 @@ hex, so helpers are provided:
 ```ts
 import { bodyToBuffer, binaryBody, binaryBodyBytes } from "cassetter";
 
-bodyToBuffer({ type: "text", content: "hi" });         // <Buffer 68 69>
-binaryBody(Buffer.from("hi"));                          // { type: "binary", content: "6869" }
-binaryBodyBytes({ type: "binary", content: "6869" });   // <Buffer 68 69>
+bodyToBuffer({ type: "text", content: "hi" });
+binaryBody(Buffer.from("hi"));
+binaryBodyBytes({ type: "binary", content: "6869" });
 ```
 
 ## Interception

@@ -19,8 +19,7 @@ target/
 # Node
 node_modules/
 
-# Generated napi glue (rebuilt by `npm run build:native`)
-ts/native/index.js
+# Generated napi declarations
 ts/native/index.d.ts
 
 # Coverage

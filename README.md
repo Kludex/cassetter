@@ -644,3 +644,5 @@ cd ts && npm install && npm run build:native && npm test
 
 Changes to matching, security, the cassette format, or body handling belong in
 `crates/cassetter-core` so every binding gets them at once.
+
+Use the [release checklist](RELEASING.md) to publish every SDK from one version tag.
