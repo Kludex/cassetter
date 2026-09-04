@@ -1,9 +1,10 @@
 package cassetter
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -19,11 +20,64 @@ func (value yamlJSONValue) MarshalYAML() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var document yaml.Node
-	if err := yaml.Unmarshal(content, &document); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	var canonical any
+	if err := decoder.Decode(&canonical); err != nil {
 		return nil, err
 	}
-	return document.Content[0], nil
+	return encodeYAMLJSONValue(canonical)
+}
+
+func encodeYAMLJSONValue(value any) (*yaml.Node, error) {
+	switch typed := value.(type) {
+	case nil:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}, nil
+	case bool:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(typed)}, nil
+	case json.Number:
+		if _, err := json.Marshal(typed); err != nil {
+			return nil, err
+		}
+		tag := "!!int"
+		if strings.ContainsAny(string(typed), ".eE") {
+			tag = "!!float"
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: string(typed)}, nil
+	case string:
+		node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: typed}
+		if strings.Contains(typed, "\n") && strings.Trim(typed, "\n \t") == "" {
+			node.Style = yaml.DoubleQuotedStyle
+		}
+		return node, nil
+	case []any:
+		node := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, child := range typed {
+			childNode, err := encodeYAMLJSONValue(child)
+			if err != nil {
+				return nil, err
+			}
+			node.Content = append(node.Content, childNode)
+		}
+		return node, nil
+	case map[string]any:
+		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			childNode, err := encodeYAMLJSONValue(typed[key])
+			if err != nil {
+				return nil, err
+			}
+			node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, childNode)
+		}
+		return node, nil
+	default:
+		return nil, fmt.Errorf("unsupported JSON value %T", value)
+	}
 }
 
 func decodeYAMLJSONValue(node *yaml.Node) (any, error) {
@@ -67,16 +121,9 @@ func decodeYAMLJSONValue(node *yaml.Node) (any, error) {
 			if value, err := strconv.ParseUint(node.Value, 0, 64); err == nil {
 				return value, nil
 			}
-			return json.Number(node.Value), nil
+			return validatedJSONNumber(node.Value)
 		case "!!float":
-			if isDecimalInteger(node.Value) {
-				return json.Number(node.Value), nil
-			}
-			value, err := strconv.ParseFloat(node.Value, 64)
-			if err != nil || math.IsInf(value, 0) || math.IsNaN(value) {
-				return nil, fmt.Errorf("invalid JSON number %q", node.Value)
-			}
-			return value, nil
+			return validatedJSONNumber(node.Value)
 		default:
 			return nil, fmt.Errorf("unsupported JSON scalar %q", node.Tag)
 		}
@@ -85,15 +132,10 @@ func decodeYAMLJSONValue(node *yaml.Node) (any, error) {
 	}
 }
 
-func isDecimalInteger(value string) bool {
-	value = strings.TrimPrefix(strings.TrimPrefix(value, "+"), "-")
-	if value == "" {
-		return false
+func validatedJSONNumber(value string) (json.Number, error) {
+	number := json.Number(value)
+	if _, err := json.Marshal(number); err != nil {
+		return "", fmt.Errorf("invalid JSON number %q", value)
 	}
-	for _, character := range value {
-		if character < '0' || character > '9' {
-			return false
-		}
-	}
-	return true
+	return number, nil
 }

@@ -93,5 +93,5 @@ func parsedYAMLBody(node *yaml.Node) (Body, bool, error) {
 	if err != nil {
 		return Body{}, false, fmt.Errorf("parsed_body must contain JSON-compatible data: %w", err)
 	}
-	return Body{Type: BodyTypeJSON, Content: normalized}, true, nil
+	return Body{Type: BodyTypeJSON, Content: normalizeJSONUnicode(normalized)}, true, nil
 }
