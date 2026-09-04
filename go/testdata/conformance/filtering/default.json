@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "http": [
+    {
+      "method": "POST",
+      "uri": "https://api.example.com/login?API_KEY=[FILTERED]&custom_token=request-custom&keep=one,two#access_token=[FILTERED]&state=kept",
+      "requestHeaders": {
+        "X-Custom-Secret": [
+          "request-custom-header"
+        ],
+        "X-Keep": [
+          "request-kept"
+        ]
+      },
+      "requestBody": {
+        "type": "json",
+        "content": {
+          "user": "alice",
+          "password": "[FILTERED]",
+          "nested": [
+            {
+              "access_token": "[FILTERED]",
+              "private": "request-private"
+            },
+            {
+              "keep": true
+            }
+          ]
+        }
+      },
+      "status": 200,
+      "responseHeaders": {
+        "X-Custom-Secret": [
+          "response-custom-header"
+        ],
+        "X-Keep": [
+          "response-kept"
+        ]
+      },
+      "responseBody": {
+        "type": "text",
+        "content": "{\"access_token\":\"[FILTERED]\",\"ok\":true,\"private\":\"response-private\"}"
+      },
+      "recordedAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "grpc": [
+    {
+      "method": "/example.Account/Login",
+      "metadata": {
+        "x-custom-secret": [
+          "grpc-custom-header"
+        ],
+        "x-keep": [
+          "grpc-kept"
+        ]
+      },
+      "requestBody": {
+        "type": "json",
+        "content": {
+          "password": "[FILTERED]",
+          "private": "grpc-private",
+          "keep": "request"
+        }
+      },
+      "statusCode": 0,
+      "statusMessage": "OK",
+      "responseMetadata": {
+        "x-custom-secret": [
+          "grpc-response-custom-header"
+        ],
+        "x-keep": [
+          "grpc-response-kept"
+        ]
+      },
+      "responseBody": {
+        "type": "json",
+        "content": {
+          "refresh_token": "[FILTERED]",
+          "private": "grpc-response-private",
+          "keep": "response"
+        }
+      },
+      "jsonDebug": {
+        "request": {
+          "client_secret": "[FILTERED]",
+          "private": "grpc-debug-private",
+          "keep": "debug"
+        }
+      },
+      "recordedAt": "2026-01-01T00:00:01Z"
+    }
+  ],
+  "ws": [
+    {
+      "uri": "wss://stream.example.com/events?token=[FILTERED]&custom_token=ws-custom&keep=yes",
+      "headers": {
+        "x-custom-secret": [
+          "ws-custom-header"
+        ],
+        "x-keep": [
+          "ws-kept"
+        ]
+      },
+      "frames": [
+        {
+          "direction": "send",
+          "frameType": "text",
+          "body": {
+            "type": "json",
+            "content": {
+              "access_token": "[FILTERED]",
+              "private": "ws-private",
+              "keep": "send"
+            }
+          },
+          "offsetMs": 0
+        },
+        {
+          "direction": "recv",
+          "frameType": "text",
+          "body": {
+            "type": "text",
+            "content": "password=[FILTERED]&private=ws-private&keep=recv"
+          },
+          "offsetMs": 10
+        },
+        {
+          "direction": "recv",
+          "frameType": "binary",
+          "body": {
+            "type": "binary",
+            "content": "010203"
+          },
+          "offsetMs": 20
+        }
+      ],
+      "recordedAt": "2026-01-01T00:00:02Z"
+    }
+  ]
+}

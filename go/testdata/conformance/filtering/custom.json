@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "http": [
+    {
+      "method": "POST",
+      "uri": "https://api.example.com/login?API_KEY=***&custom_token=***&keep=one,two#access_token=***&state=kept",
+      "requestHeaders": {
+        "X-Keep": [
+          "request-kept"
+        ]
+      },
+      "requestBody": {
+        "type": "json",
+        "content": {
+          "user": "alice",
+          "password": "***",
+          "nested": [
+            {
+              "access_token": "***",
+              "private": "***"
+            },
+            {
+              "keep": true
+            }
+          ]
+        }
+      },
+      "status": 200,
+      "responseHeaders": {
+        "X-Keep": [
+          "response-kept"
+        ]
+      },
+      "responseBody": {
+        "type": "text",
+        "content": "{\"access_token\":\"***\",\"ok\":true,\"private\":\"***\"}"
+      },
+      "recordedAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "grpc": [
+    {
+      "method": "/example.Account/Login",
+      "metadata": {
+        "x-keep": [
+          "grpc-kept"
+        ]
+      },
+      "requestBody": {
+        "type": "json",
+        "content": {
+          "password": "***",
+          "private": "***",
+          "keep": "request"
+        }
+      },
+      "statusCode": 0,
+      "statusMessage": "OK",
+      "responseMetadata": {
+        "x-keep": [
+          "grpc-response-kept"
+        ]
+      },
+      "responseBody": {
+        "type": "json",
+        "content": {
+          "refresh_token": "***",
+          "private": "***",
+          "keep": "response"
+        }
+      },
+      "jsonDebug": {
+        "request": {
+          "client_secret": "***",
+          "private": "***",
+          "keep": "debug"
+        }
+      },
+      "recordedAt": "2026-01-01T00:00:01Z"
+    }
+  ],
+  "ws": [
+    {
+      "uri": "wss://stream.example.com/events?token=***&custom_token=***&keep=yes",
+      "headers": {
+        "x-keep": [
+          "ws-kept"
+        ]
+      },
+      "frames": [
+        {
+          "direction": "send",
+          "frameType": "text",
+          "body": {
+            "type": "json",
+            "content": {
+              "access_token": "***",
+              "private": "***",
+              "keep": "send"
+            }
+          },
+          "offsetMs": 0
+        },
+        {
+          "direction": "recv",
+          "frameType": "text",
+          "body": {
+            "type": "text",
+            "content": "password=***&private=***&keep=recv"
+          },
+          "offsetMs": 10
+        },
+        {
+          "direction": "recv",
+          "frameType": "binary",
+          "body": {
+            "type": "binary",
+            "content": "010203"
+          },
+          "offsetMs": 20
+        }
+      ],
+      "recordedAt": "2026-01-01T00:00:02Z"
+    }
+  ]
+}

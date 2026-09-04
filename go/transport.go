@@ -25,6 +25,7 @@ type Transport struct {
 	canRecord  bool
 	pending    map[uint64]pendingRecording
 	recordErr  error
+	saveEmpty  bool
 	closed     bool
 	closeErr   error
 }

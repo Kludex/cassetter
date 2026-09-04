@@ -1,0 +1,43 @@
+{
+  "https://example.com/empty": {"type": "none"},
+  "https://example.com/nested-json": {
+    "type": "json",
+    "content": {"outer": {"items": [1, true, null, {"name": "café"}]}}
+  },
+  "https://example.com/vendor-json": {
+    "type": "json",
+    "content": {"vendor": true}
+  },
+  "https://example.com/sniff-json": {
+    "type": "json",
+    "content": [{"sniffed": true}]
+  },
+  "https://example.com/invalid-json": {
+    "type": "text",
+    "content": "{not json}"
+  },
+  "https://example.com/unicode": {
+    "type": "text",
+    "content": "é and café"
+  },
+  "https://example.com/binary": {
+    "type": "binary",
+    "content": "fffe0001"
+  },
+  "https://example.com/gzip": {
+    "type": "json",
+    "content": {"compressed": true, "nested": {"value": 42}}
+  },
+  "https://example.com/deflate": {
+    "type": "json",
+    "content": {"compressed": true, "nested": {"value": 42}}
+  },
+  "https://example.com/brotli": {
+    "type": "json",
+    "content": {"compressed": true, "nested": {"value": 42}}
+  },
+  "https://example.com/zstandard": {
+    "type": "json",
+    "content": {"compressed": true, "nested": {"value": 42}}
+  }
+}

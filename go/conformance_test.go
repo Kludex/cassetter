@@ -48,6 +48,26 @@ func TestFormatConformance(t *testing.T) {
 	}
 }
 
+func TestUnknownTopLevelFieldConformance(t *testing.T) {
+	t.Parallel()
+	fixtures := formatFixtures(t)
+	cassette, err := cassetter.Load(filepath.Join(fixtures, "unknown-fields.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "unknown-fields.yaml")
+	if err := cassette.Save(output); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(content, []byte("future_protocol:")) {
+		t.Fatal("Go save removed an unknown top-level field")
+	}
+}
+
 func TestInvalidFormatConformance(t *testing.T) {
 	t.Parallel()
 	fixtures := formatFixtures(t)
@@ -61,13 +81,13 @@ func TestInvalidFormatConformance(t *testing.T) {
 	}
 }
 
-func TestPackagedFormatFixturesMatchShared(t *testing.T) {
+func TestPackagedConformanceFixturesMatchShared(t *testing.T) {
 	t.Parallel()
-	shared := filepath.Join("..", "conformance", "format")
+	shared := filepath.Join("..", "conformance")
 	if _, err := os.Stat(shared); err != nil {
 		t.Skip("shared fixtures are outside the published Go module")
 	}
-	packaged := filepath.Join("testdata", "conformance", "format")
+	packaged := filepath.Join("testdata", "conformance")
 	files := fixtureFiles(t, shared)
 	if packagedFiles := fixtureFiles(t, packaged); !reflect.DeepEqual(packagedFiles, files) {
 		t.Fatalf("packaged conformance files = %v, shared files = %v", packagedFiles, files)
@@ -110,13 +130,18 @@ func fixtureFiles(t *testing.T, root string) []string {
 	return files
 }
 
-func formatFixtures(t *testing.T) string {
+func conformanceFixtures(t *testing.T) string {
 	t.Helper()
-	shared := filepath.Join("..", "conformance", "format")
+	shared := filepath.Join("..", "conformance")
 	if _, err := os.Stat(shared); err == nil {
 		return shared
 	}
-	return filepath.Join("testdata", "conformance", "format")
+	return filepath.Join("testdata", "conformance")
+}
+
+func formatFixtures(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(conformanceFixtures(t), "format")
 }
 
 func loadFormatCases(t *testing.T, fixtures string) []formatCase {

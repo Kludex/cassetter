@@ -2,22 +2,14 @@
 
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { native } from "../src/binding.js";
-import type {
-  Body,
-  GrpcInteraction,
-  HeaderMap,
-  HttpInteraction,
-  WsInteraction,
-} from "../src/types.js";
+import { canonicalCassette, CONFORMANCE_ROOT } from "./conformance-helpers.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const FORMAT_FIXTURES = join(ROOT, "conformance", "format");
+const FORMAT_FIXTURES = join(CONFORMANCE_ROOT, "conformance", "format");
 
 type FormatCase = {
   name: string;
@@ -37,65 +29,6 @@ const INVALID_CASES = JSON.parse(
   readFileSync(join(FORMAT_FIXTURES, "invalid", "cases.json"), "utf-8"),
 ) as InvalidFormatCase[];
 
-function sortKeys<T extends object>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).sort(([left], [right]) => (left < right ? -1 : 1)),
-  ) as T;
-}
-
-function body(value: Body): object {
-  return value.type === "none"
-    ? { type: "none" }
-    : { type: value.type, content: value.content };
-}
-
-function headers(value: HeaderMap): HeaderMap {
-  return sortKeys(value);
-}
-
-function canonical(cassette: {
-  version: number;
-  interactions: HttpInteraction[];
-  grpcInteractions: GrpcInteraction[];
-  wsInteractions: WsInteraction[];
-}): object {
-  return {
-    version: cassette.version,
-    http: cassette.interactions.map((interaction) => ({
-      method: interaction.request.method,
-      uri: interaction.request.uri,
-      requestHeaders: headers(interaction.request.headers),
-      requestBody: body(interaction.request.body),
-      status: interaction.response.status,
-      responseHeaders: headers(interaction.response.headers),
-      responseBody: body(interaction.response.body),
-      recordedAt: interaction.recordedAt,
-    })),
-    grpc: cassette.grpcInteractions.map((interaction) => ({
-      method: interaction.request.method,
-      metadata: headers(interaction.request.metadata),
-      requestBody: body(interaction.request.body),
-      statusCode: interaction.response.statusCode,
-      statusMessage: interaction.response.statusMessage,
-      responseMetadata: headers(interaction.response.metadata),
-      responseBody: body(interaction.response.body),
-      jsonDebug: interaction.jsonDebug ?? null,
-      recordedAt: interaction.recordedAt,
-    })),
-    ws: cassette.wsInteractions.map((interaction) => ({
-      uri: interaction.uri,
-      headers: headers(interaction.headers),
-      frames: interaction.frames.map((frame) => ({
-        direction: frame.direction,
-        frameType: frame.frameType,
-        body: body(frame.body),
-        offsetMs: frame.offsetMs,
-      })),
-      recordedAt: interaction.recordedAt,
-    })),
-  };
-}
-
 function expected(case_: FormatCase): object {
   return JSON.parse(
     readFileSync(join(FORMAT_FIXTURES, case_.expected), "utf-8"),
@@ -105,7 +38,7 @@ function expected(case_: FormatCase): object {
 describe("cross-language format conformance", () => {
   it.each(CASES)("parses $name into the canonical structure", (case_) => {
     const cassette = native.Cassette.load(join(FORMAT_FIXTURES, case_.cassette));
-    expect(canonical(cassette)).toEqual(expected(case_));
+    expect(canonicalCassette(cassette)).toEqual(expected(case_));
   });
 
   it.each(CASES)("round-trips $name through its storage format without drift", (case_) => {
@@ -113,7 +46,7 @@ describe("cross-language format conformance", () => {
     try {
       const output = join(directory, case_.cassette);
       native.Cassette.load(join(FORMAT_FIXTURES, case_.cassette)).save(output);
-      expect(canonical(native.Cassette.load(output))).toEqual(expected(case_));
+      expect(canonicalCassette(native.Cassette.load(output))).toEqual(expected(case_));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

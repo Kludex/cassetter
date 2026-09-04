@@ -1,0 +1,106 @@
+version: 1
+interactions:
+  - request:
+      method: POST
+      uri: https://api.example.com/login?API_KEY=request-secret&custom_token=request-custom&keep=one,two#access_token=fragment-secret&state=kept
+      headers:
+        Authorization:
+          - Bearer request-secret
+        X-Api-Key:
+          - request-api-key
+        X-Custom-Secret:
+          - request-custom-header
+        X-Keep:
+          - request-kept
+      body:
+        type: json
+        content:
+          user: alice
+          password: request-password
+          nested:
+            - access_token: request-token
+              private: request-private
+            - keep: true
+    response:
+      status: 200
+      headers:
+        Set-Cookie:
+          - session=response-secret
+        X-Custom-Secret:
+          - response-custom-header
+        X-Keep:
+          - response-kept
+      body:
+        type: text
+        content: '{"access_token":"response-secret","ok":true,"private":"response-private"}'
+    recorded_at: "2026-01-01T00:00:00Z"
+grpc_interactions:
+  - request:
+      method: /example.Account/Login
+      metadata:
+        authorization:
+          - Bearer grpc-secret
+        x-custom-secret:
+          - grpc-custom-header
+        x-keep:
+          - grpc-kept
+      body:
+        type: json
+        content:
+          password: grpc-password
+          private: grpc-private
+          keep: request
+    response:
+      status_code: 0
+      status_message: OK
+      metadata:
+        set-cookie:
+          - grpc=response-secret
+        x-custom-secret:
+          - grpc-response-custom-header
+        x-keep:
+          - grpc-response-kept
+      body:
+        type: json
+        content:
+          refresh_token: grpc-refresh
+          private: grpc-response-private
+          keep: response
+    json_debug:
+      request:
+        client_secret: grpc-debug-secret
+        private: grpc-debug-private
+        keep: debug
+    recorded_at: "2026-01-01T00:00:01Z"
+ws_interactions:
+  - uri: wss://stream.example.com/events?token=ws-secret&custom_token=ws-custom&keep=yes
+    headers:
+      authorization:
+        - Bearer ws-secret
+      x-custom-secret:
+        - ws-custom-header
+      x-keep:
+        - ws-kept
+    frames:
+      - direction: send
+        frame_type: text
+        body:
+          type: json
+          content:
+            access_token: ws-token
+            private: ws-private
+            keep: send
+        offset_ms: 0
+      - direction: recv
+        frame_type: text
+        body:
+          type: text
+          content: 'password=ws-password&private=ws-private&keep=recv'
+        offset_ms: 10
+      - direction: recv
+        frame_type: binary
+        body:
+          type: binary
+          content: "010203"
+        offset_ms: 20
+    recorded_at: "2026-01-01T00:00:02Z"

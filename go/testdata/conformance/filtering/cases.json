@@ -1,0 +1,14 @@
+[
+  {
+    "name": "default security filters",
+    "expected": "default.json"
+  },
+  {
+    "name": "custom filters extend defaults",
+    "filterHeaders": ["x-custom-secret"],
+    "filterQueryParameters": ["custom_token"],
+    "bodyScrubPatterns": ["private"],
+    "replacement": "***",
+    "expected": "custom.json"
+  }
+]

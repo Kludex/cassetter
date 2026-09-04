@@ -1,0 +1,17 @@
+version: 1
+interactions:
+  - request:
+      method: GET
+      uri: https://example.com/recorded
+      body:
+        type: none
+    response:
+      status: 201
+      headers:
+        content-type:
+          - application/json
+      body:
+        type: json
+        content:
+          source: cassette
+    recorded_at: "2026-01-01T00:00:00Z"

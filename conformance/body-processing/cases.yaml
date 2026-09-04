@@ -1,0 +1,145 @@
+version: 1
+interactions:
+  - request:
+      method: GET
+      uri: https://example.com/empty
+      body:
+        type: none
+    response:
+      status: 200
+      body:
+        type: none
+  - request:
+      method: GET
+      uri: https://example.com/nested-json
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/json
+      body:
+        type: text
+        content: '{"outer":{"items":[1,true,null,{"name":"caf\u00e9"}]}}'
+  - request:
+      method: GET
+      uri: https://example.com/vendor-json
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/vnd.api+json; charset=utf-8
+      body:
+        type: binary
+        content: 7b2276656e646f72223a747275657d
+  - request:
+      method: GET
+      uri: https://example.com/sniff-json
+      body:
+        type: none
+    response:
+      status: 200
+      body:
+        type: binary
+        content: 5b7b22736e6966666564223a747275657d5d
+  - request:
+      method: GET
+      uri: https://example.com/invalid-json
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/json
+      body:
+        type: binary
+        content: 7b6e6f74206a736f6e7d
+  - request:
+      method: GET
+      uri: https://example.com/unicode
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - text/plain; charset=utf-8
+        content-encoding:
+          - gzip
+      body:
+        type: binary
+        content: 1f8b08000000000000ff4a3dd3a8909897a2909c98967aa611100000ffffd0326d950e000000
+  - request:
+      method: GET
+      uri: https://example.com/binary
+      body:
+        type: none
+    response:
+      status: 200
+      body:
+        type: binary
+        content: fffe0001
+  - request:
+      method: GET
+      uri: https://example.com/gzip
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/json
+        content-encoding:
+          - gzip
+      body:
+        type: binary
+        content: 1f8b08000000000000ffaa564acecf2d284a2d2e4e4d51b22a292a4dd551ca4b2d2e01f1aa95ca12734a5395ac4c8c6a6b01010000ffff82200ed229000000
+  - request:
+      method: GET
+      uri: https://example.com/deflate
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/json
+        content-encoding:
+          - deflate
+      body:
+        type: binary
+        content: 789caa564acecf2d284a2d2e4e4d51b22a292a4dd551ca4b2d2e01f1aa95ca12734a5395ac4c8c6a6b01010000ffff3ba70e92
+  - request:
+      method: GET
+      uri: https://example.com/brotli
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/json
+        content-encoding:
+          - br
+      body:
+        type: binary
+        content: 1b28000004fecf96facb9249bf554477eba63519651559f4857da796fca3b60bad16182fc90a2dc850f81d
+  - request:
+      method: GET
+      uri: https://example.com/zstandard
+      body:
+        type: none
+    response:
+      status: 200
+      headers:
+        content-type:
+          - application/json
+        content-encoding:
+          - zstd
+      body:
+        type: binary
+        content: 28b52ffd04004901007b22636f6d70726573736564223a747275652c226e6573746564223a7b2276616c7565223a34327d7d843c475d

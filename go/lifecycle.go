@@ -59,6 +59,10 @@ func (t *Transport) Close() error {
 		pending := t.pending[order]
 		err = errors.Join(err, &IncompleteRecordingError{Method: pending.method, URI: pending.uri})
 	}
+	if t.saveEmpty {
+		err = errors.Join(err, t.cassette.Save(t.config.path))
+		t.saveEmpty = false
+	}
 	t.closeErr = err
 	return err
 }
