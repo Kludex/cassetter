@@ -39,6 +39,24 @@ func (c *WebSocketConn) appendCloseFrame(err error) {
 	})
 }
 
+func scrubWebSocketCloseBody(body Body, patterns []string, replacement string) Body {
+	if body.Type != BodyTypeBinary {
+		return body
+	}
+	content, ok := body.Content.([]byte)
+	if !ok || len(content) < 2 {
+		return body
+	}
+	reason := scrubBody(Body{Type: BodyTypeText, Content: string(content[2:])}, patterns, replacement)
+	scrubbedReason, err := bodyBytes(reason)
+	if err != nil {
+		return body
+	}
+	scrubbed := append([]byte(nil), content[:2]...)
+	scrubbed = append(scrubbed, scrubbedReason...)
+	return Body{Type: BodyTypeBinary, Content: scrubbed}
+}
+
 func replayWebSocketClose(frame WebSocketFrame) (websocket.CloseError, error) {
 	if frame.Body.Type != BodyTypeBinary {
 		return websocket.CloseError{}, fmt.Errorf("recorded WebSocket close body has type %q, want binary", frame.Body.Type)

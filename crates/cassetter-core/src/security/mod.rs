@@ -3,7 +3,7 @@ pub mod defaults;
 pub mod headers;
 
 use crate::protocol::grpc::GrpcInteraction;
-use crate::protocol::http::HttpInteraction;
+use crate::protocol::http::{Body, BodyContent, HttpInteraction};
 use crate::protocol::ws::WsInteraction;
 use crate::{CassetteError, Result};
 
@@ -143,6 +143,19 @@ pub fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig
         scrubbed.uri = uri;
     }
     for frame in &mut scrubbed.frames {
+        match (frame.frame_type.as_str(), &frame.body.inner) {
+            ("close", BodyContent::Binary(content)) if content.len() >= 2 => {
+                let mut encoded = content[..2].to_vec();
+                let reason = Body::text(String::from_utf8_lossy(&content[2..]).into_owned());
+                let scrubbed_reason = config.scrubber.scrub_body(&reason, &config.replacement);
+                if let BodyContent::Text(value) = scrubbed_reason.inner {
+                    encoded.extend_from_slice(value.as_bytes());
+                    frame.body = Body::binary(encoded);
+                    continue;
+                }
+            }
+            _ => {}
+        }
         frame.body = config.scrubber.scrub_body(&frame.body, &config.replacement);
     }
     scrubbed
@@ -175,7 +188,6 @@ mod tests {
 
     use super::*;
     use crate::protocol::grpc::{GrpcRequest, GrpcResponse};
-    use crate::protocol::http::{Body, BodyContent};
     use crate::protocol::ws::WsFrame;
 
     fn default_config() -> SecurityConfig {
@@ -251,6 +263,12 @@ mod tests {
                     body: Body::binary(vec![1, 2, 3]),
                     offset_ms: 20,
                 },
+                WsFrame {
+                    direction: "recv".to_string(),
+                    frame_type: "close".to_string(),
+                    body: Body::binary(b"\x03\xf0access_token=secret".to_vec()),
+                    offset_ms: 30,
+                },
             ],
             recorded_at: "2026-01-01T00:00:00Z".to_string(),
         };
@@ -279,6 +297,10 @@ mod tests {
             other => panic!("expected text body, got {other:?}"),
         }
         assert_eq!(scrubbed.frames[2].body, interaction.frames[2].body);
+        assert_eq!(
+            scrubbed.frames[3].body,
+            Body::binary(b"\x03\xf0access_token=[FILTERED]".to_vec())
+        );
     }
 
     #[test]

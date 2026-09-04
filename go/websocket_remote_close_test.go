@@ -22,7 +22,7 @@ func TestWebSocketRecorderFinalizesRemoteClose(t *testing.T) {
 		if err := connection.Write(request.Context(), websocket.MessageText, []byte("message")); err != nil {
 			return
 		}
-		_ = connection.Close(websocket.StatusPolicyViolation, "denied")
+		_ = connection.Close(websocket.StatusPolicyViolation, "access_token=secret")
 	}))
 	t.Cleanup(server.Close)
 	path := filepath.Join(t.TempDir(), "remote-close.yaml")
@@ -70,7 +70,8 @@ func TestWebSocketRecorderFinalizesRemoteClose(t *testing.T) {
 	}
 	_, _, err = replay.Read(context.Background())
 	var closeError websocket.CloseError
-	if !errors.As(err, &closeError) || closeError.Code != websocket.StatusPolicyViolation || closeError.Reason != "denied" {
-		t.Fatalf("replayed close error = %v, want policy violation denied", err)
+	if !errors.As(err, &closeError) || closeError.Code != websocket.StatusPolicyViolation ||
+		closeError.Reason != "access_token=[FILTERED]" {
+		t.Fatalf("replayed close error = %v, want filtered policy violation", err)
 	}
 }

@@ -1118,7 +1118,7 @@ async def test_record_ws_close_status(tmp_path: Path) -> None:
 
     class FakeWs:
         async def recv(self) -> str:
-            raise ConnectionClosedError(Close(1008, "denied"), None)
+            raise ConnectionClosedError(Close(1008, "access_token=secret"), None)
 
     token = current_cassette.set(cassette)
     try:
@@ -1134,7 +1134,7 @@ async def test_record_ws_close_status(tmp_path: Path) -> None:
     frame = cassette.ws_interactions[0].frames[0]
     assert frame.direction == "recv"
     assert frame.frame_type == "close"
-    assert frame.body.content == b"\x03\xf0denied"
+    assert frame.body.content == b"\x03\xf0access_token=[FILTERED]"
 
 
 @pytest.mark.anyio

@@ -49,11 +49,16 @@ func (c *Cassette) Scrub(config SecurityConfig) {
 		filterHeaders(interaction.Headers, config.FilterHeaders)
 		interaction.URI = scrubURI(interaction.URI, config.FilterQueryParameters, config.Replacement)
 		for frameIndex := range interaction.Frames {
-			interaction.Frames[frameIndex].Body = scrubBody(
-				interaction.Frames[frameIndex].Body,
-				config.BodyScrubPatterns,
-				config.Replacement,
-			)
+			frame := &interaction.Frames[frameIndex]
+			if frame.FrameType == "close" {
+				frame.Body = scrubWebSocketCloseBody(
+					frame.Body,
+					config.BodyScrubPatterns,
+					config.Replacement,
+				)
+				continue
+			}
+			frame.Body = scrubBody(frame.Body, config.BodyScrubPatterns, config.Replacement)
 		}
 	}
 }
