@@ -9,20 +9,31 @@ import (
 )
 
 type replayWebSocketConn struct {
-	frames []WebSocketFrame
-	mu     sync.Mutex
-	next   int
-	closed bool
+	frames   []WebSocketFrame
+	terminal websocket.CloseError
+	mu       sync.Mutex
+	next     int
+	closed   bool
 }
 
-func newReplayWebSocketConn(interaction WebSocketInteraction) *WebSocketConn {
+func newReplayWebSocketConn(interaction WebSocketInteraction) (*WebSocketConn, error) {
 	frames := make([]WebSocketFrame, 0, len(interaction.Frames))
+	terminal := websocket.CloseError{Code: websocket.StatusNormalClosure, Reason: "cassette replay exhausted"}
 	for _, frame := range interaction.Frames {
-		if frame.Direction == "recv" {
-			frames = append(frames, frame)
+		if frame.Direction != "recv" {
+			continue
 		}
+		if frame.FrameType == "close" {
+			var err error
+			terminal, err = replayWebSocketClose(frame)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		frames = append(frames, frame)
 	}
-	return &WebSocketConn{replay: &replayWebSocketConn{frames: frames}}
+	return &WebSocketConn{replay: &replayWebSocketConn{frames: frames, terminal: terminal}}, nil
 }
 
 func (c *replayWebSocketConn) read(ctx context.Context) (websocket.MessageType, []byte, error) {
@@ -33,7 +44,7 @@ func (c *replayWebSocketConn) read(ctx context.Context) (websocket.MessageType, 
 	if c.closed || c.next >= len(c.frames) {
 		c.closed = true
 		c.mu.Unlock()
-		return 0, nil, websocket.CloseError{Code: websocket.StatusNormalClosure, Reason: "cassette replay exhausted"}
+		return 0, nil, c.terminal
 	}
 	frame := c.frames[c.next]
 	c.next++

@@ -42,6 +42,8 @@ func (c *WebSocketConn) Read(ctx context.Context) (websocket.MessageType, []byte
 	messageType, content, err := c.live.Read(ctx)
 	if err == nil {
 		err = c.appendFrame("recv", messageType, content)
+	} else {
+		c.appendCloseFrame(err)
 	}
 	c.readMu.Unlock()
 	if err != nil {

@@ -49,7 +49,11 @@ func (t *Transport) DialWebSocket(
 			return nil, nil, err
 		}
 		if found {
-			return newReplayWebSocketConn(interaction), replayWebSocketResponse(parsed), nil
+			connection, err := newReplayWebSocketConn(interaction)
+			if err != nil {
+				return nil, nil, err
+			}
+			return connection, replayWebSocketResponse(parsed), nil
 		}
 	}
 	if !t.canRecord {

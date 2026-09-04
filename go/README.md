@@ -152,9 +152,9 @@ func TestEvents(t *testing.T) {
 ```
 
 `DialWebSocket` uses [`github.com/coder/websocket`](https://github.com/coder/websocket).
-It records successful text and binary messages until the connection closes. It
-replays received messages in order without opening a network connection. Sent
-messages do not participate in matching, which matches the other SDKs.
+It records successful text and binary messages with the terminal close status.
+It replays received messages in order without opening a network connection.
+Sent messages do not participate in matching, which matches the other SDKs.
 
 WebSocket matching uses the filtered URI. It supports `WithURINormalizer`,
 repeated playback, host bypass options, header filtering, JSON secret scrubbing,

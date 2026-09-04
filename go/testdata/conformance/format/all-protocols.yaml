@@ -118,4 +118,10 @@ ws_interactions:
       # binary body would decode to nothing. Cassetter quotes it when writing.
       content: '00010203'
     offset_ms: 250
+  - direction: recv
+    frame_type: close
+    body:
+      type: binary
+      content: 03f064656e696564
+    offset_ms: 300
   recorded_at: '2026-01-05T00:00:00Z'

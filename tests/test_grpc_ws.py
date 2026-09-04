@@ -9,7 +9,8 @@ import grpc.aio
 import pytest
 import websockets.asyncio.client
 import websockets.exceptions
-from websockets.exceptions import ConnectionClosedOK
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+from websockets.frames import Close
 
 from cassetter._core import (
     Body,
@@ -972,6 +973,33 @@ async def test_replay_ws_recv() -> None:
 
 
 @pytest.mark.anyio
+async def test_replay_ws_close_status() -> None:
+
+    interaction = WsInteraction(
+        "wss://ws.example.com",
+        {},
+        [WsFrame("recv", "close", Body("binary", b"\x03\xf0denied"), 10)],
+    )
+    ws = VCRWebSocketReplay(interaction)
+    with pytest.raises(ConnectionClosedError) as exc_info:
+        await ws.recv()
+    assert exc_info.value.rcvd == Close(1008, "denied")
+
+
+@pytest.mark.anyio
+async def test_replay_ws_rejects_short_close_frame() -> None:
+
+    interaction = WsInteraction(
+        "wss://ws.example.com",
+        {},
+        [WsFrame("recv", "close", Body("binary", b"\x03"), 10)],
+    )
+    ws = VCRWebSocketReplay(interaction)
+    with pytest.raises(ValueError, match="shorter than its status code"):
+        await ws.recv()
+
+
+@pytest.mark.anyio
 async def test_replay_ws_send_is_noop() -> None:
 
     interaction = WsInteraction("wss://ws.example.com", {}, [])
@@ -1048,6 +1076,31 @@ async def test_record_ws_frames(tmp_path: Path) -> None:
     assert len(interaction.frames) == 2
     assert interaction.frames[0].direction == "send"
     assert interaction.frames[1].direction == "recv"
+
+
+@pytest.mark.anyio
+async def test_record_ws_close_status(tmp_path: Path) -> None:
+
+    path = os.path.join(str(tmp_path), "ws_close.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    class FakeWs:
+        async def recv(self) -> str:
+            raise ConnectionClosedError(Close(1008, "denied"), None)
+
+    token = current_cassette.set(cassette)
+    try:
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
+        with pytest.raises(ConnectionClosedError):
+            await ws.recv()
+    finally:
+        current_cassette.reset(token)
+
+    frame = cassette.ws_interactions[0].frames[0]
+    assert frame.direction == "recv"
+    assert frame.frame_type == "close"
+    assert frame.body.content == b"\x03\xf0denied"
 
 
 @pytest.mark.anyio

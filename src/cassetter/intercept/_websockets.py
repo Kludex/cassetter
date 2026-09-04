@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import struct
 import time
 from collections.abc import AsyncIterator, Generator
 from typing import Any
 
 import websockets
 import websockets.asyncio.client
-from websockets.exceptions import ConnectionClosedOK
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+from websockets.frames import Close
 
 from cassetter._core import Body, WsFrame, WsInteraction
 from cassetter._state import get_current_cassette
@@ -33,7 +35,15 @@ class VCRWebSocket:
         await self._real.send(message)
 
     async def recv(self) -> str | bytes:
-        data: str | bytes = await self._real.recv()
+        try:
+            data: str | bytes = await self._real.recv()
+        except websockets.exceptions.ConnectionClosed as exc:
+            if exc.rcvd is not None:
+                content = struct.pack(">H", exc.rcvd.code) + exc.rcvd.reason.encode()
+                offset_ms = int((time.monotonic() - self._start_time) * 1000)
+                self._frames.append(WsFrame("recv", "close", Body("binary", content), offset_ms))
+            self._flush()
+            raise
         offset_ms = int((time.monotonic() - self._start_time) * 1000)
         if isinstance(data, bytes):
             frame = WsFrame("recv", "binary", Body("binary", data), offset_ms)
@@ -75,7 +85,8 @@ class VCRWebSocketReplay:
 
     def __init__(self, interaction: WsInteraction) -> None:
         self._frames = interaction.frames
-        self._recv_frames = [f for f in self._frames if f.direction == "recv"]
+        self._recv_frames = [f for f in self._frames if f.direction == "recv" and f.frame_type != "close"]
+        self._close = next((f for f in self._frames if f.direction == "recv" and f.frame_type == "close"), None)
         self._recv_index = 0
 
     async def send(self, message: str | bytes) -> None:
@@ -83,6 +94,15 @@ class VCRWebSocketReplay:
 
     async def recv(self) -> str | bytes:
         if self._recv_index >= len(self._recv_frames):
+            if self._close is not None:
+                content = self._close.body.content
+                data = content if isinstance(content, bytes) else b""
+                if len(data) < 2:
+                    raise ValueError("recorded WebSocket close body is shorter than its status code")
+                close = Close(struct.unpack(">H", data[:2])[0], data[2:].decode())
+                if close.code in (1000, 1001):
+                    raise ConnectionClosedOK(close, None)
+                raise ConnectionClosedError(close, None)
             # Recorded frames are exhausted; signal a clean end-of-stream the
             # way a real connection does, so `await ws.recv()` callers see
             # ConnectionClosed instead of a bare StopAsyncIteration.
