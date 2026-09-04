@@ -77,6 +77,50 @@ Available matchers are `method`, `uri`, `headers`, `body`, and `json_body`.
 The headers matcher requires every recorded header to have the same values in the incoming request.
 Use `WithURINormalizer` when environment-specific URI segments should compare as the same resource.
 
+## Expire old cassettes
+
+```go
+transport := cassetter.NewTransport(
+    http.DefaultTransport,
+    cassetter.WithPath("testdata/cassettes/users.yaml"),
+    cassetter.WithMaxAge(7*24*time.Hour),
+    cassetter.WithExpiryAction(cassetter.ExpiryRerecord),
+)
+```
+
+The default expiry action is `ExpiryWarn`. Use `ExpiryFail` to return a
+`CassetteExpiredError`, or `ExpiryRerecord` to remove the cassette and start
+again. `RecordModeNone` still cannot record after an expired cassette is removed.
+
+## Bypass and transform traffic
+
+```go
+transport := cassetter.NewTransport(
+    http.DefaultTransport,
+    cassetter.WithPath("testdata/cassettes/users.yaml"),
+    cassetter.WithIgnoreLocalhost(),
+    cassetter.WithIgnoreHosts("*.googleapis.com"),
+    cassetter.WithRequestHook(func(request *http.Request) error {
+        request.Header.Del("X-Volatile-ID")
+        return nil
+    }),
+    cassetter.WithResponseHook(func(response *http.Response) error {
+        response.Header.Del("X-Request-ID")
+        return nil
+    }),
+)
+```
+
+Bypassed requests go directly to the wrapped transport. The request hook runs
+before matching and can change the request sent live. The response hook runs
+only for live responses. Return `ErrSkipRecording` from either hook to pass the
+exchange through without recording it. Other hook errors fail the request. Hooks
+may run concurrently when the transport is shared. A hook that replaces a body
+must close the previous body.
+
+Recorded JSON and text bodies are normalized to Unicode NFC before they are
+saved.
+
 ## Use cassettes in tests
 
 ```go

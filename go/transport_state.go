@@ -22,6 +22,20 @@ func (t *Transport) load() {
 		t.initErr = err
 		return
 	}
+	if t.config.maxAge != nil && *t.config.maxAge < 0 {
+		t.initErr = errors.New("cassetter: maximum age cannot be negative")
+		return
+	}
+	switch t.config.expiryAction {
+	case ExpiryWarn, ExpiryFail, ExpiryRerecord:
+	default:
+		t.initErr = fmt.Errorf("cassetter: unknown expiry action %q", t.config.expiryAction)
+		return
+	}
+	if err := validateIgnoreHosts(t.config.ignoreHosts); err != nil {
+		t.initErr = err
+		return
+	}
 	if t.config.mode == RecordModeRewrite {
 		if err := os.Remove(t.config.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.initErr = fmt.Errorf("remove cassette: %w", err)
@@ -38,6 +52,14 @@ func (t *Transport) load() {
 		t.cassette, t.initErr = Load(t.config.path)
 		if t.initErr != nil {
 			return
+		}
+		rerecorded, err := t.checkExpiry()
+		if err != nil {
+			t.initErr = err
+			return
+		}
+		if rerecorded {
+			exists = false
 		}
 	} else {
 		t.cassette = &Cassette{Version: 1, Interactions: []HTTPInteraction{}}
@@ -57,6 +79,15 @@ func (t *Transport) load() {
 	t.nextOrder = uint64(len(t.cassette.Interactions))
 	t.canRecord = t.config.mode == RecordModeNewEpisodes || t.config.mode == RecordModeAll ||
 		t.config.mode == RecordModeRewrite || t.config.mode == RecordModeOnce && !exists
+}
+
+func (t *Transport) checkOpen() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return ErrTransportClosed
+	}
+	return nil
 }
 
 func (t *Transport) takeMatch(request HTTPRequest) (HTTPInteraction, bool, error) {
