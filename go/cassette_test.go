@@ -3,6 +3,7 @@ package cassetter_test
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,8 @@ grpc_interactions:
       body:
         type: binary
         content: ""
+future_interactions:
+  - value: retained
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -55,6 +58,12 @@ grpc_interactions:
 	if got := cassette.Interactions[0].Response.Body.Content; !bytes.Equal(got.([]byte), []byte{0, 255}) {
 		t.Fatalf("binary body = %v", got)
 	}
+	if got := cassette.GRPCInteractions[0].Request.Method; got != "/example.Service/Get" {
+		t.Fatalf("gRPC method = %q", got)
+	}
+	if got := cassette.GRPCInteractions[0].Response.StatusMessage; got != "OK" {
+		t.Fatalf("gRPC status message = %q", got)
+	}
 	if err := cassette.Save(path); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +72,10 @@ grpc_interactions:
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(saved), "grpc_interactions:") {
-		t.Fatal("Save removed the unimplemented gRPC section")
+		t.Fatal("Save removed the gRPC section")
+	}
+	if !strings.Contains(string(saved), "future_interactions:") {
+		t.Fatal("Save removed an unknown protocol section")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -98,6 +110,20 @@ func TestSaveRejectsInvalidInteractions(t *testing.T) {
 				Response: cassetter.HTTPResponse{Status: 0},
 			}},
 		},
+		"WebSocket direction": {
+			Version: 1,
+			WebSocketInteractions: []cassetter.WebSocketInteraction{{
+				URI:    "wss://example.com",
+				Frames: []cassetter.WebSocketFrame{{FrameType: "text"}},
+			}},
+		},
+		"WebSocket frame type": {
+			Version: 1,
+			WebSocketInteractions: []cassetter.WebSocketInteraction{{
+				URI:    "wss://example.com",
+				Frames: []cassetter.WebSocketFrame{{Direction: "send"}},
+			}},
+		},
 	}
 	for name, cassette := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -113,7 +139,7 @@ func TestSaveRejectsInvalidBody(t *testing.T) {
 	t.Parallel()
 	bodies := []cassetter.Body{
 		{Type: cassetter.BodyTypeText, Content: []byte("not text")},
-		{Type: cassetter.BodyTypeJSON, Content: map[any]any{1: "not JSON"}},
+		{Type: cassetter.BodyTypeJSON, Content: map[string]any{"value": math.NaN()}},
 	}
 	for index, body := range bodies {
 		cassette := &cassetter.Cassette{
@@ -133,6 +159,20 @@ func TestSaveRejectsInvalidBody(t *testing.T) {
 	}
 }
 
+func TestSaveRejectsNonFiniteGRPCDebugData(t *testing.T) {
+	t.Parallel()
+	cassette := &cassetter.Cassette{
+		Version: 1,
+		GRPCInteractions: []cassetter.GRPCInteraction{{
+			Request:   cassetter.GRPCRequest{Method: "/example.Service/Get"},
+			JSONDebug: map[string]any{"value": math.NaN()},
+		}},
+	}
+	if err := cassette.Save(filepath.Join(t.TempDir(), "invalid.yaml")); err == nil {
+		t.Fatal("Save accepted non-finite gRPC debug data")
+	}
+}
+
 func TestLoadRejectsInvalidJSONBody(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "invalid.yaml")
@@ -148,7 +188,7 @@ interactions:
       body:
         type: json
         content:
-          1: not JSON
+          value: .nan
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)

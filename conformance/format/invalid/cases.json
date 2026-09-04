@@ -1,0 +1,30 @@
+[
+  {
+    "name": "missing gRPC response",
+    "cassette": "missing-grpc-response.yaml"
+  },
+  {
+    "name": "missing gRPC status code",
+    "cassette": "missing-grpc-status-code.yaml"
+  },
+  {
+    "name": "null gRPC status code",
+    "cassette": "null-grpc-status-code.yaml"
+  },
+  {
+    "name": "null gRPC status message",
+    "cassette": "null-grpc-status-message.yaml"
+  },
+  {
+    "name": "non-finite gRPC debug number",
+    "cassette": "non-finite-grpc-debug-number.yaml"
+  },
+  {
+    "name": "missing WebSocket frame direction",
+    "cassette": "missing-ws-direction.yaml"
+  },
+  {
+    "name": "missing WebSocket frame type",
+    "cassette": "missing-ws-frame-type.yaml"
+  }
+]
