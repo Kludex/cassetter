@@ -45,9 +45,12 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		return nil, errors.Join(err, closeRequestBody(request))
 	}
 	uri := request.URL.String()
-	matchURI := scrubURI(uri, t.config.security.FilterQueryParameters, t.config.security.Replacement)
 	if t.config.mode != RecordModeAll && t.config.mode != RecordModeRewrite {
-		interaction, found, err := t.takeMatch(request.Method, matchURI)
+		probe, err := t.requestForMatching(request)
+		if err != nil {
+			return nil, errors.Join(err, closeRequestBody(request))
+		}
+		interaction, found, err := t.takeMatch(probe)
 		if err != nil {
 			return nil, errors.Join(err, closeRequestBody(request))
 		}

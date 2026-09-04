@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 )
 
@@ -17,6 +16,10 @@ func (t *Transport) load() {
 	case RecordModeNone, RecordModeOnce, RecordModeNewEpisodes, RecordModeAll, RecordModeRewrite:
 	default:
 		t.initErr = fmt.Errorf("cassetter: unknown record mode %q", t.config.mode)
+		return
+	}
+	if err := validateMatchers(t.config.matchers); err != nil {
+		t.initErr = err
 		return
 	}
 	if t.config.mode == RecordModeRewrite {
@@ -45,25 +48,45 @@ func (t *Transport) load() {
 	t.pending = make(map[uint64]pendingRecording)
 	for index, interaction := range t.cassette.Interactions {
 		t.orders[index] = uint64(index)
-		key := matchKey(interaction.Request.Method, interaction.Request.URI)
-		t.index[key] = append(t.index[key], index)
+		if t.usesMethodURIIndex() {
+			request := t.matchingRequest(interaction.Request)
+			key := matchKey(request.Method, request.URI)
+			t.index[key] = append(t.index[key], index)
+		}
 	}
 	t.nextOrder = uint64(len(t.cassette.Interactions))
 	t.canRecord = t.config.mode == RecordModeNewEpisodes || t.config.mode == RecordModeAll ||
 		t.config.mode == RecordModeRewrite || t.config.mode == RecordModeOnce && !exists
 }
 
-func (t *Transport) takeMatch(method string, uri string) (HTTPInteraction, bool, error) {
+func (t *Transport) takeMatch(request HTTPRequest) (HTTPInteraction, bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
 		return HTTPInteraction{}, false, ErrTransportClosed
 	}
-	for _, candidate := range t.index[matchKey(method, uri)] {
+	candidates := make([]int, len(t.cassette.Interactions))
+	for index := range candidates {
+		candidates[index] = index
+	}
+	if t.usesMethodURIIndex() {
+		candidates = t.index[matchKey(request.Method, request.URI)]
+	}
+	fallback := -1
+	for _, candidate := range candidates {
+		if !matchesRequest(request, t.matchingRequest(t.cassette.Interactions[candidate].Request), t.config) {
+			continue
+		}
 		if !t.played[candidate] {
 			t.played[candidate] = true
 			return t.cassette.Interactions[candidate], true, nil
 		}
+		if fallback < 0 {
+			fallback = candidate
+		}
+	}
+	if fallback >= 0 {
+		return t.cassette.Interactions[fallback], true, nil
 	}
 	return HTTPInteraction{}, false, nil
 }
@@ -87,46 +110,6 @@ func (t *Transport) finishRecording(order uint64, err error) {
 	if err != nil {
 		t.recordErr = errors.Join(t.recordErr, err)
 	}
-}
-
-func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
-	cassette := &Cassette{Version: 1, Interactions: []HTTPInteraction{interaction}}
-	cassette.Scrub(t.config.security)
-	interaction = cassette.Interactions[0]
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.closed {
-		return ErrTransportClosed
-	}
-	candidateInteractions := append([]HTTPInteraction(nil), t.cassette.Interactions...)
-	candidateInteractions = append(candidateInteractions, interaction)
-	candidateOrders := append([]uint64(nil), t.orders...)
-	candidateOrders = append(candidateOrders, order)
-
-	indices := make([]int, len(candidateInteractions))
-	for index := range indices {
-		indices[index] = index
-	}
-	sort.SliceStable(indices, func(left int, right int) bool {
-		return candidateOrders[indices[left]] < candidateOrders[indices[right]]
-	})
-	output := *t.cassette
-	output.Interactions = make([]HTTPInteraction, 0, len(indices))
-	for _, index := range indices {
-		output.Interactions = append(output.Interactions, candidateInteractions[index])
-	}
-	if err := output.Save(t.config.path); err != nil {
-		return err
-	}
-
-	index := len(t.cassette.Interactions)
-	t.cassette.Interactions = candidateInteractions
-	t.played = append(t.played, false)
-	t.orders = candidateOrders
-	key := matchKey(interaction.Request.Method, interaction.Request.URI)
-	t.index[key] = append(t.index[key], index)
-	return nil
 }
 
 func matchKey(method string, uri string) string {

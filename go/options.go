@@ -54,9 +54,12 @@ func (option optionFunc) apply(config *transportConfig) {
 }
 
 type transportConfig struct {
-	path     string
-	mode     RecordMode
-	security SecurityConfig
+	path            string
+	mode            RecordMode
+	security        SecurityConfig
+	matchers        []Matcher
+	ignoreJSONPaths []string
+	uriNormalizer   func(string) string
 }
 
 // WithPath sets the YAML cassette path.
@@ -109,7 +112,11 @@ func NewTransport(base http.RoundTripper, options ...Option) *Transport {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	config := transportConfig{mode: RecordModeOnce, security: DefaultSecurityConfig()}
+	config := transportConfig{
+		mode:     RecordModeOnce,
+		security: DefaultSecurityConfig(),
+		matchers: []Matcher{MatcherMethod, MatcherURI},
+	}
 	for _, option := range options {
 		option.apply(&config)
 	}

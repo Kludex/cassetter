@@ -11,6 +11,40 @@ import (
 	"github.com/Kludex/cassetter/go"
 )
 
+func TestTransportMatchesCompressedRequestBody(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "compressed-match.yaml")
+	saveMatchingCassette(t, path, cassetter.HTTPRequest{
+		Method:  http.MethodPost,
+		URI:     "https://example.com/value",
+		Headers: http.Header{"content-type": {"application/json"}},
+		Body: cassetter.Body{Type: cassetter.BodyTypeJSON, Content: map[string]any{
+			"password": "[FILTERED]",
+			"ok":       true,
+		}},
+	})
+	content := compressGzip(t, []byte(`{"password":"secret","ok":true}`))
+	request, err := http.NewRequest(http.MethodPost, "https://example.com/value", bytes.NewReader(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Encoding", "gzip")
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Transport: cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeNone),
+		cassetter.WithMatchers(cassetter.MatcherMethod, cassetter.MatcherURI, cassetter.MatcherJSONBody),
+	)}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTransportDecompressesRequestsBeforeScrubbing(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
