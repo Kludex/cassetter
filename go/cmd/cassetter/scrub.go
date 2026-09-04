@@ -67,7 +67,8 @@ func scrubCommand(arguments []string, stdout io.Writer, stderr io.Writer) error 
 	if err := cassette.Save(output); err != nil {
 		return err
 	}
-	message := fmt.Sprintf("Scrubbed %d HTTP interaction(s): %s\n", len(cassette.Interactions), output)
+	total := len(cassette.Interactions) + len(cassette.GRPCInteractions) + len(cassette.WebSocketInteractions)
+	message := fmt.Sprintf("Scrubbed %d interaction(s): %s\n", total, output)
 	if _, err := fmt.Fprint(stdout, message); err != nil {
 		return fmt.Errorf("write output: %w", err)
 	}

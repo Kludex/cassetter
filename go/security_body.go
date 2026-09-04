@@ -1,27 +1,61 @@
 package cassetter
 
 import (
+	"bytes"
 	"encoding/json"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 func scrubBody(body Body, patterns []string, replacement string) Body {
 	switch body.Type {
 	case BodyTypeJSON:
-		encoded, err := json.Marshal(body.Content)
-		if err == nil {
-			var normalized any
-			if json.Unmarshal(encoded, &normalized) == nil && containsSecret(normalized, patterns) {
-				body.Content = scrubJSON(normalized, patterns, replacement)
-			}
-		}
+		body.Content = scrubJSONContent(body.Content, patterns, replacement)
 	case BodyTypeText:
 		if text, ok := body.Content.(string); ok {
 			body.Content = scrubText(text, patterns, replacement)
 		}
 	}
 	return body
+}
+
+func scrubJSONContent(value any, patterns []string, replacement string) any {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var normalized any
+	if decoder.Decode(&normalized) != nil || !containsSecret(normalized, patterns) {
+		return value
+	}
+	return scrubJSON(materializeJSONNumbers(normalized), patterns, replacement)
+}
+
+func materializeJSONNumbers(value any) any {
+	switch typed := value.(type) {
+	case json.Number:
+		if integer, err := strconv.ParseInt(string(typed), 10, 64); err == nil {
+			return integer
+		}
+		if integer, err := strconv.ParseUint(string(typed), 10, 64); err == nil {
+			return integer
+		}
+		if number, err := strconv.ParseFloat(string(typed), 64); err == nil {
+			return number
+		}
+	case map[string]any:
+		for key, child := range typed {
+			typed[key] = materializeJSONNumbers(child)
+		}
+	case []any:
+		for index, child := range typed {
+			typed[index] = materializeJSONNumbers(child)
+		}
+	}
+	return value
 }
 
 func scrubJSON(value any, patterns []string, replacement string) any {

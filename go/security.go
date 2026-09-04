@@ -37,32 +37,6 @@ func DefaultSecurityConfig() SecurityConfig {
 	}
 }
 
-// Scrub applies write-time secret filtering to every HTTP interaction.
-func (c *Cassette) Scrub(config SecurityConfig) {
-	for index := range c.Interactions {
-		interaction := &c.Interactions[index]
-		filterHeaders(interaction.Request.Headers, config.FilterHeaders)
-		filterHeaders(interaction.Response.Headers, config.FilterHeaders)
-		interaction.Request.URI = scrubURI(
-			interaction.Request.URI,
-			config.FilterQueryParameters,
-			config.Replacement,
-		)
-		interaction.Request.Body = scrubBody(
-			interaction.Request.Body,
-			config.BodyScrubPatterns,
-			config.Replacement,
-		)
-		interaction.Response.Body = scrubBody(
-			interaction.Response.Body,
-			config.BodyScrubPatterns,
-			config.Replacement,
-		)
-		retagContentLength(interaction.Request.Headers, interaction.Request.Body)
-		retagContentLength(interaction.Response.Headers, interaction.Response.Body)
-	}
-}
-
 func filterHeaders(headers http.Header, filtered []string) {
 	for name := range headers {
 		for _, candidate := range filtered {
