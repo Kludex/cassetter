@@ -24,7 +24,13 @@ func TestWebSocketTransportBypassesLocalhost(t *testing.T) {
 		defer func() {
 			_ = connection.CloseNow()
 		}()
-		_, _, err = connection.Read(request.Context())
+		messageType, content, err := connection.Read(request.Context())
+		if err == nil {
+			err = connection.Write(request.Context(), messageType, content)
+		}
+		if err == nil {
+			_, _, err = connection.Read(request.Context())
+		}
 		if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
 			err = nil
 		}
@@ -44,6 +50,12 @@ func TestWebSocketTransportBypassesLocalhost(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("dial WebSocket: %v", err)
+	}
+	if err := connection.Write(context.Background(), websocket.MessageText, []byte("bypassed")); err != nil {
+		t.Fatalf("write bypassed WebSocket: %v", err)
+	}
+	if _, content, err := connection.Read(context.Background()); err != nil || string(content) != "bypassed" {
+		t.Fatalf("read bypassed WebSocket = %q, %v", content, err)
 	}
 	if err := recorder.Close(); err != nil {
 		t.Fatalf("close recorder with bypassed connection: %v", err)

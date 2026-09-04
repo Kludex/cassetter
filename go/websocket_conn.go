@@ -35,6 +35,9 @@ func (c *WebSocketConn) Read(ctx context.Context) (websocket.MessageType, []byte
 	if c.replay != nil {
 		return c.replay.read(ctx)
 	}
+	if c.transport == nil {
+		return c.live.Read(ctx)
+	}
 	c.readMu.Lock()
 	messageType, content, err := c.live.Read(ctx)
 	if err == nil {
@@ -60,6 +63,9 @@ func (c *WebSocketConn) Reader(ctx context.Context) (websocket.MessageType, io.R
 func (c *WebSocketConn) Write(ctx context.Context, messageType websocket.MessageType, content []byte) error {
 	if c.replay != nil {
 		return c.replay.write(ctx, messageType)
+	}
+	if c.transport == nil {
+		return c.live.Write(ctx, messageType, content)
 	}
 	c.writeMu.Lock()
 	err := c.live.Write(ctx, messageType, content)
