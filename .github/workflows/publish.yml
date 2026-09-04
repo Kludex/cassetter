@@ -44,6 +44,9 @@ jobs:
   ci:
     name: tagged commit CI
     needs: [version]
+    permissions:
+      checks: write
+      contents: read
     uses: ./.github/workflows/ci.yml
 
   validate-go:
@@ -95,7 +98,22 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.version.outputs.version }}
-        run: sed -i.bak "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
+        run: |
+          python3 - "$VERSION" <<'PY'
+          from pathlib import Path
+          import sys
+
+          version = sys.argv[1]
+          path = Path("Cargo.toml")
+          content = path.read_text()
+          placeholder = 'version = "0.0.0"'
+          if content.count(placeholder) != 1:
+              raise SystemExit("workspace release version placeholder is missing or duplicated")
+          content = content.replace(placeholder, f'version = "{version}"')
+          if content.count(f'version = "{version}"') != 1:
+              raise SystemExit("workspace release version was not updated exactly once")
+          path.write_text(content)
+          PY
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.target }}
@@ -111,6 +129,20 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist --manifest-path crates/cassetter-python/Cargo.toml --interpreter python3.14t
           manylinux: ${{ matrix.manylinux || 'auto' }}
+      - name: Verify wheel versions
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          test "${#wheels[@]}" -gt 0
+          for wheel in "${wheels[@]}"; do
+            case "$(basename "$wheel")" in
+              cassetter-"$VERSION"-*.whl) ;;
+              *) echo "unexpected wheel version: $wheel" >&2; exit 1 ;;
+            esac
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}-${{ matrix.manylinux || 'auto' }}
@@ -128,11 +160,33 @@ jobs:
       - name: Set release version
         env:
           VERSION: ${{ needs.version.outputs.version }}
-        run: sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
+        run: |
+          python3 - "$VERSION" <<'PY'
+          from pathlib import Path
+          import sys
+
+          version = sys.argv[1]
+          path = Path("Cargo.toml")
+          content = path.read_text()
+          placeholder = 'version = "0.0.0"'
+          if content.count(placeholder) != 1:
+              raise SystemExit("workspace release version placeholder is missing or duplicated")
+          content = content.replace(placeholder, f'version = "{version}"')
+          if content.count(f'version = "{version}"') != 1:
+              raise SystemExit("workspace release version was not updated exactly once")
+          path.write_text(content)
+          PY
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
           args: --out dist --manifest-path crates/cassetter-python/Cargo.toml
+      - name: Verify source distribution version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          artifact="dist/cassetter-${VERSION}.tar.gz"
+          test -f "$artifact"
+          test "$(tar -xOf "$artifact" "cassetter-${VERSION}/PKG-INFO" | grep -E '^Version: ')" = "Version: $VERSION"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sdist
@@ -256,9 +310,13 @@ jobs:
             test -f "$addon"
           done
           test "$(find native -name 'cassetter.*.node' | wc -l | tr -d ' ')" = "${#expected[@]}"
-      - run: npm version --no-git-tag-version "${VERSION}"
+      - name: Set npm release version
         env:
           VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          test "$(node -p 'require("./package.json").version')" = 0.0.0
+          npm version --no-git-tag-version "$VERSION"
+          test "$(node -p 'require("./package.json").version')" = "$VERSION"
       - run: npm run typecheck
       - run: npm test
       - run: npx tsc
@@ -326,7 +384,22 @@ jobs:
       - name: Set release version
         env:
           VERSION: ${{ needs.version.outputs.version }}
-        run: sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
+        run: |
+          python3 - "$VERSION" <<'PY'
+          from pathlib import Path
+          import sys
+
+          version = sys.argv[1]
+          path = Path("Cargo.toml")
+          content = path.read_text()
+          placeholder = 'version = "0.0.0"'
+          if content.count(placeholder) != 1:
+              raise SystemExit("workspace release version placeholder is missing or duplicated")
+          content = content.replace(placeholder, f'version = "{version}"')
+          if content.count(f'version = "{version}"') != 1:
+              raise SystemExit("workspace release version was not updated exactly once")
+          path.write_text(content)
+          PY
       - run: cargo package -p cassetter-core --allow-dirty
       - name: Inspect Rust artifact
         env:
@@ -441,9 +514,11 @@ jobs:
     steps:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "24"
+          node-version: "24.20.0"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Verify npm version
+        run: test "$(npm --version)" = 11.19.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: npm-dist

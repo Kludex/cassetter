@@ -15,7 +15,7 @@ The workflow refuses to move an existing tag.
 
 ```console
 GOPROXY=https://proxy.golang.org go list -m github.com/Kludex/cassetter/go@v0.11.0
-GONOSUMDB=github.com/Kludex/cassetter GOPROXY=direct go mod download github.com/Kludex/cassetter/go@v0.11.0
+GOPROXY=direct go mod download github.com/Kludex/cassetter/go@v0.11.0
 ```
 
 If validation fails before the Go tag exists, correct the code on `main` and

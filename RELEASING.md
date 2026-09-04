@@ -25,13 +25,8 @@ token to the workflow.
 ## Smoke-test release artifacts
 
 ```console
-gh workflow run Release -f version=0.11.0
-run_id=$(gh run list \
-  --workflow Release \
-  --limit 1 \
-  --json databaseId \
-  --jq '.[0].databaseId')
-gh run watch "$run_id" --exit-status
+run_url=$(gh workflow run Release -f version=0.11.0)
+gh run watch "${run_url##*/}" --exit-status
 ```
 
 Use the intended release version. A manual run executes the complete CI suite,
