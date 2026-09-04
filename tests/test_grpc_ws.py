@@ -455,6 +455,21 @@ def test_record_ws_scrubs_headers(tmp_path: Path) -> None:
     assert recorded.headers["x-custom"] == ["keep"]
 
 
+def test_record_ws_scrubs_uri_and_replays_live_uri(tmp_path: Path) -> None:
+    path = os.path.join(str(tmp_path), "ws_uri_scrub.yaml")
+    uri = "wss://ws.example.com?access_token=super-secret-token"
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+    cassette.record_ws(uri, {}, [])
+    cassette.save()
+
+    assert cassette.ws_interactions[0].uri.endswith("access_token=[FILTERED]")
+
+    replayed = Cassette(path, record_mode=RecordMode.NONE)
+    replayed.load()
+    assert replayed.play_ws(uri).uri.endswith("access_token=[FILTERED]")
+
+
 def test_record_ws_scrubs_frame_bodies(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "ws_frame_scrub.yaml")
     cassette = Cassette(path, record_mode=RecordMode.ALL)
@@ -494,6 +509,22 @@ def test_record_grpc_scrubs_metadata_and_json_debug(tmp_path: Path) -> None:
     assert recorded.json_debug["request"]["password"] == "[FILTERED]"
     assert recorded.json_debug["response"]["access_token"] == "[FILTERED]"
     assert recorded.request.body.content == b"\x0a\x0b"
+
+
+def test_record_grpc_scrubs_structured_bodies(tmp_path: Path) -> None:
+    cassette = Cassette(os.path.join(str(tmp_path), "grpc_body_scrub.yaml"), record_mode=RecordMode.ALL)
+    cassette.load()
+
+    cassette.record_grpc(
+        method="/pkg.Svc/Login",
+        metadata={},
+        request_body=Body("json", {"api_key": "secret", "message": "hello"}),
+        response_body=Body("text", '{"api-key":"secret","ok":true}'),
+    )
+
+    recorded = cassette.grpc_interactions[0]
+    assert recorded.request.body.content == {"api_key": "[FILTERED]", "message": "hello"}
+    assert '"api-key":"[FILTERED]"' in recorded.response.body.content
 
 
 def test_play_ws_interaction(tmp_path: Path) -> None:

@@ -1,6 +1,10 @@
 # Cassetter
 
-Rust-powered HTTP cassette recorder for Python tests. Safe by default.
+Rust-powered HTTP cassette recorder. Safe by default.
+
+Available for **Python** (this README) and **Node/TypeScript** ([`ts/`](ts)).
+Both are thin bindings over one Rust core, so a cassette recorded by either
+is readable by the other.
 
 ## Why?
 
@@ -588,14 +592,51 @@ cassetter uses the same `@pytest.mark.vcr` marker, `vcr_config` fixture, and `--
 | `--disable-recording` | _(not supported)_ | |
 
 
+## Architecture
+
+Everything that defines a cassette - the file format (YAML and TOML), request
+matching, security filtering, and body processing - lives in one Rust crate.
+Each language gets a thin binding over it rather than its own reimplementation,
+so the parts that matter cannot drift apart.
+
+```
+crates/
+  cassetter-core/     pure Rust: format, matching, security, body processing
+  cassetter-python/   PyO3 bindings    -> cassetter._core
+  cassetter-node/     napi-rs bindings -> cassetter.node
+src/cassetter/        Python package (interceptors, pytest plugin, CLI)
+ts/                   Node package (fetch interception)
+conformance/          shared fixture both bindings must reproduce
+```
+
+A binding only implements what is genuinely language-specific: HTTP library
+interception and the idiomatic record/replay wrapper.
+
+### Adding a language
+
+Add a crate under `crates/` that wraps `cassetter-core`, then make it pass
+[`conformance/`](conformance). That suite pins the cassette format across
+bindings - see its README for the contract.
+
 ## Development
 
-Requires Rust toolchain and Python 3.10+.
+Requires a Rust toolchain, Python 3.10+, and Node 18+ for the Node binding.
 
 ```bash
 git clone https://github.com/Kludex/cassetter.git
 cd cassetter
+
+# Rust core
+cargo test --workspace
+
+# Python
 uv sync
 uv run maturin develop
 uv run pytest
+
+# Node
+cd ts && npm install && npm run build:native && npm test
 ```
+
+Changes to matching, security, the cassette format, or body handling belong in
+`crates/cassetter-core` so every binding gets them at once.

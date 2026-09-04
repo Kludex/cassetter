@@ -32,9 +32,9 @@ jobs:
       # cargo test links against libpython (the extension-module feature is
       # only enabled by maturin when building the wheel)
       - run: sudo apt-get update && sudo apt-get install -y libpython3-dev
-      - run: cargo fmt --manifest-path rust/Cargo.toml --check
-      - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --manifest-path rust/Cargo.toml
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
   go-test:
     permissions:
@@ -65,9 +65,6 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # The manifest and lockfile live in rust/; the action defaults to the
-          # repository root, where there is no Cargo.toml to scan.
-          working-directory: rust
 
   test:
     runs-on: ${{ matrix.os }}
@@ -104,10 +101,43 @@ jobs:
       - if: matrix.os == 'ubuntu-latest'
         run: uv run coverage report
 
+  node:
+    runs-on: ${{ matrix.os }}
+    # `npm ci` and the native build run dependency lifecycle and build scripts,
+    # so keep the checkout token away from them.
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        node-version: ["18", "20", "22"]
+        include:
+          # the addon is built per platform, so check the ones we publish for
+          - os: macos-latest
+            node-version: "22"
+          - os: windows-latest
+            node-version: "22"
+    defaults:
+      run:
+        working-directory: ts
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm run build:native
+      - run: npm run typecheck
+      - run: npm test
+
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:
     if: always()
-    needs: [lint, rust-test, go-test, audit, test]
+    needs: [lint, rust-test, go-test, audit, test, node]
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed

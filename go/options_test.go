@@ -30,6 +30,7 @@ func TestTransportExtendsSecurityDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	request.Header.Set("Authorization", "Bearer secret")
 	request.Header.Set("X-Company-Token", "secret")
 	response, err := client.Do(request)
 	if err != nil {
@@ -46,6 +47,9 @@ func TestTransportExtendsSecurityDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	interaction := cassette.Interactions[0]
+	if interaction.Request.Headers.Get("authorization") != "" {
+		t.Fatal("default header was not removed")
+	}
 	if interaction.Request.Headers.Get("x-company-token") != "" {
 		t.Fatal("custom header was not removed")
 	}

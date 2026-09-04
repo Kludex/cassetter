@@ -52,11 +52,11 @@ jobs:
         shell: bash
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" rust/Cargo.toml && rm -f rust/Cargo.toml.bak
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
+          args: --release --out dist --manifest-path crates/cassetter-python/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
           manylinux: ${{ matrix.manylinux || 'auto' }}
       # Free-threaded CPython uses its own ABI tag, so a cp314 wheel will not
       # install there and the module declares gil_used = false. It is installed
@@ -72,7 +72,7 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --manifest-path rust/Cargo.toml --interpreter python3.14t
+          args: --release --out dist --manifest-path crates/cassetter-python/Cargo.toml --interpreter python3.14t
           manylinux: ${{ matrix.manylinux || 'auto' }}
       - uses: actions/upload-artifact@v7
         with:
@@ -88,11 +88,11 @@ jobs:
         shell: bash
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" rust/Cargo.toml && rm -f rust/Cargo.toml.bak
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist --manifest-path rust/Cargo.toml
+          args: --out dist --manifest-path crates/cassetter-python/Cargo.toml
       - uses: actions/upload-artifact@v7
         with:
           name: sdist

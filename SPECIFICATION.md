@@ -244,10 +244,50 @@ Both entry points build cassettes through it: `use_cassette()` is a thin wrapper
 
 **Why this choice:** Configuration is data, so it gets a value object rather than a builder or a factory function. Options unset on the object fall back to the same defaults as `use_cassette()`, which keeps one set of defaults in the library. The one deliberate exception is `record_mode`, which is stored as "unset" rather than `once`: the pytest plugin defaults to `none` for safety, and an object that silently flipped a suite to `once` would defeat that.
 
-## 8. Scope and non-goals
+## 8. Multi-language architecture
+
+The cassette format, request matching, security filtering, and body processing live in a single binding-free Rust crate (`cassetter-core`). Each language gets a thin wrapper crate - `cassetter-python` via PyO3, `cassetter-node` via napi-rs - that only converts types across the boundary.
+
+**Alternatives considered:**
+
+- **Reimplement per language.** A native TypeScript port, a native Ruby port, and so on. Every language then owns its own copy of the matching rules, the security defaults, and the format reader. These drift silently - a fix to JSON-path ignoring in one language doesn't reach the others, and a cassette written by one binding can stop being readable by another. It also gives up the two properties the Rust core exists to provide: speed, and parsing by something with no concept of arbitrary object construction. Rejected because the maintenance cost scales with the number of languages and the failure mode is silent.
+
+- **WASM instead of native bindings for Node.** One artifact, and it runs in browsers, Deno, and edge runtimes. But it is meaningfully slower than a native addon and needs glue for filesystem access. Rejected for now because cassetter's measurable win is load/save throughput on large cassettes; it remains the better option if browser or edge support becomes a goal.
+
+- **A shared core exposed as a subprocess or local server.** Language-agnostic with no FFI. Adds process management, serialization overhead per request, and a new class of failure (the helper died). Rejected because the FFI cost is far lower.
+
+**Why this choice:** the logic that defines a cassette is written once. A binding only implements what is genuinely language-specific - HTTP library interception and an idiomatic record/replay wrapper. Adding a language means writing a thin crate, not reimplementing the product.
+
+### 8.1. Structured data crosses the boundary in the file's own shape
+
+Bindings that exchange plain data rather than wrapping every type in a native class convert through `cassetter_core::interop`, which produces exactly the shape the cassette file uses: bodies are `{type, content}`, and binary content is hex.
+
+**Alternatives considered:**
+
+- **A binding-specific wire shape.** Each binding picks whatever is most natural for its host language. That is one more representation to keep in step with the file format, and the place a subtle difference would hide. Rejected because it adds a translation layer with nothing to anchor it.
+
+- **Native class wrappers everywhere, as PyO3 does.** Right for Python, where the existing API is attribute access on frozen value objects. For Node it would mean a dozen `#[napi]` classes to express data that is already idiomatic as plain objects. Kept for Python, rejected for Node.
+
+**Why this choice:** one representation serves the file on disk and every binding that exchanges data, so there is a single thing to be correct about.
+
+### 8.2. Conformance as the contract
+
+`conformance/` holds a cassette fixture exercising every body type, multi-value headers, unicode, and all three protocols, plus the canonical structure parsing it must produce. Every binding asserts against the same file.
+
+**Alternatives considered:**
+
+- **Trust the shared core.** The core guarantees the logic matches, but each binding still has a conversion layer where hex encoding, header shapes, or optional fields can be handled differently. Rejected because that layer is exactly where drift would appear.
+
+- **Test bindings against each other at runtime.** Requires every language's toolchain in one CI job. Rejected as fragile; a committed fixture gives each binding an independent check.
+
+**Why this choice:** a new binding gets a concrete definition of correct, and a change that makes two bindings disagree fails CI instead of surfacing as an unreadable cassette later.
+
+## 9. Scope and non-goals
 
 ### Implemented
-- HTTP recording/replay for httpx, aiohttp, requests, urllib3
+- Binding-free Rust core shared by every language, with a cross-language conformance suite
+- Python bindings (PyO3) and Node bindings (napi-rs)
+- HTTP recording/replay for httpx, aiohttp, requests, urllib3 (Python) and `fetch` (Node)
 - gRPC message recording via grpcio
 - WebSocket frame recording via websockets
 - Structured YAML cassette format with typed bodies

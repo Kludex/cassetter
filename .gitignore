@@ -8,12 +8,20 @@ wheels/
 .venv
 
 # Rust
-rust/target/
+target/
 
 # Compiled extensions
 *.so
 *.pyd
 *.dylib
+*.node
+
+# Node
+node_modules/
+
+# Generated napi glue (rebuilt by `npm run build:native`)
+ts/native/index.js
+ts/native/index.d.ts
 
 # Coverage
 .coverage
