@@ -47,8 +47,12 @@ func (i *GRPCInteraction) UnmarshalYAML(node *yaml.Node) error {
 	if !found {
 		return errors.New("gRPC interaction response is required")
 	}
-	if _, found := mappingValue(responseNode, "status_code"); !found {
+	statusNode, found := mappingValue(responseNode, "status_code")
+	if !found {
 		return errors.New("gRPC response status_code is required")
+	}
+	if statusNode.Tag == "!!null" {
+		return errors.New("gRPC response status_code cannot be null")
 	}
 	type interaction GRPCInteraction
 	var value interaction

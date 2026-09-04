@@ -8,6 +8,10 @@
     "cassette": "missing-grpc-status-code.yaml"
   },
   {
+    "name": "null gRPC status code",
+    "cassette": "null-grpc-status-code.yaml"
+  },
+  {
     "name": "missing WebSocket frame direction",
     "cassette": "missing-ws-direction.yaml"
   },
