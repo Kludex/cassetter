@@ -24,7 +24,7 @@ jobs:
           python-version: "3.13"
       - run: uv sync
       - run: uv run maturin develop --release
-      - uses: CodSpeedHQ/action@v4.19.1
+      - uses: CodSpeedHQ/action@v5.2.1
         with:
           # v4 requires the mode that v3 picked on its own. `simulation` is what
           # it chose for a hosted runner, under its old name `instrumentation`,
