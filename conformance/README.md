@@ -42,6 +42,9 @@ A format case passes when an SDK parses its cassette into the corresponding cano
 | Go | `go/conformance_test.go` |
 
 Each SDK reads `cases.json`. Add a case once and every implementation receives it.
+The nested Go module includes a synchronized copy under `go/testdata/conformance/`.
+This lets its tests run from a downloaded module without access to the repository parent.
+Go CI fails when that copy differs from this directory.
 
 ## Adding a format case
 

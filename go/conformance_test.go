@@ -1,6 +1,7 @@
 package cassetter_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ type formatCase struct {
 
 func TestFormatConformance(t *testing.T) {
 	t.Parallel()
-	fixtures := filepath.Join("..", "conformance", "format")
+	fixtures := formatFixtures(t)
 	for _, testCase := range loadFormatCases(t, fixtures) {
 		t.Run(testCase.Name, func(t *testing.T) {
 			t.Parallel()
@@ -39,6 +40,41 @@ func TestFormatConformance(t *testing.T) {
 			assertCanonicalJSON(t, canonicalCassette(reloaded), filepath.Join(fixtures, testCase.Expected))
 		})
 	}
+}
+
+func TestPackagedFormatFixturesMatchShared(t *testing.T) {
+	t.Parallel()
+	shared := filepath.Join("..", "conformance", "format")
+	if _, err := os.Stat(shared); err != nil {
+		t.Skip("shared fixtures are outside the published Go module")
+	}
+	packaged := filepath.Join("testdata", "conformance", "format")
+	files := []string{"cases.json"}
+	for _, testCase := range loadFormatCases(t, shared) {
+		files = append(files, testCase.Cassette, testCase.Expected)
+	}
+	for _, name := range files {
+		sharedContent, err := os.ReadFile(filepath.Join(shared, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		packagedContent, err := os.ReadFile(filepath.Join(packaged, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(packagedContent, sharedContent) {
+			t.Fatalf("packaged conformance fixture %s is stale", name)
+		}
+	}
+}
+
+func formatFixtures(t *testing.T) string {
+	t.Helper()
+	shared := filepath.Join("..", "conformance", "format")
+	if _, err := os.Stat(shared); err == nil {
+		return shared
+	}
+	return filepath.Join("testdata", "conformance", "format")
 }
 
 func loadFormatCases(t *testing.T, fixtures string) []formatCase {
