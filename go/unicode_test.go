@@ -46,6 +46,31 @@ func TestCassetteNormalizesLoadedBodiesToNFC(t *testing.T) {
 	}
 }
 
+func TestCassetteRejectsNormalizedJSONKeyCollisions(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	cassette := &cassetter.Cassette{
+		Version: 1,
+		Interactions: []cassetter.HTTPInteraction{{
+			Request: cassetter.HTTPRequest{
+				Method: http.MethodPost,
+				URI:    "https://example.com",
+				Body: cassetter.Body{Type: cassetter.BodyTypeJSON, Content: map[string]any{
+					"é":       1,
+					"e\u0301": 2,
+				}},
+			},
+			Response: cassetter.HTTPResponse{Status: http.StatusOK},
+		}},
+	}
+	if err := cassette.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cassetter.Load(path); err == nil || !strings.Contains(err.Error(), "normalize") {
+		t.Fatalf("load error = %v", err)
+	}
+}
+
 func TestTransportNormalizesRecordedTextToNFC(t *testing.T) {
 	t.Parallel()
 	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {

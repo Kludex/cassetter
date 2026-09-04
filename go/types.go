@@ -111,7 +111,11 @@ func (b *Body) UnmarshalYAML(node *yaml.Node) error {
 		if err != nil {
 			return fmt.Errorf("JSON body content: %w", err)
 		}
-		*b = Body{Type: value.Type, Content: normalizeJSONUnicode(normalized)}
+		normalized, err = normalizeJSONUnicode(normalized)
+		if err != nil {
+			return fmt.Errorf("JSON body content: %w", err)
+		}
+		*b = Body{Type: value.Type, Content: normalized}
 	default:
 		return fmt.Errorf("unknown body type %q", value.Type)
 	}

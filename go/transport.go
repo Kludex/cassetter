@@ -143,17 +143,25 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		if err != nil {
 			return err
 		}
+		requestBody, err := bodyFromBytes(requestContent, headerValue(requestHeaders, "content-type"))
+		if err != nil {
+			return err
+		}
+		responseBody, err := bodyFromBytes(responseContent, headerValue(responseHeaders, "content-type"))
+		if err != nil {
+			return err
+		}
 		interaction := HTTPInteraction{
 			Request: HTTPRequest{
 				Method:  requestMethod,
 				URI:     uri,
 				Headers: requestHeaders,
-				Body:    bodyFromBytes(requestContent, headerValue(requestHeaders, "content-type")),
+				Body:    requestBody,
 			},
 			Response: HTTPResponse{
 				Status:  responseStatus,
 				Headers: responseHeaders,
-				Body:    bodyFromBytes(responseContent, headerValue(responseHeaders, "content-type")),
+				Body:    responseBody,
 			},
 			RecordedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		}
