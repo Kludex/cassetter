@@ -9,7 +9,11 @@ permissions:
 
 jobs:
   validate:
+    name: validate (${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.25.x", stable]
     defaults:
       run:
         working-directory: go
@@ -19,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: ${{ matrix.go-version }}
           check-latest: true
           cache-dependency-path: go/go.sum
       - name: Validate module tag

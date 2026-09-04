@@ -6,14 +6,14 @@ Git tag `go/v0.1.0`. A root tag such as `v0.1.0` belongs to the Python and Node 
 ## Verify
 
 ```console
-$ git switch main
-$ git pull --ff-only
-$ git status --short
-$ (cd go && go mod verify)
-$ (cd go && go test -race ./...)
-$ (cd go && go vet ./...)
-$ (cd go && golangci-lint run ./...)
-$ (cd go && go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...)
+git switch main
+git pull --ff-only
+git status --short
+(cd go && go mod verify)
+(cd go && go test -race ./...)
+(cd go && go vet ./...)
+(cd go && golangci-lint run ./...)
+(cd go && go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...)
 ```
 
 Confirm the `main` CI workflow is green. Confirm the release version and notes in `go/CHANGELOG.md`.
@@ -21,8 +21,8 @@ Confirm the `main` CI workflow is green. Confirm the release version and notes i
 ## Tag
 
 ```console
-$ git tag -a go/v0.1.0 -m "Release Go v0.1.0"
-$ git push origin go/v0.1.0
+git tag -a go/v0.1.0 -m "Release Go v0.1.0"
+git push origin go/v0.1.0
 ```
 
 The `Validate Go release` workflow checks the tag, module path, race tests, vet, and lint. Do not create the GitHub
@@ -37,8 +37,8 @@ The Go module proxy reads the tagged `go/` directory directly. The PyPI workflow
 ## Verify the public module
 
 ```console
-$ GOPROXY=https://proxy.golang.org go list -m github.com/Kludex/cassetter/go@v0.1.0
-$ GONOSUMDB=github.com/Kludex/cassetter GOPROXY=direct go mod download github.com/Kludex/cassetter/go@v0.1.0
+GOPROXY=https://proxy.golang.org go list -m github.com/Kludex/cassetter/go@v0.1.0
+GONOSUMDB=github.com/Kludex/cassetter GOPROXY=direct go mod download github.com/Kludex/cassetter/go@v0.1.0
 ```
 
 If validation fails before the GitHub release exists, correct the code on `main` and publish a new version tag. Do not
