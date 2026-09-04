@@ -9,18 +9,12 @@ import (
 
 type requestBody struct {
 	source io.ReadCloser
-	done   chan struct{}
-	once   sync.Once
 	mu     sync.Mutex
 	buffer bytes.Buffer
 }
 
 func newRequestBody(source io.ReadCloser) *requestBody {
-	body := &requestBody{source: source, done: make(chan struct{})}
-	if source == nil {
-		close(body.done)
-	}
-	return body
+	return &requestBody{source: source}
 }
 
 func (b *requestBody) Read(target []byte) (int, error) {
@@ -30,29 +24,17 @@ func (b *requestBody) Read(target []byte) (int, error) {
 		_, _ = b.buffer.Write(target[:count])
 		b.mu.Unlock()
 	}
-	if err != nil {
-		b.signalDone()
-	}
 	return count, err
 }
 
 func (b *requestBody) Close() error {
-	err := b.source.Close()
-	b.signalDone()
-	return err
+	return b.source.Close()
 }
 
 func (b *requestBody) content() []byte {
-	<-b.done
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return bytes.Clone(b.buffer.Bytes())
-}
-
-func (b *requestBody) signalDone() {
-	b.once.Do(func() {
-		close(b.done)
-	})
 }
 
 type recordingBody struct {
