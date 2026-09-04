@@ -1,0 +1,31 @@
+version: 1
+future_protocol:
+  enabled: true
+  values:
+    - one
+    - two
+interactions:
+  - request:
+      method: GET
+      uri: https://example.com/unknown
+      headers:
+        x-multi:
+          - one
+          - two
+      body:
+        type: json
+        content:
+          nested:
+            value: kept
+      future_request_field:
+        opaque: request
+    response:
+      status: 200
+      body:
+        type: text
+        content: kept
+      future_response_field:
+        opaque: response
+    recorded_at: "2026-01-01T00:00:00Z"
+    future_interaction_field:
+      opaque: interaction

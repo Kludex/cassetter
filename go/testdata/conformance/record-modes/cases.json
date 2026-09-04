@@ -1,0 +1,127 @@
+[
+  {
+    "name": "none replays an existing interaction",
+    "mode": "none",
+    "existing": true,
+    "requests": ["https://example.com/recorded"],
+    "expectedOutcomes": ["replay"],
+    "expectedBaseCalls": 0,
+    "expectedFile": [
+      {"uri": "https://example.com/recorded", "status": 201}
+    ]
+  },
+  {
+    "name": "none rejects a missing interaction",
+    "mode": "none",
+    "existing": true,
+    "requests": ["https://example.com/missing"],
+    "expectedOutcomes": ["no_match"],
+    "expectedBaseCalls": 0,
+    "expectedFile": [
+      {"uri": "https://example.com/recorded", "status": 201}
+    ]
+  },
+  {
+    "name": "none does not create a missing cassette",
+    "mode": "none",
+    "existing": false,
+    "requests": ["https://example.com/missing"],
+    "expectedOutcomes": ["no_match"],
+    "expectedBaseCalls": 0,
+    "expectedFile": null
+  },
+  {
+    "name": "once replays but does not append to an existing cassette",
+    "mode": "once",
+    "existing": true,
+    "requests": [
+      "https://example.com/recorded",
+      "https://example.com/missing"
+    ],
+    "expectedOutcomes": ["replay", "no_match"],
+    "expectedBaseCalls": 0,
+    "expectedFile": [
+      {"uri": "https://example.com/recorded", "status": 201}
+    ]
+  },
+  {
+    "name": "once records while the cassette is new",
+    "mode": "once",
+    "existing": false,
+    "requests": [
+      "https://example.com/first",
+      "https://example.com/second"
+    ],
+    "expectedOutcomes": ["live", "live"],
+    "expectedBaseCalls": 2,
+    "expectedFile": [
+      {"uri": "https://example.com/first", "status": 299},
+      {"uri": "https://example.com/second", "status": 299}
+    ]
+  },
+  {
+    "name": "new episodes replays matches and records misses",
+    "mode": "new_episodes",
+    "existing": true,
+    "requests": [
+      "https://example.com/recorded",
+      "https://example.com/new",
+      "https://example.com/new"
+    ],
+    "expectedOutcomes": ["replay", "live", "replay"],
+    "expectedBaseCalls": 1,
+    "expectedFile": [
+      {"uri": "https://example.com/new", "status": 299},
+      {"uri": "https://example.com/recorded", "status": 201}
+    ]
+  },
+  {
+    "name": "all replaces existing interactions",
+    "mode": "all",
+    "existing": true,
+    "requests": ["https://example.com/new"],
+    "expectedOutcomes": ["live"],
+    "expectedBaseCalls": 1,
+    "expectedFile": [
+      {"uri": "https://example.com/new", "status": 299}
+    ]
+  },
+  {
+    "name": "all clears an existing cassette without traffic",
+    "mode": "all",
+    "existing": true,
+    "requests": [],
+    "expectedOutcomes": [],
+    "expectedBaseCalls": 0,
+    "expectedFile": []
+  },
+  {
+    "name": "all does not create a cassette without traffic",
+    "mode": "all",
+    "existing": false,
+    "requests": [],
+    "expectedOutcomes": [],
+    "expectedBaseCalls": 0,
+    "expectedFile": null
+  },
+  {
+    "name": "rewrite removes an existing cassette without traffic",
+    "mode": "rewrite",
+    "existing": true,
+    "requests": [],
+    "expectedOutcomes": [],
+    "expectedBaseCalls": 0,
+    "expectedFile": null
+  },
+  {
+    "name": "rewrite records from an empty cassette",
+    "mode": "rewrite",
+    "existing": true,
+    "requests": ["https://example.com/new"],
+    "expectedOutcomes": ["live"],
+    "expectedBaseCalls": 1,
+    "expectedFile": [
+      {"uri": "https://example.com/new", "status": 299}
+    ]
+  }
+]

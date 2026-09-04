@@ -61,13 +61,13 @@ func TestInvalidFormatConformance(t *testing.T) {
 	}
 }
 
-func TestPackagedFormatFixturesMatchShared(t *testing.T) {
+func TestPackagedConformanceFixturesMatchShared(t *testing.T) {
 	t.Parallel()
-	shared := filepath.Join("..", "conformance", "format")
+	shared := filepath.Join("..", "conformance")
 	if _, err := os.Stat(shared); err != nil {
 		t.Skip("shared fixtures are outside the published Go module")
 	}
-	packaged := filepath.Join("testdata", "conformance", "format")
+	packaged := filepath.Join("testdata", "conformance")
 	files := fixtureFiles(t, shared)
 	if packagedFiles := fixtureFiles(t, packaged); !reflect.DeepEqual(packagedFiles, files) {
 		t.Fatalf("packaged conformance files = %v, shared files = %v", packagedFiles, files)
@@ -110,13 +110,18 @@ func fixtureFiles(t *testing.T, root string) []string {
 	return files
 }
 
-func formatFixtures(t *testing.T) string {
+func conformanceFixtures(t *testing.T) string {
 	t.Helper()
-	shared := filepath.Join("..", "conformance", "format")
+	shared := filepath.Join("..", "conformance")
 	if _, err := os.Stat(shared); err == nil {
 		return shared
 	}
-	return filepath.Join("testdata", "conformance", "format")
+	return filepath.Join("testdata", "conformance")
+}
+
+func formatFixtures(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(conformanceFixtures(t), "format")
 }
 
 func loadFormatCases(t *testing.T, fixtures string) []formatCase {

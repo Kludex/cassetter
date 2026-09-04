@@ -94,6 +94,31 @@ func TestTransportCloseReportsSaveFailure(t *testing.T) {
 	}
 }
 
+func TestTransportCloseReportsEmptyAllSaveFailure(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	if err := os.WriteFile(path, []byte("version: 1\ninteractions: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	transport := cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeAll),
+	)
+	if err := transport.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := transport.Close(); err == nil || !strings.Contains(err.Error(), "replace cassette") {
+		t.Fatalf("close error = %v", err)
+	}
+}
+
 func TestNewTestTransportCompletesCleanly(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "cassette.yaml")

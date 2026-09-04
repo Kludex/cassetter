@@ -30,8 +30,10 @@ func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 		output.Interactions = append(output.Interactions, candidateInteractions[index])
 	}
 	if err := output.Save(t.config.path); err != nil {
+		t.saveEmpty = false
 		return err
 	}
+	t.saveEmpty = false
 
 	index := len(t.cassette.Interactions)
 	t.cassette.Interactions = candidateInteractions

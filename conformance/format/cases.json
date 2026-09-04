@@ -23,5 +23,10 @@
     "name": "empty cassette",
     "cassette": "empty.yaml",
     "expected": "empty.json"
+  },
+  {
+    "name": "unknown fields",
+    "cassette": "unknown-fields.yaml",
+    "expected": "unknown-fields.json"
   }
 ]

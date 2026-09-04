@@ -63,6 +63,7 @@ func (t *Transport) load() {
 		}
 	} else {
 		t.cassette = &Cassette{Version: 1, Interactions: []HTTPInteraction{}}
+		t.saveEmpty = exists && t.config.mode == RecordModeAll
 	}
 	t.played = make([]bool, len(t.cassette.Interactions))
 	t.orders = make([]uint64, len(t.cassette.Interactions))

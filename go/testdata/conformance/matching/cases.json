@@ -1,0 +1,159 @@
+[
+  {
+    "name": "default method and URI match case-insensitively",
+    "requests": [
+      {"method": "get", "uri": "https://example.com/default"}
+    ],
+    "expectedStatuses": [201]
+  },
+  {
+    "name": "default URI mismatch",
+    "requests": [
+      {"method": "GET", "uri": "https://example.com/missing"}
+    ],
+    "expectedStatuses": [null]
+  },
+  {
+    "name": "recorded headers are an ordered subset",
+    "matchOn": ["method", "headers"],
+    "requests": [
+      {
+        "method": "PATCH",
+        "uri": "https://different.example.com/path",
+        "headers": {
+          "X-Required": ["one", "two"],
+          "x-extra": ["kept"]
+        }
+      }
+    ],
+    "expectedStatuses": [202]
+  },
+  {
+    "name": "header value order must match",
+    "matchOn": ["method", "headers"],
+    "requests": [
+      {
+        "method": "PATCH",
+        "uri": "https://example.com/headers",
+        "headers": {"x-required": ["two", "one"]}
+      }
+    ],
+    "expectedStatuses": [null]
+  },
+  {
+    "name": "typed text body match",
+    "matchOn": ["method", "body"],
+    "requests": [
+      {
+        "method": "PUT",
+        "uri": "https://different.example.com/path",
+        "headers": {"content-type": ["text/plain"]},
+        "body": {"type": "text", "content": "hello"}
+      }
+    ],
+    "expectedStatuses": [203]
+  },
+  {
+    "name": "body type must match",
+    "matchOn": ["method", "body"],
+    "requests": [
+      {
+        "method": "PUT",
+        "uri": "https://example.com/body",
+        "headers": {"content-type": ["application/json"]},
+        "body": {"type": "json", "content": "hello"}
+      }
+    ],
+    "expectedStatuses": [null]
+  },
+  {
+    "name": "JSON object order does not affect matching",
+    "matchOn": ["method", "json_body"],
+    "requests": [
+      {
+        "method": "CONNECT",
+        "uri": "https://different.example.com/path",
+        "headers": {"content-type": ["application/json"]},
+        "body": {
+          "type": "json",
+          "content": {
+            "items": [{"nonce": "recorded", "value": 1}, {"value": 2}],
+            "metadata": {"timestamp": "2026-01-01T00:00:00Z"},
+            "request_id": "recorded",
+            "stable": "yes"
+          }
+        }
+      }
+    ],
+    "expectedStatuses": [204]
+  },
+  {
+    "name": "ignored JSON object and array paths",
+    "matchOn": ["method", "json_body"],
+    "ignoreJsonPaths": ["request_id", "metadata.timestamp", "items[0].nonce"],
+    "requests": [
+      {
+        "method": "CONNECT",
+        "uri": "https://example.com/json",
+        "headers": {"content-type": ["application/json"]},
+        "body": {
+          "type": "json",
+          "content": {
+            "stable": "yes",
+            "request_id": "incoming",
+            "metadata": {"timestamp": "2030-01-01T00:00:00Z"},
+            "items": [{"value": 1, "nonce": "incoming"}, {"value": 2}]
+          }
+        }
+      }
+    ],
+    "expectedStatuses": [204]
+  },
+  {
+    "name": "non-ignored JSON difference does not match",
+    "matchOn": ["method", "json_body"],
+    "ignoreJsonPaths": ["request_id", "metadata.timestamp", "items[0].nonce"],
+    "requests": [
+      {
+        "method": "CONNECT",
+        "uri": "https://example.com/json",
+        "headers": {"content-type": ["application/json"]},
+        "body": {
+          "type": "json",
+          "content": {
+            "stable": "changed",
+            "request_id": "incoming",
+            "metadata": {"timestamp": "2030-01-01T00:00:00Z"},
+            "items": [{"value": 1, "nonce": "incoming"}, {"value": 2}]
+          }
+        }
+      }
+    ],
+    "expectedStatuses": [null]
+  },
+  {
+    "name": "method-only matching",
+    "matchOn": ["method"],
+    "requests": [
+      {"method": "trace", "uri": "https://different.example.com/path"}
+    ],
+    "expectedStatuses": [205]
+  },
+  {
+    "name": "URI-only matching",
+    "matchOn": ["uri"],
+    "requests": [
+      {"method": "DELETE", "uri": "https://example.com/uri-only"}
+    ],
+    "expectedStatuses": [208]
+  },
+  {
+    "name": "repeated playback prefers unused then reuses first",
+    "requests": [
+      {"method": "GET", "uri": "https://example.com/repeat"},
+      {"method": "GET", "uri": "https://example.com/repeat"},
+      {"method": "GET", "uri": "https://example.com/repeat"}
+    ],
+    "expectedStatuses": [206, 207, 206]
+  }
+]

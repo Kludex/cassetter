@@ -1,0 +1,103 @@
+version: 1
+interactions:
+  - request:
+      method: GET
+      uri: https://example.com/default
+      body:
+        type: none
+    response:
+      status: 201
+      body:
+        type: text
+        content: default
+    recorded_at: "2026-01-01T00:00:00Z"
+  - request:
+      method: PATCH
+      uri: https://example.com/headers
+      headers:
+        x-required:
+          - one
+          - two
+      body:
+        type: none
+    response:
+      status: 202
+      body:
+        type: text
+        content: headers
+    recorded_at: "2026-01-01T00:00:01Z"
+  - request:
+      method: PUT
+      uri: https://example.com/body
+      body:
+        type: text
+        content: hello
+    response:
+      status: 203
+      body:
+        type: text
+        content: body
+    recorded_at: "2026-01-01T00:00:02Z"
+  - request:
+      method: CONNECT
+      uri: https://example.com/json
+      body:
+        type: json
+        content:
+          stable: yes
+          request_id: recorded
+          metadata:
+            timestamp: "2026-01-01T00:00:00Z"
+          items:
+            - value: 1
+              nonce: recorded
+            - value: 2
+    response:
+      status: 204
+      body:
+        type: none
+    recorded_at: "2026-01-01T00:00:03Z"
+  - request:
+      method: TRACE
+      uri: https://example.com/method-only
+      body:
+        type: none
+    response:
+      status: 205
+      body:
+        type: text
+        content: method
+    recorded_at: "2026-01-01T00:00:04Z"
+  - request:
+      method: OPTIONS
+      uri: https://example.com/uri-only
+      body:
+        type: none
+    response:
+      status: 208
+      body:
+        type: text
+        content: uri
+    recorded_at: "2026-01-01T00:00:05Z"
+  - request:
+      method: GET
+      uri: https://example.com/repeat
+      body:
+        type: none
+    response:
+      status: 206
+      body:
+        type: text
+        content: first
+    recorded_at: "2026-01-01T00:00:06Z"
+  - request:
+      method: GET
+      uri: https://example.com/repeat
+      body:
+        type: none
+    response:
+      status: 207
+      body:
+        type: text
+        content: second
+    recorded_at: "2026-01-01T00:00:07Z"

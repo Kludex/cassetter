@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "http": [
+    {
+      "method": "GET",
+      "uri": "https://example.com/unknown",
+      "requestHeaders": {"x-multi": ["one", "two"]},
+      "requestBody": {"type": "json", "content": {"nested": {"value": "kept"}}},
+      "status": 200,
+      "responseHeaders": {},
+      "responseBody": {"type": "text", "content": "kept"},
+      "recordedAt": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "grpc": [],
+  "ws": []
+}
