@@ -485,8 +485,8 @@ jobs:
 
   publish-pypi:
     name: publish to PyPI
-    needs: [version, build-wheels, build-sdist]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.build-wheels.result == 'success' && needs.build-sdist.result == 'success' }}
+    needs: [version, validate-go, build-wheels, build-sdist]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.build-wheels.result == 'success' && needs.build-sdist.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -509,8 +509,8 @@ jobs:
 
   publish-npm:
     name: publish to npm
-    needs: [version, package-npm]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.package-npm.result == 'success' }}
+    needs: [version, validate-go, package-npm]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.package-npm.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: npm
@@ -533,8 +533,8 @@ jobs:
 
   publish-crates-io:
     name: publish to crates.io
-    needs: [version, package-rust]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.package-rust.result == 'success' }}
+    needs: [version, validate-go, package-rust]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.package-rust.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: crates-io
