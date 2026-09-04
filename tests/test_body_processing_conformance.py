@@ -2,19 +2,45 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from cassetter._core import Body, Cassette, process_body
+import yaml
+from typing_extensions import NotRequired, TypedDict
+
+from cassetter._core import process_body
 from tests.conformance_helpers import canonical_body
 
 FIXTURES = Path(__file__).parent.parent / "conformance" / "body-processing"
 
 
-def body_bytes(body: Body) -> bytes:
-    if body.body_type == "binary":
-        return cast(bytes, body.content)
-    if body.body_type == "text":
-        return cast(str, body.content).encode()
+class RawBody(TypedDict):
+    type: str
+    content: NotRequired[str]
+
+
+class RawMessage(TypedDict):
+    headers: NotRequired[dict[str, list[str]]]
+    body: RawBody
+
+
+class RawRequest(TypedDict):
+    uri: str
+
+
+class RawInteraction(TypedDict):
+    request: RawRequest
+    response: RawMessage
+
+
+class RawCassette(TypedDict):
+    interactions: list[RawInteraction]
+
+
+def body_bytes(body: RawBody) -> bytes:
+    if body["type"] == "binary":
+        return bytes.fromhex(body["content"])
+    if body["type"] == "text":
+        return body["content"].encode()
     return b""
 
 
@@ -26,18 +52,19 @@ def header(headers: dict[str, list[str]], name: str) -> str | None:
 
 
 def test_shared_body_processing_cases() -> None:
-    cassette = Cassette.load(str(FIXTURES / "cases.yaml"))
-    expected: dict[str, dict[str, Any]] = json.loads((FIXTURES / "expected.json").read_text())
+    source: RawCassette = yaml.safe_load((FIXTURES / "cases.yaml").read_text(encoding="utf-8"))
+    expected: dict[str, dict[str, Any]] = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
 
-    actual = {
-        interaction.request.uri: canonical_body(
+    actual: dict[str, dict[str, Any]] = {}
+    for interaction in source["interactions"]:
+        response = interaction["response"]
+        headers = response.get("headers", {})
+        actual[interaction["request"]["uri"]] = canonical_body(
             process_body(
-                body_bytes(interaction.response.body),
-                header(interaction.response.headers, "content-type"),
-                header(interaction.response.headers, "content-encoding"),
+                body_bytes(response["body"]),
+                header(headers, "content-type"),
+                header(headers, "content-encoding"),
             )
         )
-        for interaction in cassette.interactions
-    }
 
     assert actual == expected
