@@ -35,9 +35,7 @@ func (t *Transport) requestForMatching(request *http.Request) (HTTPRequest, erro
 }
 
 func (t *Transport) matchesRequestContent() bool {
-	return slices.Contains(t.config.matchers, MatcherHeaders) ||
-		slices.Contains(t.config.matchers, MatcherBody) ||
-		slices.Contains(t.config.matchers, MatcherJSONBody)
+	return slices.Contains(t.config.matchers, MatcherBody) || slices.Contains(t.config.matchers, MatcherJSONBody)
 }
 
 func readRequestBody(request *http.Request) ([]byte, error) {

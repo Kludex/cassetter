@@ -140,6 +140,34 @@ func TestTransportRejectsInvalidMatchers(t *testing.T) {
 	}
 }
 
+func TestTransportHeaderMatchDoesNotReadBody(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	saveMatchingCassette(t, path, cassetter.HTTPRequest{
+		Method:  http.MethodGet,
+		URI:     "https://recorded.example.com/value",
+		Headers: http.Header{"x-match": {"yes"}},
+	})
+	client := &http.Client{Transport: cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeNone),
+		cassetter.WithMatchers(cassetter.MatcherHeaders),
+	)}
+	request, err := http.NewRequest(http.MethodPost, "https://example.com/value", failingReadCloser{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-Match", "yes")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTransportBodyMatchReadFailure(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "cassette.yaml")
