@@ -641,6 +641,13 @@ def test_metadata_to_dict_bytes_values() -> None:
     assert result == {"key": ["binary-val"]}
 
 
+def test_metadata_to_dict_binary_metadata() -> None:
+
+    md = [("trace-bin", b"\xff\x00")]
+    result = metadata_to_dict(md)
+    assert result == {"trace-bin": ["/wA="]}
+
+
 def test_build_json_debug_no_protobuf() -> None:
 
     # Objects without MessageToDict support return None

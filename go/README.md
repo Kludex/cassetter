@@ -1,6 +1,6 @@
 # cassetter-go
 
-Record and replay Go HTTP requests with the same structured YAML and TOML formats as
+Record and replay Go HTTP and gRPC requests with the same structured cassette format as
 [`cassetter`](https://github.com/Kludex/cassetter).
 
 ## Install
@@ -60,7 +60,61 @@ It only replays when the cassette already exists.
 
 Use a `.toml` path to store HTTP cassettes as TOML. Other extensions use YAML.
 
-## Configure request matching
+## Record and replay gRPC
+
+```go
+package example_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/Kludex/cassetter/go"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+    "google.golang.org/grpc/health/grpc_health_v1"
+)
+
+func TestHealth(t *testing.T) {
+    recorder := cassetter.NewTestGRPCRecorder(
+        t,
+        cassetter.WithPath("testdata/cassettes/health.yaml"),
+    )
+    connection, err := grpc.NewClient(
+        "dns:///localhost:50051",
+        grpc.WithTransportCredentials(insecure.NewCredentials()),
+        grpc.WithChainUnaryInterceptor(recorder.UnaryClientInterceptor()),
+        grpc.WithChainStreamInterceptor(recorder.StreamClientInterceptor()),
+    )
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer connection.Close()
+
+    client := grpc_health_v1.NewHealthClient(connection)
+    if _, err := client.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{}); err != nil {
+        t.Fatal(err)
+    }
+}
+```
+
+`UnaryClientInterceptor` records unary calls. `StreamClientInterceptor` records
+server-streaming, client-streaming, and bidirectional calls. Both interceptors
+match the full gRPC method. They prefer unused interactions and then reuse the
+first matching interaction.
+
+The recorder stores protobuf messages as binary bodies. Unary interactions also
+include scrubbed protobuf JSON for inspection. The v1 format stores response
+headers and trailers in one combined metadata map. Replay exposes that map from
+both metadata accessors. Binary `-bin` metadata values use base64 in the cassette.
+Status codes and messages remain separate. Header and JSON secret filtering use
+the same configuration as HTTP recording.
+
+Use YAML for cassettes that contain gRPC interactions. TOML supports HTTP only.
+Call `NewGRPCRecorder` instead of `NewTestGRPCRecorder` outside a test, then call
+`Transport.Close` to surface incomplete streams and save errors.
+
+## Configure HTTP request matching
 
 ```go
 transport := cassetter.NewTransport(
@@ -225,8 +279,8 @@ preserve the source values. TOML supports HTTP interactions only.
 
 ## Scope
 
-The first release supports YAML and TOML cassettes and HTTP through
-`http.RoundTripper`. `Load` accepts structured Cassetter YAML, VCR.py YAML, and
-Cassetter TOML. It exposes typed HTTP, gRPC, and WebSocket interactions. YAML
-rewrites preserve unrecognized top-level protocol sections. gRPC interceptors
-and WebSocket recording are planned.
+The first release supports HTTP through `http.RoundTripper` and gRPC through
+unary and streaming client interceptors. `Load` accepts structured Cassetter
+YAML, VCR.py YAML, and Cassetter TOML. It exposes typed HTTP, gRPC, and WebSocket
+interactions. YAML rewrites preserve unrecognized top-level protocol sections.
+WebSocket recording is planned.

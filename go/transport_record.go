@@ -1,7 +1,5 @@
 package cassetter
 
-import "sort"
-
 func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 	cassette := &Cassette{Version: 1, Interactions: []HTTPInteraction{interaction}}
 	cassette.Scrub(t.config.security)
@@ -17,18 +15,9 @@ func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 	candidateOrders := append([]uint64(nil), t.orders...)
 	candidateOrders = append(candidateOrders, order)
 
-	indices := make([]int, len(candidateInteractions))
-	for index := range indices {
-		indices[index] = index
-	}
-	sort.SliceStable(indices, func(left int, right int) bool {
-		return candidateOrders[indices[left]] < candidateOrders[indices[right]]
-	})
 	output := *t.cassette
-	output.Interactions = make([]HTTPInteraction, 0, len(indices))
-	for _, index := range indices {
-		output.Interactions = append(output.Interactions, candidateInteractions[index])
-	}
+	output.Interactions = orderedRecordings(candidateInteractions, candidateOrders)
+	output.GRPCInteractions = orderedRecordings(t.cassette.GRPCInteractions, t.grpcOrders)
 	if err := output.Save(t.config.path); err != nil {
 		t.saveEmpty = false
 		return err

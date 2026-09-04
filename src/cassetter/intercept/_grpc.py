@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import struct
 from collections.abc import AsyncIterator
 from typing import Any
@@ -489,7 +490,11 @@ def metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
         return {}
     result: dict[str, list[str]] = {}
     for key, value in metadata:
-        str_val = value if isinstance(value, str) else value.decode("utf-8", errors="replace")
+        if key.lower().endswith("-bin"):
+            raw_value = value.encode() if isinstance(value, str) else value
+            str_val = base64.b64encode(raw_value).decode("ascii")
+        else:
+            str_val = value if isinstance(value, str) else value.decode("utf-8", errors="replace")
         result.setdefault(key, []).append(str_val)
     return result
 
