@@ -53,7 +53,7 @@ func (t *Transport) DialWebSocket(
 			if err != nil {
 				return nil, nil, err
 			}
-			return connection, replayWebSocketResponse(parsed), nil
+			return connection, replayWebSocketResponse(parsed, connection.Subprotocol()), nil
 		}
 	}
 	if !t.canRecord {
@@ -88,14 +88,18 @@ func (t *Transport) DialWebSocket(
 	}, response, nil
 }
 
-func replayWebSocketResponse(uri *url.URL) *http.Response {
+func replayWebSocketResponse(uri *url.URL, subprotocol string) *http.Response {
+	headers := make(http.Header)
+	if subprotocol != "" {
+		headers.Set("Sec-WebSocket-Protocol", subprotocol)
+	}
 	return &http.Response{
 		Status:     "101 Switching Protocols",
 		StatusCode: http.StatusSwitchingProtocols,
 		Proto:      "HTTP/1.1",
 		ProtoMajor: 1,
 		ProtoMinor: 1,
-		Header:     make(http.Header),
+		Header:     headers,
 		Body:       http.NoBody,
 		Request:    &http.Request{Method: http.MethodGet, URL: uri},
 	}

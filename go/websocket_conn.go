@@ -64,6 +64,9 @@ func (c *WebSocketConn) Reader(ctx context.Context) (websocket.MessageType, io.R
 
 // Write writes one complete WebSocket message.
 func (c *WebSocketConn) Write(ctx context.Context, messageType websocket.MessageType, content []byte) error {
+	if messageType != websocket.MessageText && messageType != websocket.MessageBinary {
+		return errors.New("cassetter: WebSocket message type must be text or binary")
+	}
 	if c.replay != nil {
 		return c.replay.write(ctx, messageType)
 	}
@@ -76,6 +79,10 @@ func (c *WebSocketConn) Write(ctx context.Context, messageType websocket.Message
 		err = c.appendFrame("send", messageType, content)
 	}
 	c.writeMu.Unlock()
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		c.appendCloseFrame(err)
+		return joinWebSocketErrors(err, c.finalize())
+	}
 	return err
 }
 

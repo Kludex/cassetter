@@ -1002,6 +1002,20 @@ async def test_replay_ws_normal_close_status() -> None:
 
 
 @pytest.mark.anyio
+async def test_replay_ws_no_status_close() -> None:
+
+    interaction = WsInteraction(
+        "wss://ws.example.com",
+        {},
+        [WsFrame("recv", "close", Body("binary", b"\x03\xed"), 10)],
+    )
+    ws = VCRWebSocketReplay(interaction)
+    with pytest.raises(ConnectionClosedOK) as exc_info:
+        await ws.recv()
+    assert exc_info.value.rcvd == Close(1005, "")
+
+
+@pytest.mark.anyio
 async def test_replay_ws_rejects_short_close_frame() -> None:
 
     interaction = WsInteraction(

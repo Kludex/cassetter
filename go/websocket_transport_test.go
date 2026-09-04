@@ -84,6 +84,9 @@ func TestWebSocketTransportRecordsAndReplaysMessages(t *testing.T) {
 	if got := replay.Subprotocol(); got != "chat" {
 		t.Fatalf("replay subprotocol = %q, want chat", got)
 	}
+	if got := replayResponse.Header.Get("Sec-WebSocket-Protocol"); got != "chat" {
+		t.Fatalf("replay response subprotocol = %q, want chat", got)
+	}
 	if err := replay.Ping(context.Background()); err != nil {
 		t.Fatalf("ping replay WebSocket: %v", err)
 	}

@@ -8,7 +8,7 @@ from typing import Any
 import websockets
 import websockets.asyncio.client
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
-from websockets.frames import Close
+from websockets.frames import Close, CloseCode
 
 from cassetter._core import Body, WsFrame, WsInteraction
 from cassetter._state import get_current_cassette
@@ -122,7 +122,7 @@ class VCRWebSocketReplay:
                 if len(data) < 2:
                     raise ValueError("recorded WebSocket close body is shorter than its status code")
                 close = Close(struct.unpack(">H", data[:2])[0], data[2:].decode())
-                if close.code in (1000, 1001):
+                if close.code in (1000, 1001, CloseCode.NO_STATUS_RCVD):
                     raise ConnectionClosedOK(close, None)
                 raise ConnectionClosedError(close, None)
             # Recorded frames are exhausted; signal a clean end-of-stream the
