@@ -42,9 +42,10 @@ func main() {
 }
 ```
 
-The transport matches each interaction once by HTTP method and URI. It is safe
-to share between goroutines. Response bodies remain streaming. A recording is
-written when the body reaches EOF or is closed.
+The transport matches by HTTP method and URI. It prefers an unused interaction,
+then reuses the first matching interaction after every match has played. It is
+safe to share between goroutines. Response bodies remain streaming. A recording
+is written when the body reaches EOF or is closed.
 
 `RecordModeOnce` is the default. It records when the cassette does not exist.
 It only replays when the cassette already exists.
@@ -56,6 +57,25 @@ It only replays when the cassette already exists.
 | `RecordModeNewEpisodes` | Replay existing interactions and record misses. |
 | `RecordModeAll` | Record every request and replace existing interactions. |
 | `RecordModeRewrite` | Remove the cassette first, then record every request. |
+
+## Configure request matching
+
+```go
+transport := cassetter.NewTransport(
+    http.DefaultTransport,
+    cassetter.WithPath("testdata/cassettes/chat.yaml"),
+    cassetter.WithMatchers(
+        cassetter.MatcherMethod,
+        cassetter.MatcherURI,
+        cassetter.MatcherJSONBody,
+    ),
+    cassetter.WithIgnoredJSONPaths("request_id", "metadata.timestamp"),
+)
+```
+
+Available matchers are `method`, `uri`, `headers`, `body`, and `json_body`.
+The headers matcher requires every recorded header to have the same values in the incoming request.
+Use `WithURINormalizer` when environment-specific URI segments should compare as the same resource.
 
 ## Use cassettes in tests
 

@@ -141,9 +141,15 @@ func TestTransportStreamsRecordsAndReplays(t *testing.T) {
 	if strings.Contains(string(replayedBody), "secret") || !strings.Contains(string(replayedBody), "[FILTERED]") {
 		t.Fatalf("replayed body = %q", replayedBody)
 	}
-	_, err = replayClient.Get(server.URL + "/events?api_key=third")
-	if !errors.Is(err, cassetter.ErrNoMatch) {
-		t.Fatalf("second replay error = %v", err)
+	repeated, err := replayClient.Get(server.URL + "/events?api_key=third")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(io.Discard, repeated.Body); err != nil {
+		t.Fatal(err)
+	}
+	if err := repeated.Body.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -209,6 +215,32 @@ func TestTransportStreamsRequestBodies(t *testing.T) {
 	}
 	if content := cassette.Interactions[0].Request.Body.Content; content != "first-second" {
 		t.Fatalf("recorded request body = %q", content)
+	}
+}
+
+func TestTransportReturnsNoMatchForDifferentRequest(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "no-match.yaml")
+	cassette := &cassetter.Cassette{
+		Version: 1,
+		Interactions: []cassetter.HTTPInteraction{{
+			Request: cassetter.HTTPRequest{Method: http.MethodGet, URI: "https://example.com/one"},
+			Response: cassetter.HTTPResponse{
+				Status: http.StatusOK,
+			},
+		}},
+	}
+	if err := cassette.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeNone),
+	)}
+	_, err := client.Get("https://example.com/two")
+	if !errors.Is(err, cassetter.ErrNoMatch) {
+		t.Fatalf("request error = %v", err)
 	}
 }
 
