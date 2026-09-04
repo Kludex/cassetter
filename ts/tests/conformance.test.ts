@@ -108,7 +108,7 @@ describe("cross-language format conformance", () => {
     expect(canonical(cassette)).toEqual(expected(case_));
   });
 
-  it.each(CASES)("round-trips $name through YAML without drift", (case_) => {
+  it.each(CASES)("round-trips $name through its storage format without drift", (case_) => {
     const directory = mkdtempSync(join(tmpdir(), "cassetter-conf-"));
     try {
       const output = join(directory, case_.cassette);

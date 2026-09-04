@@ -1,6 +1,6 @@
 # cassetter-go
 
-Record and replay Go HTTP requests with the same structured YAML format as
+Record and replay Go HTTP requests with the same structured YAML and TOML formats as
 [`cassetter`](https://github.com/Kludex/cassetter).
 
 ## Install
@@ -57,6 +57,8 @@ It only replays when the cassette already exists.
 | `RecordModeNewEpisodes` | Replay existing interactions and record misses. |
 | `RecordModeAll` | Record every request and replace existing interactions. |
 | `RecordModeRewrite` | Remove the cassette first, then record every request. |
+
+Use a `.toml` path to store HTTP cassettes as TOML. Other extensions use YAML.
 
 ## Configure request matching
 
@@ -198,7 +200,7 @@ transport := cassetter.NewTransport(
 
 Each option adds to the safe defaults.
 
-## Inspect, diff, and scrub
+## Inspect, diff, scrub, and convert
 
 ```bash
 go install github.com/Kludex/cassetter/go/cmd/cassetter@latest
@@ -207,6 +209,8 @@ cassetter inspect tests/cassettes/openai.yaml
 cassetter diff tests/cassettes/openai.yaml tests/cassettes/openai-new.yaml
 cassetter scrub tests/cassettes/openai.yaml
 cassetter scrub --header x-company-token input.yaml output.yaml
+cassetter convert input.yaml output.toml
+cassetter convert --to toml tests/cassettes converted-cassettes
 ```
 
 `cassetter diff` exits with status `1` when it finds a difference. This lets you use it in CI.
@@ -215,9 +219,14 @@ cassetter scrub --header x-company-token input.yaml output.yaml
 It applies the same safe defaults as the HTTP transport. Pass `--force` to
 overwrite a separate output file.
 
+`cassetter convert` detects YAML or TOML from each file extension. It filters
+secrets by default, including secrets in VCR.py cassettes. Pass `--no-scrub` to
+preserve the source values. TOML supports HTTP interactions only.
+
 ## Scope
 
-The first release supports YAML cassettes and HTTP through
-`http.RoundTripper`. `Load` exposes typed HTTP, gRPC, and WebSocket interactions,
-and rewrites preserve unrecognized top-level protocol sections. gRPC interceptors
+The first release supports YAML and TOML cassettes and HTTP through
+`http.RoundTripper`. `Load` accepts structured Cassetter YAML, VCR.py YAML, and
+Cassetter TOML. It exposes typed HTTP, gRPC, and WebSocket interactions. YAML
+rewrites preserve unrecognized top-level protocol sections. gRPC interceptors
 and WebSocket recording are planned.

@@ -74,7 +74,7 @@ func canonicalBody(body cassetter.Body) map[string]any {
 func canonicalHeaders(headers http.Header) map[string][]string {
 	result := make(map[string][]string, len(headers))
 	for name, values := range headers {
-		result[name] = append([]string(nil), values...)
+		result[name] = append([]string{}, values...)
 	}
 	return result
 }

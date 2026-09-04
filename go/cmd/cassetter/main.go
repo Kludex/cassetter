@@ -26,6 +26,8 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		err = diffCommand(arguments[1:], stdout)
 	case "scrub":
 		err = scrubCommand(arguments[1:], stdout, stderr)
+	case "convert":
+		err = convertCommand(arguments[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		if err := printUsage(stdout); err != nil {
 			return 1
@@ -51,9 +53,10 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func printUsage(writer io.Writer) error {
-	_, err := fmt.Fprintln(writer, `usage: cassetter <inspect|diff|scrub> [arguments]
-  inspect <cassette>             summarize recorded interactions
-  diff <left> <right>            compare cassettes semantically
-  scrub [flags] <input> [output] remove secrets from a cassette`)
+	_, err := fmt.Fprintln(writer, `usage: cassetter <inspect|diff|scrub|convert> [arguments]
+  inspect <cassette>               summarize recorded interactions
+  diff <left> <right>              compare cassettes semantically
+  scrub [flags] <input> [output]   remove secrets from a cassette
+  convert [flags] <input> <output> convert cassette files and directories`)
 	return err
 }

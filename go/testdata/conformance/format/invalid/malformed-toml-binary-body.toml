@@ -1,0 +1,12 @@
+version = 1
+
+[[interactions]]
+[interactions.request]
+method = "GET"
+uri = "https://example.com"
+body_type = "none"
+
+[interactions.response]
+status = 200
+body_type = "binary"
+body_content = "xyz"

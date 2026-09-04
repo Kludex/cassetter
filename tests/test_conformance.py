@@ -102,7 +102,7 @@ def test_fixture_matches_canonical_structure(case: FormatCase) -> None:
 
 
 @pytest.mark.parametrize("case", FORMAT_CASES, ids=[case["name"] for case in FORMAT_CASES])
-def test_roundtrip_through_yaml_has_no_drift(tmp_path: Path, case: FormatCase) -> None:
+def test_roundtrip_through_storage_format_has_no_drift(tmp_path: Path, case: FormatCase) -> None:
     output = tmp_path / case["cassette"]
     Cassette.load(str(FORMAT_FIXTURES / case["cassette"])).save(str(output))
     expected = json.loads((FORMAT_FIXTURES / case["expected"]).read_text(encoding="utf-8"))

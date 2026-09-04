@@ -19,11 +19,14 @@ type Cassette struct {
 	extra                 map[string]yaml.Node
 }
 
-// Load reads a YAML cassette from path.
+// Load reads a YAML or TOML cassette based on the path extension.
 func Load(path string) (*Cassette, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read cassette: %w", err)
+	}
+	if isTOML(path) {
+		return unmarshalTOML(content)
 	}
 	var cassette Cassette
 	if err := yaml.Unmarshal(content, &cassette); err != nil {
@@ -35,14 +38,23 @@ func Load(path string) (*Cassette, error) {
 	return &cassette, nil
 }
 
-// Save atomically writes a YAML cassette to path.
+// Save atomically writes a YAML or TOML cassette based on the path extension.
 func (c *Cassette) Save(path string) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
-	content, err := yaml.Marshal(c)
+	var content []byte
+	var err error
+	if isTOML(path) {
+		content, err = c.marshalTOML()
+	} else {
+		content, err = yaml.Marshal(c)
+		if err != nil {
+			err = fmt.Errorf("marshal cassette: %w", err)
+		}
+	}
 	if err != nil {
-		return fmt.Errorf("marshal cassette: %w", err)
+		return err
 	}
 	parent := filepath.Dir(path)
 	if err := os.MkdirAll(parent, 0o755); err != nil {

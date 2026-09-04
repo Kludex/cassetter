@@ -19,8 +19,11 @@ The format fixtures cover:
 - Multi-value headers and metadata.
 - Unicode text and nested JSON.
 - HTTP, gRPC, and WebSocket interactions.
+- YAML and TOML storage.
+- VCR.py status, header, body, and `parsed_body` migration.
 - Empty cassettes.
 - Missing required gRPC and WebSocket fields.
+- Malformed TOML body content.
 
 Additional sets will cover request matching, filtering, body processing, and record modes.
 

@@ -1,0 +1,86 @@
+{
+  "grpc": [],
+  "http": [
+    {
+      "method": "POST",
+      "recordedAt": "",
+      "requestBody": {
+        "content": {
+          "id": 42,
+          "model": "café"
+        },
+        "type": "json"
+      },
+      "requestHeaders": {
+        "x-bool": [
+          "true"
+        ],
+        "x-mixed": [
+          "one",
+          "2",
+          "false"
+        ],
+        "x-null": [],
+        "x-number": [
+          "42"
+        ],
+        "x-scalar": [
+          "value"
+        ]
+      },
+      "responseBody": {
+        "content": "0001fffe",
+        "type": "binary"
+      },
+      "responseHeaders": {
+        "content-type": [
+          "application/json"
+        ]
+      },
+      "status": 200,
+      "uri": "https://api.example.com/json"
+    },
+    {
+      "method": "POST",
+      "recordedAt": "",
+      "requestBody": {
+        "content": {
+          "model": "llama",
+          "stream": false
+        },
+        "type": "json"
+      },
+      "requestHeaders": {},
+      "responseBody": {
+        "content": "plain text",
+        "type": "text"
+      },
+      "responseHeaders": {},
+      "status": 201,
+      "uri": "https://api.example.com/mapping"
+    },
+    {
+      "method": "GET",
+      "recordedAt": "",
+      "requestBody": {
+        "content": {
+          "token": "parsed",
+          "values": [
+            1,
+            null
+          ]
+        },
+        "type": "json"
+      },
+      "requestHeaders": {},
+      "responseBody": {
+        "type": "none"
+      },
+      "responseHeaders": {},
+      "status": 204,
+      "uri": "https://api.example.com/parsed"
+    }
+  ],
+  "version": 1,
+  "ws": []
+}

@@ -32,7 +32,9 @@ Use the Go module when you need cassette recording through `http.RoundTripper`:
 go get github.com/Kludex/cassetter/go
 ```
 
-It reads and writes the same structured YAML format. It also provides `inspect`, `diff`, and `scrub` commands. See the [Go documentation](go/README.md) for the complete example and record modes.
+It reads and writes the same structured YAML and TOML formats, including VCR.py YAML migration. It also provides
+`inspect`, `diff`, `scrub`, and `convert` commands. See the [Go documentation](go/README.md) for the complete example
+and record modes.
 
 ## Quick start
 
