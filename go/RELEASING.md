@@ -13,6 +13,7 @@ $ (cd go && go mod verify)
 $ (cd go && go test -race ./...)
 $ (cd go && go vet ./...)
 $ (cd go && golangci-lint run ./...)
+$ (cd go && go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...)
 ```
 
 Confirm the `main` CI workflow is green. Confirm the release version and notes in `go/CHANGELOG.md`.

@@ -12,6 +12,10 @@ go get github.com/Kludex/cassetter/go@v0.1.0
 See the [Go changelog](CHANGELOG.md) for release details. Maintainers can use the
 [release checklist](RELEASING.md) for module tags.
 
+## Requirements
+
+Use Go 1.25 or newer. Install the latest patch release for your Go toolchain.
+
 ## Record and replay HTTP
 
 ```go
