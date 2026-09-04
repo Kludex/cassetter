@@ -1,0 +1,54 @@
+name: Validate Go release
+
+on:
+  push:
+    tags: ["go/v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - name: Validate module tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#go/}
+          python3 - "$VERSION" <<'PY'
+          import re
+          import sys
+
+          version = sys.argv[1]
+          match = re.fullmatch(
+              r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+              r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?",
+              version,
+          )
+          if match is None:
+              raise SystemExit(f"invalid canonical Go module version: {version}")
+          prerelease = match.group(4)
+          if prerelease is not None:
+              for identifier in prerelease.split("."):
+                  if identifier.isdigit() and len(identifier) > 1 and identifier.startswith("0"):
+                      raise SystemExit(f"invalid canonical Go module version: {version}")
+          if int(match.group(1)) >= 2:
+              raise SystemExit("Go v2+ requires a /vN suffix in the module path")
+          PY
+          test "$(go list -m)" = "github.com/Kludex/cassetter/go"
+      - run: go test -race ./...
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: go

@@ -6,8 +6,11 @@ Record and replay Go HTTP, gRPC, and WebSocket traffic with the same structured 
 ## Install
 
 ```bash
-go get github.com/Kludex/cassetter/go
+go get github.com/Kludex/cassetter/go@v0.1.0
 ```
+
+See the [Go changelog](CHANGELOG.md) for release details. Maintainers can use the
+[release checklist](RELEASING.md) for module tags.
 
 ## Record and replay HTTP
 
@@ -307,7 +310,7 @@ Each option adds to the safe defaults.
 ## Inspect, diff, scrub, and convert
 
 ```bash
-go install github.com/Kludex/cassetter/go/cmd/cassetter@latest
+go install github.com/Kludex/cassetter/go/cmd/cassetter@v0.1.0
 
 cassetter inspect tests/cassettes/openai.yaml
 cassetter diff tests/cassettes/openai.yaml tests/cassettes/openai-new.yaml
@@ -326,6 +329,70 @@ overwrite a separate output file.
 `cassetter convert` detects YAML or TOML from each file extension. It filters
 secrets by default, including secrets in VCR.py cassettes. Pass `--no-scrub` to
 preserve the source values. TOML supports HTTP interactions only.
+
+## API reference
+
+### Constructors and lifecycle
+
+| API | Purpose |
+|---|---|
+| `NewTransport` | Create an HTTP `RoundTripper` and shared cassette lifecycle. |
+| `NewGRPCRecorder` | Create the lifecycle used by unary and streaming gRPC interceptors. |
+| `NewWebSocketRecorder` | Create the lifecycle used by `DialWebSocket`. |
+| `NewTestTransport` | Create and immediately initialize an HTTP transport with `testing.TB` cleanup. |
+| `NewTestGRPCRecorder` | Create and initialize a gRPC recorder with `testing.TB` cleanup. |
+| `NewTestWebSocketRecorder` | Create and initialize a WebSocket recorder with `testing.TB` cleanup. |
+| `Transport.Initialize` | Load and validate the cassette before traffic starts. |
+| `Transport.Close` | Save empty replacement runs and report save or incomplete-recording errors. |
+| `Transport.CloseIdleConnections` | Close idle connections held by the wrapped HTTP transport. |
+
+Use `Transport.UnaryClientInterceptor` and `Transport.StreamClientInterceptor`
+with `grpc.ClientConn`. Use `Transport.DialWebSocket` for WebSockets.
+`WebSocketConn` provides `Read`, `Reader`, `Write`, `Writer`, `Ping`,
+`SetReadLimit`, `Subprotocol`, `Close`, and `CloseNow`.
+
+### Options
+
+| Option | Purpose |
+|---|---|
+| `WithPath` | Set the YAML or TOML cassette path. |
+| `WithRecordMode` | Select `none`, `once`, `new_episodes`, `all`, or `rewrite`. |
+| `WithMatchers` | Select HTTP `method`, `uri`, `headers`, `body`, or `json_body` matching. |
+| `WithIgnoredJSONPaths` | Ignore dot-separated paths during HTTP JSON body matching. |
+| `WithURINormalizer` | Normalize HTTP and WebSocket URIs for comparison. |
+| `WithFilterHeaders` | Add request, response, handshake, or metadata names to filter. |
+| `WithFilterQueryParameters` | Add URI query or fragment parameters to filter. |
+| `WithBodyScrubPatterns` | Add JSON or text field patterns to scrub. |
+| `WithFilterReplacement` | Change the value written in place of secrets. |
+| `WithMaxAge` | Set the maximum cassette age. |
+| `WithExpiryAction` | Select `warn`, `fail`, or `rerecord` for expired cassettes. |
+| `WithIgnoreLocalhost` | Bypass recording for loopback hosts. |
+| `WithIgnoreHosts` | Bypass recording for exact hosts or wildcard host patterns. |
+| `WithRequestHook` | Transform or skip a live HTTP request before matching. |
+| `WithResponseHook` | Transform or skip a live HTTP response before recording. |
+
+Options add to the safe filtering defaults. `DefaultSecurityConfig` returns a
+copy of those defaults for `Cassette.Scrub`.
+
+### Cassette data
+
+`Load` reads YAML, TOML, or VCR.py YAML into `Cassette`. `Cassette.Save` writes
+atomically. `Cassette.Scrub` filters an in-memory cassette. `Cassette` exposes
+`Interactions`, `GRPCInteractions`, and `WebSocketInteractions` with typed
+request, response, body, metadata, and frame values.
+
+`Body.Type` is `BodyTypeNone`, `BodyTypeJSON`, `BodyTypeText`, or
+`BodyTypeBinary`. JSON content uses ordinary Go values. Binary content uses
+`[]byte` and is stored as lowercase hexadecimal.
+
+### Errors
+
+Use `errors.Is` with `ErrNoMatch`, `ErrIncompleteRecording`,
+`ErrTransportClosed`, `ErrCassetteExpired`, and `ErrSkipRecording`. Use
+`errors.As` when you need details from `NoMatchError`, `NoGRPCMatchError`,
+`NoWebSocketMatchError`, `IncompleteRecordingError`,
+`IncompleteGRPCRecordingError`, `IncompleteWebSocketRecordingError`, or
+`CassetteExpiredError`.
 
 ## Scope
 
