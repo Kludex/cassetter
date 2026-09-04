@@ -541,21 +541,23 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: crates-io-dist
-          path: crates-io-dist
+          path: ${{ runner.temp }}/crates-io-dist
       - name: Extract verified crate
         env:
+          CRATE_DIR: ${{ runner.temp }}/crates-io-dist
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          tar -xzf "crates-io-dist/cassetter-core-${VERSION}.crate" -C crates-io-dist
-          rm "crates-io-dist/cassetter-core-${VERSION}/Cargo.toml.orig"
+          tar -xzf "$CRATE_DIR/cassetter-core-${VERSION}.crate" -C "$CRATE_DIR"
+          rm "$CRATE_DIR/cassetter-core-${VERSION}/Cargo.toml.orig"
       - name: Authenticate to crates.io
         id: crates-io-auth
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
       - name: Publish verified crate
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+          CRATE_DIR: ${{ runner.temp }}/crates-io-dist
           VERSION: ${{ needs.version.outputs.version }}
-        run: cargo publish --manifest-path "crates-io-dist/cassetter-core-${VERSION}/Cargo.toml" --no-verify --allow-dirty
+        run: cargo publish --manifest-path "$CRATE_DIR/cassetter-core-${VERSION}/Cargo.toml" --no-verify --allow-dirty
 
   smoke-check:
     name: check release artifact smoke test
