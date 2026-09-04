@@ -14,25 +14,25 @@
   "files": [
     "dist",
     "native/index.js",
-    "native/index.d.ts",
     "native/package.json",
     "native/*.node"
   ],
   "napi": {
-    "name": "cassetter",
-    "triples": {
-      "defaults": true,
-      "additional": [
-        "aarch64-apple-darwin",
-        "aarch64-unknown-linux-gnu",
-        "aarch64-pc-windows-msvc",
-        "x86_64-unknown-linux-musl"
-      ]
-    }
+    "binaryName": "cassetter",
+    "targets": [
+      "aarch64-apple-darwin",
+      "aarch64-pc-windows-msvc",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ]
   },
   "scripts": {
-    "build:native": "napi build --platform --release --cargo-cwd .. -p cassetter-node --cargo-name cassetter_node native",
-    "build:native:debug": "napi build --platform --cargo-cwd .. -p cassetter-node --cargo-name cassetter_node native",
+    "build:native": "napi build --platform --release --manifest-path ../crates/cassetter-node/Cargo.toml --package-json-path package.json --output-dir native",
+    "build:native:debug": "napi build --platform --manifest-path ../crates/cassetter-node/Cargo.toml --package-json-path package.json --output-dir native",
     "build": "npm run build:native && tsc",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
@@ -66,7 +66,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.4",
+    "@napi-rs/cli": "^3.9.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
