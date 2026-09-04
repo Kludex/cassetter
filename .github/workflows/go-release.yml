@@ -9,7 +9,11 @@ permissions:
 
 jobs:
   validate:
+    name: validate (${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.25.x", stable]
     defaults:
       run:
         working-directory: go
@@ -19,7 +23,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go/go.mod
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
           cache-dependency-path: go/go.sum
       - name: Validate module tag
         shell: bash
@@ -52,3 +57,4 @@ jobs:
         with:
           version: latest
           working-directory: go
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
