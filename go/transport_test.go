@@ -292,10 +292,14 @@ func (transport *idleClosingTransport) CloseIdleConnections() {
 	transport.closed = true
 }
 
-func TestTransportCloseDrainsAndRecords(t *testing.T) {
-	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(writer, strings.Repeat("x", 64*1024))
+func TestTransportCloseStopsAnUnboundedResponse(t *testing.T) {
+	started := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(writer, "first")
+		writer.(http.Flusher).Flush()
+		close(started)
+		<-request.Context().Done()
 	}))
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), "close.yaml")
@@ -304,21 +308,28 @@ func TestTransportCloseDrainsAndRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := response.Body.Close(); err != nil {
+	<-started
+	first := make([]byte, len("first"))
+	if _, err := io.ReadFull(response.Body, first); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for {
-		cassette, err := cassetter.Load(path)
-		if err == nil {
-			if len(cassette.Interactions) != 1 {
-				t.Fatalf("interactions = %d", len(cassette.Interactions))
-			}
-			break
-		}
-		if time.Now().After(deadline) {
+	closed := make(chan error, 1)
+	go func() {
+		closed <- response.Body.Close()
+	}()
+	select {
+	case err := <-closed:
+		if err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(time.Millisecond)
+	case <-time.After(time.Second):
+		t.Fatal("Close blocked while draining an unbounded response")
+	}
+	cassette, err := cassetter.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content := cassette.Interactions[0].Response.Body.Content; content != "first" {
+		t.Fatalf("recorded response body = %q", content)
 	}
 }

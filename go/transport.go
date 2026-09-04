@@ -66,7 +66,14 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 	responseHeaders := recordHeaders(response.Header)
 	responseStatus := response.StatusCode
 	finalize := func(content []byte) error {
-		requestContent := requestBody.content()
+		requestContent, err := decodeBody(requestBody.content(), requestHeaders)
+		if err != nil {
+			return err
+		}
+		responseContent, err := decodeBody(content, responseHeaders)
+		if err != nil {
+			return err
+		}
 		interaction := HTTPInteraction{
 			Request: HTTPRequest{
 				Method:  requestMethod,
@@ -77,7 +84,7 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 			Response: HTTPResponse{
 				Status:  responseStatus,
 				Headers: responseHeaders,
-				Body:    bodyFromBytes(content, headerValue(responseHeaders, "content-type")),
+				Body:    bodyFromBytes(responseContent, headerValue(responseHeaders, "content-type")),
 			},
 			RecordedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		}

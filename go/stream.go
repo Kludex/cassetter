@@ -59,6 +59,7 @@ type recordingBody struct {
 	source   io.ReadCloser
 	content  bytes.Buffer
 	finalize func([]byte) error
+	mu       sync.Mutex
 
 	finishOnce sync.Once
 	finishErr  error
@@ -73,7 +74,9 @@ func newRecordingBody(source io.ReadCloser, finalize func([]byte) error) io.Read
 func (b *recordingBody) Read(target []byte) (int, error) {
 	count, err := b.source.Read(target)
 	if count > 0 {
+		b.mu.Lock()
 		_, _ = b.content.Write(target[:count])
+		b.mu.Unlock()
 	}
 	if errors.Is(err, io.EOF) {
 		if finishErr := b.finish(); finishErr != nil {
@@ -85,16 +88,18 @@ func (b *recordingBody) Read(target []byte) (int, error) {
 
 func (b *recordingBody) Close() error {
 	b.closeOnce.Do(func() {
-		_, drainErr := io.Copy(io.Discard, b)
 		closeErr := b.source.Close()
-		b.closeErr = errors.Join(drainErr, closeErr)
+		b.closeErr = errors.Join(closeErr, b.finish())
 	})
 	return b.closeErr
 }
 
 func (b *recordingBody) finish() error {
 	b.finishOnce.Do(func() {
-		b.finishErr = b.finalize(bytes.Clone(b.content.Bytes()))
+		b.mu.Lock()
+		content := bytes.Clone(b.content.Bytes())
+		b.mu.Unlock()
+		b.finishErr = b.finalize(content)
 	})
 	return b.finishErr
 }
