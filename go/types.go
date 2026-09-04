@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -96,7 +97,7 @@ func (b *Body) UnmarshalYAML(node *yaml.Node) error {
 		if !hasContent || contentNode.Tag != "!!str" || contentNode.Decode(&content) != nil {
 			return fmt.Errorf("text body content must be a string")
 		}
-		*b = Body{Type: value.Type, Content: content}
+		*b = Body{Type: value.Type, Content: norm.NFC.String(content)}
 	case BodyTypeJSON:
 		var content any
 		if hasContent {
