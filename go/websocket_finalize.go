@@ -23,10 +23,6 @@ func (c *WebSocketConn) finalize() error {
 		c.mu.Unlock()
 		c.writeMu.Unlock()
 		c.readMu.Unlock()
-		if len(frames) == 0 {
-			c.transport.finishWebSocketRecording(c.order, nil)
-			return
-		}
 		c.finishErr = c.transport.recordWebSocket(WebSocketInteraction{
 			URI:        c.uri,
 			Headers:    c.headers,

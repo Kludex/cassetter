@@ -1,6 +1,7 @@
 package cassetter
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -12,7 +13,10 @@ import (
 func (c *WebSocketConn) appendCloseFrame(err error) {
 	var closeError websocket.CloseError
 	if !errors.As(err, &closeError) {
-		return
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		closeError.Code = websocket.StatusAbnormalClosure
 	}
 	content := make([]byte, 2+len(closeError.Reason))
 	binary.BigEndian.PutUint16(content, uint16(closeError.Code))
@@ -22,13 +26,17 @@ func (c *WebSocketConn) appendCloseFrame(err error) {
 		offset = 0
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.terminal {
+		return
+	}
+	c.terminal = true
 	c.frames = append(c.frames, WebSocketFrame{
 		Direction: "recv",
 		FrameType: "close",
 		Body:      Body{Type: BodyTypeBinary, Content: content},
 		OffsetMS:  uint64(offset),
 	})
-	c.mu.Unlock()
 }
 
 func replayWebSocketClose(frame WebSocketFrame) (websocket.CloseError, error) {

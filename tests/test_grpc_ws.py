@@ -1124,6 +1124,53 @@ async def test_record_ws_close_status(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
+async def test_record_ws_abnormal_close(tmp_path: Path) -> None:
+
+    path = os.path.join(str(tmp_path), "ws_abnormal.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    class FakeWs:
+        async def recv(self) -> str:
+            raise ConnectionClosedError(None, None)
+
+    token = current_cassette.set(cassette)
+    try:
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
+        with pytest.raises(ConnectionClosedError):
+            await ws.recv()
+    finally:
+        current_cassette.reset(token)
+
+    frame = cassette.ws_interactions[0].frames[0]
+    assert frame.frame_type == "close"
+    assert frame.body.content == b"\x03\xee"
+
+
+@pytest.mark.anyio
+async def test_record_ws_empty_connection(tmp_path: Path) -> None:
+
+    path = os.path.join(str(tmp_path), "ws_empty.yaml")
+    cassette = Cassette(path, record_mode=RecordMode.ALL)
+    cassette.load()
+
+    class FakeWs:
+        async def close(self, code: int = 1000, reason: str = "") -> None:
+            pass
+
+    token = current_cassette.set(cassette)
+    try:
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {}, "chat")
+        await ws.close()
+    finally:
+        current_cassette.reset(token)
+
+    interaction = cassette.ws_interactions[0]
+    assert interaction.frames == []
+    assert interaction.headers["sec-websocket-protocol"] == ["chat"]
+
+
+@pytest.mark.anyio
 async def test_record_ws_context_manager(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "ws_ctx.yaml")

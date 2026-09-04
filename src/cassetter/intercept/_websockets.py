@@ -33,6 +33,7 @@ class VCRWebSocket:
         self.subprotocol = subprotocol
         self._frames: list[WsFrame] = []
         self._terminal_recorded = False
+        self._flushed = False
         self._start_time = time.monotonic()
 
     async def send(self, message: str | bytes) -> None:
@@ -50,10 +51,10 @@ class VCRWebSocket:
         except websockets.exceptions.ConnectionClosed as exc:
             if not self._terminal_recorded:
                 self._terminal_recorded = True
-                if exc.rcvd is not None:
-                    content = struct.pack(">H", exc.rcvd.code) + exc.rcvd.reason.encode()
-                    offset_ms = int((time.monotonic() - self._start_time) * 1000)
-                    self._frames.append(WsFrame("recv", "close", Body("binary", content), offset_ms))
+                close = exc.rcvd or Close(1006, "")
+                content = struct.pack(">H", close.code) + close.reason.encode()
+                offset_ms = int((time.monotonic() - self._start_time) * 1000)
+                self._frames.append(WsFrame("recv", "close", Body("binary", content), offset_ms))
                 self._flush()
             raise
         offset_ms = int((time.monotonic() - self._start_time) * 1000)
@@ -70,9 +71,10 @@ class VCRWebSocket:
 
     def _flush(self) -> None:
         cassette = get_current_cassette()
-        if self._frames and cassette is not None:
+        if not self._flushed and cassette is not None:
             cassette.record_ws(self._uri, self._headers, self._frames)
             self._frames = []
+            self._flushed = True
 
     async def __aenter__(self) -> VCRWebSocket:
         return self

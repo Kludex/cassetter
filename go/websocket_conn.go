@@ -26,6 +26,7 @@ type WebSocketConn struct {
 	writeMu   sync.Mutex
 	mu        sync.Mutex
 	frames    []WebSocketFrame
+	terminal  bool
 	finish    sync.Once
 	finishErr error
 }
