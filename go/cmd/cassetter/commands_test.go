@@ -40,7 +40,7 @@ grpc_interactions:
         type: none
     response:
       status_code: 0
-      status_message: OK
+      status_message: "OK\e[31mALERT"
       metadata: {}
       body:
         type: none
@@ -63,8 +63,9 @@ ws_interactions:
 	}
 	inspect := runCLI(t, "inspect", input)
 	if !strings.Contains(inspect, "1. GET https://example.com?api_key=secret -> 200") ||
-		!strings.Contains(inspect, "1. /example.Service/Get -> 0 OK") ||
-		!strings.Contains(inspect, "1. wss://example.com/stream?token=secret -> 1 frame(s)") {
+		!strings.Contains(inspect, `1. /example.Service/Get -> 0 OK\x1b[31mALERT`) ||
+		!strings.Contains(inspect, "1. wss://example.com/stream?token=secret -> 1 frame(s)") ||
+		strings.Contains(inspect, "\x1b") {
 		t.Fatalf("inspect output = %q", inspect)
 	}
 	runCLI(t, "scrub", input, output)
