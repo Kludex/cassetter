@@ -58,7 +58,6 @@ func TestRequestHookModifiesRequestsBeforeMatching(t *testing.T) {
 			}
 			request.Body = io.NopCloser(strings.NewReader(`{"value":"hooked"}`))
 			request.ContentLength = -1
-			request.GetBody = nil
 			return nil
 		}),
 	)

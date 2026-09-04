@@ -17,12 +17,12 @@ func validateIgnoreHosts(patterns []string) error {
 }
 
 func (t *Transport) shouldBypass(target *url.URL) bool {
-	host := target.Hostname()
+	host := strings.ToLower(target.Hostname())
 	if t.config.ignoreLocalhost && (strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1") {
 		return true
 	}
 	for _, pattern := range t.config.ignoreHosts {
-		if matched, _ := path.Match(pattern, host); matched {
+		if matched, _ := path.Match(strings.ToLower(pattern), host); matched {
 			return true
 		}
 	}

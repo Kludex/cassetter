@@ -46,7 +46,7 @@ func (b Body) MarshalYAML() (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("JSON body content: %w", err)
 		}
-		content = normalized
+		content = yamlJSONValue{value: normalized}
 	case BodyTypeText:
 		if _, ok := content.(string); !ok {
 			return nil, fmt.Errorf("text body content must be a string")
@@ -95,6 +95,13 @@ func (b *Body) UnmarshalYAML(node *yaml.Node) error {
 		}
 	}
 	if value.Type == BodyTypeJSON {
+		if contentNode, found := mappingValue(node, "content"); found {
+			content, err := decodeYAMLJSONValue(contentNode)
+			if err != nil {
+				return fmt.Errorf("JSON body content: %w", err)
+			}
+			value.Content = content
+		}
 		normalized, err := normalizeJSONValue(value.Content)
 		if err != nil {
 			return fmt.Errorf("JSON body content: %w", err)

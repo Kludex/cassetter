@@ -31,7 +31,7 @@ func TestTransportNormalizesRecordedTextToNFC(t *testing.T) {
 	request, err := http.NewRequest(
 		http.MethodPost,
 		"https://example.com/unicode",
-		strings.NewReader("{\"name\":\"cafe\u0301\",\"id\":9007199254740993}"),
+		strings.NewReader(`{"cafe\u0301":"cafe\u0301","name":"cafe\u0301","id":18446744073709551616}`),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,8 @@ func TestTransportNormalizesRecordedTextToNFC(t *testing.T) {
 	}
 	interaction := cassette.Interactions[0]
 	requestContent := interaction.Request.Body.Content.(map[string]any)
-	if requestContent["name"] != "café" || fmt.Sprint(requestContent["id"]) != "9007199254740993" {
+	if requestContent["name"] != "café" || requestContent["café"] != "café" ||
+		fmt.Sprint(requestContent["id"]) != "18446744073709551616" {
 		t.Fatalf("request body = %#v", requestContent)
 	}
 	if interaction.Response.Body.Content != "café" {

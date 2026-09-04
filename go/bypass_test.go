@@ -82,7 +82,7 @@ func TestTransportBypassesMatchingHosts(t *testing.T) {
 		cassetter.WithIgnoreHosts("*.googleapis.com", "accounts.example.com"),
 	)
 	client := &http.Client{Transport: transport}
-	for _, uri := range []string{"https://oauth2.googleapis.com/token", "https://accounts.example.com/login"} {
+	for _, uri := range []string{"https://OAUTH2.GOOGLEAPIS.COM/token", "https://accounts.example.com/login"} {
 		response, err := client.Get(uri)
 		if err != nil {
 			t.Fatal(err)

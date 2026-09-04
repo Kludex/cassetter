@@ -30,7 +30,8 @@ func bodyFromBytes(content []byte, contentType string) Body {
 		if decoder.Decode(&value) == nil {
 			var extra any
 			if decoder.Decode(&extra) == io.EOF {
-				return Body{Type: BodyTypeJSON, Content: materializeJSONNumbers(value)}
+				content := normalizeJSONUnicode(materializeJSONNumbers(value))
+				return Body{Type: BodyTypeJSON, Content: content}
 			}
 		}
 	}

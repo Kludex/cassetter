@@ -80,12 +80,24 @@ Use `WithURINormalizer` when environment-specific URI segments should compare as
 ## Expire old cassettes
 
 ```go
-transport := cassetter.NewTransport(
-    http.DefaultTransport,
-    cassetter.WithPath("testdata/cassettes/users.yaml"),
-    cassetter.WithMaxAge(7*24*time.Hour),
-    cassetter.WithExpiryAction(cassetter.ExpiryRerecord),
+package main
+
+import (
+    "net/http"
+    "time"
+
+    "github.com/Kludex/cassetter/go"
 )
+
+func main() {
+    transport := cassetter.NewTransport(
+        http.DefaultTransport,
+        cassetter.WithPath("testdata/cassettes/users.yaml"),
+        cassetter.WithMaxAge(7*24*time.Hour),
+        cassetter.WithExpiryAction(cassetter.ExpiryRerecord),
+    )
+    _ = transport
+}
 ```
 
 The default expiry action is `ExpiryWarn`. Use `ExpiryFail` to return a
@@ -95,20 +107,31 @@ again. `RecordModeNone` still cannot record after an expired cassette is removed
 ## Bypass and transform traffic
 
 ```go
-transport := cassetter.NewTransport(
-    http.DefaultTransport,
-    cassetter.WithPath("testdata/cassettes/users.yaml"),
-    cassetter.WithIgnoreLocalhost(),
-    cassetter.WithIgnoreHosts("*.googleapis.com"),
-    cassetter.WithRequestHook(func(request *http.Request) error {
-        request.Header.Del("X-Volatile-ID")
-        return nil
-    }),
-    cassetter.WithResponseHook(func(response *http.Response) error {
-        response.Header.Del("X-Request-ID")
-        return nil
-    }),
+package main
+
+import (
+    "net/http"
+
+    "github.com/Kludex/cassetter/go"
 )
+
+func main() {
+    transport := cassetter.NewTransport(
+        http.DefaultTransport,
+        cassetter.WithPath("testdata/cassettes/users.yaml"),
+        cassetter.WithIgnoreLocalhost(),
+        cassetter.WithIgnoreHosts("*.googleapis.com"),
+        cassetter.WithRequestHook(func(request *http.Request) error {
+            request.Header.Del("X-Volatile-ID")
+            return nil
+        }),
+        cassetter.WithResponseHook(func(response *http.Response) error {
+            response.Header.Del("X-Request-ID")
+            return nil
+        }),
+    )
+    _ = transport
+}
 ```
 
 Bypassed requests go directly to the wrapped transport. The request hook runs

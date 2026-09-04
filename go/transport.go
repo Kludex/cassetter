@@ -56,7 +56,9 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		return t.base.RoundTrip(request)
 	}
 	if t.config.requestHook != nil {
-		if err := t.config.requestHook(request); err != nil {
+		err := t.config.requestHook(request)
+		request.GetBody = nil
+		if err != nil {
 			if errors.Is(err, ErrSkipRecording) {
 				return t.base.RoundTrip(request)
 			}
