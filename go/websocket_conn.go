@@ -103,8 +103,8 @@ func (c *WebSocketConn) SetReadLimit(limit int64) {
 
 // Subprotocol returns the negotiated subprotocol for a live connection.
 func (c *WebSocketConn) Subprotocol() string {
-	if c.live == nil {
-		return ""
+	if c.replay != nil {
+		return c.replay.subprotocol
 	}
 	return c.live.Subprotocol()
 }

@@ -72,6 +72,12 @@ func (t *Transport) DialWebSocket(
 	if options != nil {
 		headers = recordHeaders(options.HTTPHeader)
 	}
+	if subprotocol := connection.Subprotocol(); subprotocol != "" {
+		if headers == nil {
+			headers = make(http.Header)
+		}
+		headers["sec-websocket-protocol"] = []string{subprotocol}
+	}
 	return &WebSocketConn{
 		live:      connection,
 		transport: t,

@@ -9,11 +9,12 @@ import (
 )
 
 type replayWebSocketConn struct {
-	frames   []WebSocketFrame
-	terminal websocket.CloseError
-	mu       sync.Mutex
-	next     int
-	closed   bool
+	frames      []WebSocketFrame
+	terminal    websocket.CloseError
+	subprotocol string
+	mu          sync.Mutex
+	next        int
+	closed      bool
 }
 
 func newReplayWebSocketConn(interaction WebSocketInteraction) (*WebSocketConn, error) {
@@ -33,7 +34,13 @@ func newReplayWebSocketConn(interaction WebSocketInteraction) (*WebSocketConn, e
 		}
 		frames = append(frames, frame)
 	}
-	return &WebSocketConn{replay: &replayWebSocketConn{frames: frames, terminal: terminal}}, nil
+	subprotocol := ""
+	if values, found := findHeader(interaction.Headers, "sec-websocket-protocol"); found && len(values) > 0 {
+		subprotocol = values[0]
+	}
+	return &WebSocketConn{
+		replay: &replayWebSocketConn{frames: frames, terminal: terminal, subprotocol: subprotocol},
+	}, nil
 }
 
 func (c *replayWebSocketConn) read(ctx context.Context) (websocket.MessageType, []byte, error) {

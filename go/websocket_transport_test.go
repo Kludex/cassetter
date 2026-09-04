@@ -63,6 +63,9 @@ func TestWebSocketTransportRecordsAndReplaysMessages(t *testing.T) {
 	if got := grpcHeaderValues(interaction.Headers, "x-request"); len(got) != 1 || got[0] != "request" {
 		t.Fatalf("recorded x-request header = %v", got)
 	}
+	if got := grpcHeaderValues(interaction.Headers, "sec-websocket-protocol"); len(got) != 1 || got[0] != "chat" {
+		t.Fatalf("recorded subprotocol = %v, want chat", got)
+	}
 	assertRecordedWebSocketFrames(t, interaction.Frames)
 
 	server.Close()
@@ -77,6 +80,9 @@ func TestWebSocketTransportRecordsAndReplaysMessages(t *testing.T) {
 	}
 	if replayResponse == nil || replayResponse.StatusCode != http.StatusSwitchingProtocols {
 		t.Fatalf("replay handshake response = %v, want switching protocols", replayResponse)
+	}
+	if got := replay.Subprotocol(); got != "chat" {
+		t.Fatalf("replay subprotocol = %q, want chat", got)
 	}
 	if err := replay.Ping(context.Background()); err != nil {
 		t.Fatalf("ping replay WebSocket: %v", err)

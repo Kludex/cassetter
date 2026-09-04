@@ -18,11 +18,21 @@ from cassetter.cassette import NoMatchError
 class VCRWebSocket:
     """Wraps a real WebSocket connection to record sent/received frames."""
 
-    def __init__(self, real_ws: Any, uri: str, headers: dict[str, list[str]]) -> None:
+    def __init__(
+        self,
+        real_ws: Any,
+        uri: str,
+        headers: dict[str, list[str]],
+        subprotocol: str | None = None,
+    ) -> None:
         self._real = real_ws
         self._uri = uri
         self._headers = headers
+        if subprotocol is not None:
+            self._headers["sec-websocket-protocol"] = [subprotocol]
+        self.subprotocol = subprotocol
         self._frames: list[WsFrame] = []
+        self._terminal_recorded = False
         self._start_time = time.monotonic()
 
     async def send(self, message: str | bytes) -> None:
@@ -38,11 +48,13 @@ class VCRWebSocket:
         try:
             data: str | bytes = await self._real.recv()
         except websockets.exceptions.ConnectionClosed as exc:
-            if exc.rcvd is not None:
-                content = struct.pack(">H", exc.rcvd.code) + exc.rcvd.reason.encode()
-                offset_ms = int((time.monotonic() - self._start_time) * 1000)
-                self._frames.append(WsFrame("recv", "close", Body("binary", content), offset_ms))
-            self._flush()
+            if not self._terminal_recorded:
+                self._terminal_recorded = True
+                if exc.rcvd is not None:
+                    content = struct.pack(">H", exc.rcvd.code) + exc.rcvd.reason.encode()
+                    offset_ms = int((time.monotonic() - self._start_time) * 1000)
+                    self._frames.append(WsFrame("recv", "close", Body("binary", content), offset_ms))
+                self._flush()
             raise
         offset_ms = int((time.monotonic() - self._start_time) * 1000)
         if isinstance(data, bytes):
@@ -87,6 +99,14 @@ class VCRWebSocketReplay:
         self._frames = interaction.frames
         self._recv_frames = [f for f in self._frames if f.direction == "recv" and f.frame_type != "close"]
         self._close = next((f for f in self._frames if f.direction == "recv" and f.frame_type == "close"), None)
+        self.subprotocol = next(
+            (
+                values[0]
+                for name, values in interaction.headers.items()
+                if name.lower() == "sec-websocket-protocol" and values
+            ),
+            None,
+        )
         self._recv_index = 0
 
     async def send(self, message: str | bytes) -> None:
@@ -162,7 +182,7 @@ class _PatchedConnect:
         conn = self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
         real_ws = await conn  # pragma: no cover
         headers = extract_ws_headers(self._kwargs)  # pragma: no cover
-        self._ws = VCRWebSocket(real_ws, self._uri, headers)  # pragma: no cover
+        self._ws = VCRWebSocket(real_ws, self._uri, headers, real_ws.subprotocol)  # pragma: no cover
         return self._ws  # pragma: no cover
 
     async def _cleanup(self) -> None:

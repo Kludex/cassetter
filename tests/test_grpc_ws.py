@@ -956,7 +956,7 @@ async def test_replay_ws_recv() -> None:
 
     interaction = WsInteraction(
         "wss://ws.example.com",
-        {},
+        {"sec-websocket-protocol": ["chat"]},
         [
             WsFrame("send", "text", Body("text", "ping"), 0),
             WsFrame("recv", "text", Body("text", "pong"), 10),
@@ -964,6 +964,7 @@ async def test_replay_ws_recv() -> None:
         ],
     )
     ws = VCRWebSocketReplay(interaction)
+    assert ws.subprotocol == "chat"
     assert await ws.recv() == "pong"
     assert await ws.recv() == "data"
     # Exhausted replay signals a clean close, like a real connection at EOF
@@ -1077,7 +1078,8 @@ async def test_record_ws_frames(tmp_path: Path) -> None:
 
     token = current_cassette.set(cassette)
     try:
-        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
+        ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {}, "chat")
+        assert ws.subprotocol == "chat"
         await ws.send("hello")
         data = await ws.recv()
         assert data == "response"
@@ -1090,6 +1092,7 @@ async def test_record_ws_frames(tmp_path: Path) -> None:
     assert len(interaction.frames) == 2
     assert interaction.frames[0].direction == "send"
     assert interaction.frames[1].direction == "recv"
+    assert interaction.headers["sec-websocket-protocol"] == ["chat"]
 
 
 @pytest.mark.anyio
@@ -1108,9 +1111,12 @@ async def test_record_ws_close_status(tmp_path: Path) -> None:
         ws = VCRWebSocket(FakeWs(), "wss://ws.example.com", {})
         with pytest.raises(ConnectionClosedError):
             await ws.recv()
+        with pytest.raises(ConnectionClosedError):
+            await ws.recv()
     finally:
         current_cassette.reset(token)
 
+    assert len(cassette.ws_interactions) == 1
     frame = cassette.ws_interactions[0].frames[0]
     assert frame.direction == "recv"
     assert frame.frame_type == "close"
