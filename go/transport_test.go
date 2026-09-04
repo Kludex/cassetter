@@ -325,11 +325,7 @@ func TestTransportCloseStopsAnUnboundedResponse(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Close blocked while draining an unbounded response")
 	}
-	cassette, err := cassetter.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if content := cassette.Interactions[0].Response.Body.Content; content != "first" {
-		t.Fatalf("recorded response body = %q", content)
+	if _, err := cassetter.Load(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("incomplete response was recorded: %v", err)
 	}
 }

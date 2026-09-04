@@ -12,7 +12,7 @@ func scrubBody(body Body, patterns []string, replacement string) Body {
 		encoded, err := json.Marshal(body.Content)
 		if err == nil {
 			var normalized any
-			if json.Unmarshal(encoded, &normalized) == nil {
+			if json.Unmarshal(encoded, &normalized) == nil && containsSecret(normalized, patterns) {
 				body.Content = scrubJSON(normalized, patterns, replacement)
 			}
 		}

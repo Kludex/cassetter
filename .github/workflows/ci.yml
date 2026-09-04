@@ -37,12 +37,16 @@ jobs:
       - run: cargo test --manifest-path rust/Cargo.toml
 
   go-test:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: go
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.mod

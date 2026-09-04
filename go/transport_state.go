@@ -79,26 +79,34 @@ func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	index := len(t.cassette.Interactions)
-	t.cassette.Interactions = append(t.cassette.Interactions, interaction)
-	t.played = append(t.played, false)
-	t.orders = append(t.orders, order)
-	key := matchKey(interaction.Request.Method, interaction.Request.URI)
-	t.index[key] = append(t.index[key], index)
+	candidateInteractions := append([]HTTPInteraction(nil), t.cassette.Interactions...)
+	candidateInteractions = append(candidateInteractions, interaction)
+	candidateOrders := append([]uint64(nil), t.orders...)
+	candidateOrders = append(candidateOrders, order)
 
-	indices := make([]int, len(t.cassette.Interactions))
+	indices := make([]int, len(candidateInteractions))
 	for index := range indices {
 		indices[index] = index
 	}
 	sort.SliceStable(indices, func(left int, right int) bool {
-		return t.orders[indices[left]] < t.orders[indices[right]]
+		return candidateOrders[indices[left]] < candidateOrders[indices[right]]
 	})
 	output := *t.cassette
 	output.Interactions = make([]HTTPInteraction, 0, len(indices))
 	for _, index := range indices {
-		output.Interactions = append(output.Interactions, t.cassette.Interactions[index])
+		output.Interactions = append(output.Interactions, candidateInteractions[index])
 	}
-	return output.Save(t.config.path)
+	if err := output.Save(t.config.path); err != nil {
+		return err
+	}
+
+	index := len(t.cassette.Interactions)
+	t.cassette.Interactions = candidateInteractions
+	t.played = append(t.played, false)
+	t.orders = candidateOrders
+	key := matchKey(interaction.Request.Method, interaction.Request.URI)
+	t.index[key] = append(t.index[key], index)
+	return nil
 }
 
 func matchKey(method string, uri string) string {

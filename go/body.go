@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime"
+	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -54,14 +55,14 @@ func bodyBytes(body Body) ([]byte, error) {
 	}
 }
 
-func retagContentLength(response *HTTPResponse) {
-	content, err := bodyBytes(response.Body)
+func retagContentLength(headers http.Header, body Body) {
+	content, err := bodyBytes(body)
 	if err != nil || len(content) == 0 {
 		return
 	}
-	for name := range response.Headers {
+	for name := range headers {
 		if strings.EqualFold(name, "content-length") {
-			response.Headers[name] = []string{strconv.Itoa(len(content))}
+			headers[name] = []string{strconv.Itoa(len(content))}
 		}
 	}
 }

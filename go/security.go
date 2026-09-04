@@ -58,7 +58,8 @@ func (c *Cassette) Scrub(config SecurityConfig) {
 			config.BodyScrubPatterns,
 			config.Replacement,
 		)
-		retagContentLength(&interaction.Response)
+		retagContentLength(interaction.Request.Headers, interaction.Request.Body)
+		retagContentLength(interaction.Response.Headers, interaction.Response.Body)
 	}
 }
 
@@ -74,6 +75,11 @@ func filterHeaders(headers http.Header, filtered []string) {
 }
 
 func scrubURI(uri string, filtered []string, replacement string) string {
+	parsed, err := url.Parse(uri)
+	if err == nil && parsed.User != nil {
+		parsed.User = nil
+		uri = parsed.String()
+	}
 	queryStart := strings.IndexByte(uri, '?')
 	fragmentStart := strings.IndexByte(uri, '#')
 	if fragmentStart >= 0 && queryStart > fragmentStart {

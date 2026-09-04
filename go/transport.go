@@ -97,6 +97,6 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		response.Body = http.NoBody
 		return response, nil
 	}
-	response.Body = newRecordingBody(response.Body, finalize)
+	response.Body = newRecordingBody(response.Body, response.ContentLength, finalize)
 	return response, nil
 }

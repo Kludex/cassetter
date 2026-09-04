@@ -2,6 +2,7 @@ package cassetter
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -42,6 +43,9 @@ func (b Body) MarshalYAML() (any, error) {
 	content := b.Content
 	switch bodyType {
 	case BodyTypeJSON:
+		if _, err := json.Marshal(content); err != nil {
+			return nil, fmt.Errorf("JSON body content: %w", err)
+		}
 	case BodyTypeText:
 		if _, ok := content.(string); !ok {
 			return nil, fmt.Errorf("text body content must be a string")
@@ -87,6 +91,11 @@ func (b *Body) UnmarshalYAML(node *yaml.Node) error {
 	if value.Type == BodyTypeText {
 		if _, ok := value.Content.(string); !ok {
 			return fmt.Errorf("text body content must be a string")
+		}
+	}
+	if value.Type == BodyTypeJSON {
+		if _, err := json.Marshal(value.Content); err != nil {
+			return fmt.Errorf("JSON body content: %w", err)
 		}
 	}
 	if value.Type != BodyTypeNone && value.Type != BodyTypeJSON && value.Type != BodyTypeText &&

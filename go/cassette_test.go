@@ -2,6 +2,7 @@ package cassetter_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,18 +111,50 @@ func TestSaveRejectsInvalidInteractions(t *testing.T) {
 
 func TestSaveRejectsInvalidBody(t *testing.T) {
 	t.Parallel()
-	cassette := &cassetter.Cassette{
-		Version: 1,
-		Interactions: []cassetter.HTTPInteraction{{
-			Request: cassetter.HTTPRequest{Method: "GET", URI: "https://example.com"},
-			Response: cassetter.HTTPResponse{
-				Status: 200,
-				Body:   cassetter.Body{Type: cassetter.BodyTypeText, Content: []byte("not text")},
-			},
-		}},
+	bodies := []cassetter.Body{
+		{Type: cassetter.BodyTypeText, Content: []byte("not text")},
+		{Type: cassetter.BodyTypeJSON, Content: map[any]any{1: "not JSON"}},
 	}
-	if err := cassette.Save(filepath.Join(t.TempDir(), "invalid.yaml")); err == nil {
-		t.Fatal("Save accepted an invalid body")
+	for index, body := range bodies {
+		cassette := &cassetter.Cassette{
+			Version: 1,
+			Interactions: []cassetter.HTTPInteraction{{
+				Request: cassetter.HTTPRequest{Method: "GET", URI: "https://example.com"},
+				Response: cassetter.HTTPResponse{
+					Status: 200,
+					Body:   body,
+				},
+			}},
+		}
+		path := filepath.Join(t.TempDir(), fmt.Sprintf("invalid-%d.yaml", index))
+		if err := cassette.Save(path); err == nil {
+			t.Fatal("Save accepted an invalid body")
+		}
+	}
+}
+
+func TestLoadRejectsInvalidJSONBody(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "invalid.yaml")
+	content := `version: 1
+interactions:
+  - request:
+      method: GET
+      uri: https://example.com
+      body:
+        type: none
+    response:
+      status: 200
+      body:
+        type: json
+        content:
+          1: not JSON
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cassetter.Load(path); err == nil {
+		t.Fatal("Load accepted invalid JSON content")
 	}
 }
 

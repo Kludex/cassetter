@@ -1,6 +1,7 @@
 package cassetter_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,9 +16,13 @@ func TestScrubFiltersSecretsBeforeSave(t *testing.T) {
 		Version: 1,
 		Interactions: []cassetter.HTTPInteraction{{
 			Request: cassetter.HTTPRequest{
-				Method:  http.MethodPost,
-				URI:     "https://example.com/login?api_key=secret&keep=1#access_token=token",
-				Headers: http.Header{"Authorization": {"Bearer secret"}, "Accept": {"application/json"}},
+				Method: http.MethodPost,
+				URI:    "https://alice:password@example.com/login?api_key=secret&keep=1#access_token=token",
+				Headers: http.Header{
+					"Authorization":  {"Bearer secret"},
+					"Accept":         {"application/json"},
+					"Content-Length": {"999"},
+				},
 				Body: cassetter.Body{
 					Type: cassetter.BodyTypeJSON,
 					Content: map[string]any{
@@ -44,6 +49,16 @@ func TestScrubFiltersSecretsBeforeSave(t *testing.T) {
 					Content: `prefix {"password":"tail-secret"} suffix`,
 				},
 			},
+		}, {
+			Request: cassetter.HTTPRequest{
+				Method: http.MethodPost,
+				URI:    "https://example.com/clean",
+				Body: cassetter.Body{
+					Type:    cassetter.BodyTypeJSON,
+					Content: map[string]any{"id": int64(9_007_199_254_740_993)},
+				},
+			},
+			Response: cassetter.HTTPResponse{Status: http.StatusNoContent},
 		}},
 	}
 	cassette.Scrub(cassetter.DefaultSecurityConfig())
@@ -65,6 +80,13 @@ func TestScrubFiltersSecretsBeforeSave(t *testing.T) {
 	if typed["client_secret"] != "[FILTERED]" {
 		t.Fatalf("client secret = %v", typed["client_secret"])
 	}
+	encodedRequest, err := json.Marshal(requestBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interaction.Request.Headers.Get("Content-Length") != strconv.Itoa(len(encodedRequest)) {
+		t.Fatalf("request content length = %q", interaction.Request.Headers.Get("Content-Length"))
+	}
 	responseBody := interaction.Response.Body.Content.(string)
 	if responseBody != "data: {\"access_token\":\"[FILTERED]\",\"keep\":true}\n\n" {
 		t.Fatalf("response body = %q", responseBody)
@@ -75,5 +97,9 @@ func TestScrubFiltersSecretsBeforeSave(t *testing.T) {
 	unstructured := cassette.Interactions[1].Response.Body.Content.(string)
 	if strings.Contains(unstructured, "tail-secret") {
 		t.Fatalf("unstructured secret was not filtered: %q", unstructured)
+	}
+	clean := cassette.Interactions[2].Request.Body.Content.(map[string]any)
+	if clean["id"] != int64(9_007_199_254_740_993) {
+		t.Fatalf("clean JSON number = %#v", clean["id"])
 	}
 }
