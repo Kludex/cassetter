@@ -84,6 +84,40 @@ func TestRequestHookModifiesRequestsBeforeMatching(t *testing.T) {
 	}
 }
 
+func TestRequestHookPreservesUnchangedGetBody(t *testing.T) {
+	t.Parallel()
+	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.GetBody == nil {
+			return nil, errors.New("GetBody was cleared")
+		}
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Header:     make(http.Header),
+			Body:       http.NoBody,
+			Request:    request,
+		}, nil
+	})
+	transport := cassetter.NewTransport(
+		base,
+		cassetter.WithPath(filepath.Join(t.TempDir(), "cassette.yaml")),
+		cassetter.WithRequestHook(func(request *http.Request) error {
+			request.Header.Set("X-Hook", "yes")
+			return nil
+		}),
+	)
+	request, err := http.NewRequest(http.MethodPost, "https://example.com", strings.NewReader("body"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := (&http.Client{Transport: transport}).Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRequestHookSkipsCassette(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "missing.yaml")

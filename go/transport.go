@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -56,8 +57,17 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		return t.base.RoundTrip(request)
 	}
 	if t.config.requestHook != nil {
+		originalBody := request.Body
 		err := t.config.requestHook(request)
-		request.GetBody = nil
+		sameBody := originalBody == nil && request.Body == nil
+		if originalBody != nil && request.Body != nil {
+			left := reflect.ValueOf(originalBody)
+			right := reflect.ValueOf(request.Body)
+			sameBody = left.Type() == right.Type() && left.Comparable() && left.Equal(right)
+		}
+		if !sameBody {
+			request.GetBody = nil
+		}
 		if err != nil {
 			if errors.Is(err, ErrSkipRecording) {
 				return t.base.RoundTrip(request)

@@ -11,6 +11,35 @@ import (
 	"github.com/Kludex/cassetter/go"
 )
 
+func TestCassetteNormalizesLoadedJSONToNFC(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	cassette := &cassetter.Cassette{
+		Version: 1,
+		Interactions: []cassetter.HTTPInteraction{{
+			Request: cassetter.HTTPRequest{
+				Method: http.MethodPost,
+				URI:    "https://example.com",
+				Body: cassetter.Body{Type: cassetter.BodyTypeJSON, Content: map[string]any{
+					"cafe\u0301": "cafe\u0301",
+				}},
+			},
+			Response: cassetter.HTTPResponse{Status: http.StatusOK},
+		}},
+	}
+	if err := cassette.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := cassetter.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := loaded.Interactions[0].Request.Body.Content.(map[string]any)
+	if content["café"] != "café" {
+		t.Fatalf("loaded body = %#v", content)
+	}
+}
+
 func TestTransportNormalizesRecordedTextToNFC(t *testing.T) {
 	t.Parallel()
 	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -28,11 +57,12 @@ func TestTransportNormalizesRecordedTextToNFC(t *testing.T) {
 	})
 	path := filepath.Join(t.TempDir(), "unicode.yaml")
 	transport := cassetter.NewTransport(base, cassetter.WithPath(path))
-	request, err := http.NewRequest(
-		http.MethodPost,
-		"https://example.com/unicode",
-		strings.NewReader(`{"cafe\u0301":"cafe\u0301","name":"cafe\u0301","id":18446744073709551616}`),
+	hugeInteger := strings.Repeat("9", 400)
+	payload := fmt.Sprintf(
+		`{"cafe\u0301":"cafe\u0301","name":"cafe\u0301","id":18446744073709551616,"huge":%s,"exponent":1e1000}`,
+		hugeInteger,
 	)
+	request, err := http.NewRequest(http.MethodPost, "https://example.com/unicode", strings.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +84,8 @@ func TestTransportNormalizesRecordedTextToNFC(t *testing.T) {
 	interaction := cassette.Interactions[0]
 	requestContent := interaction.Request.Body.Content.(map[string]any)
 	if requestContent["name"] != "café" || requestContent["café"] != "café" ||
-		fmt.Sprint(requestContent["id"]) != "18446744073709551616" {
+		fmt.Sprint(requestContent["id"]) != "18446744073709551616" ||
+		fmt.Sprint(requestContent["huge"]) != hugeInteger || fmt.Sprint(requestContent["exponent"]) != "1e1000" {
 		t.Fatalf("request body = %#v", requestContent)
 	}
 	if interaction.Response.Body.Content != "café" {

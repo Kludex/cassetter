@@ -69,8 +69,7 @@ func (b Body) MarshalYAML() (any, error) {
 // UnmarshalYAML reads a body envelope from the cassetter format.
 func (b *Body) UnmarshalYAML(node *yaml.Node) error {
 	var value struct {
-		Type    BodyType `yaml:"type"`
-		Content any      `yaml:"content"`
+		Type BodyType `yaml:"type"`
 	}
 	if err := node.Decode(&value); err != nil {
 		return err
@@ -78,42 +77,43 @@ func (b *Body) UnmarshalYAML(node *yaml.Node) error {
 	if value.Type == "" {
 		value.Type = BodyTypeNone
 	}
-	if value.Type == BodyTypeBinary {
-		text, ok := value.Content.(string)
-		if !ok {
+	contentNode, hasContent := mappingValue(node, "content")
+	switch value.Type {
+	case BodyTypeNone:
+		*b = Body{Type: BodyTypeNone}
+	case BodyTypeBinary:
+		var text string
+		if !hasContent || contentNode.Tag != "!!str" || contentNode.Decode(&text) != nil {
 			return fmt.Errorf("binary body content must be a hexadecimal string")
 		}
 		content, err := hex.DecodeString(text)
 		if err != nil {
 			return fmt.Errorf("decode binary body: %w", err)
 		}
-		value.Content = content
-	}
-	if value.Type == BodyTypeText {
-		if _, ok := value.Content.(string); !ok {
+		*b = Body{Type: value.Type, Content: content}
+	case BodyTypeText:
+		var content string
+		if !hasContent || contentNode.Tag != "!!str" || contentNode.Decode(&content) != nil {
 			return fmt.Errorf("text body content must be a string")
 		}
-	}
-	if value.Type == BodyTypeJSON {
-		if contentNode, found := mappingValue(node, "content"); found {
-			content, err := decodeYAMLJSONValue(contentNode)
+		*b = Body{Type: value.Type, Content: content}
+	case BodyTypeJSON:
+		var content any
+		if hasContent {
+			var err error
+			content, err = decodeYAMLJSONValue(contentNode)
 			if err != nil {
 				return fmt.Errorf("JSON body content: %w", err)
 			}
-			value.Content = content
 		}
-		normalized, err := normalizeJSONValue(value.Content)
+		normalized, err := normalizeJSONValue(content)
 		if err != nil {
 			return fmt.Errorf("JSON body content: %w", err)
 		}
-		value.Content = normalized
-	}
-	if value.Type != BodyTypeNone && value.Type != BodyTypeJSON && value.Type != BodyTypeText &&
-		value.Type != BodyTypeBinary {
+		*b = Body{Type: value.Type, Content: normalizeJSONUnicode(normalized)}
+	default:
 		return fmt.Errorf("unknown body type %q", value.Type)
 	}
-	b.Type = value.Type
-	b.Content = value.Content
 	return nil
 }
 
