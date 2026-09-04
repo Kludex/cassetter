@@ -888,6 +888,27 @@ def test_once_without_cassette_records(tmp_path: Path) -> None:
     assert cassette.can_record is True
 
 
+def test_once_records_after_reloading_without_the_existing_file(tmp_path: Path) -> None:
+    path = os.path.join(str(tmp_path), "reload.yaml")
+    recorder = Cassette(path, record_mode=RecordMode.ALL)
+    recorder.load()
+    recorder.record("GET", "https://example.com", {}, None, 200, {}, b"{}")
+    recorder.save()
+
+    cassette = Cassette(path, record_mode=RecordMode.ONCE)
+    cassette.load()
+    cassette.play("GET", "https://example.com", {}, None)
+    assert cassette.can_record is False
+    assert cassette.play_count == 1
+
+    os.remove(path)
+    cassette.load()
+
+    assert cassette.can_record is True
+    assert cassette.interactions == []
+    assert cassette.play_count == 0
+
+
 def test_once_rerecord_expiry_allows_recording(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "expired.yaml")
     recorder = Cassette(path, record_mode=RecordMode.ALL)

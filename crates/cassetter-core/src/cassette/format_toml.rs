@@ -162,7 +162,10 @@ fn body_from_toml(body_type: &str, content: Option<String>) -> Result<Body> {
         ("binary", Some(content)) => crate::body::hex::decode(&content)
             .map(Body::binary)
             .map_err(|error| CassetteError::Format(format!("invalid binary content: {error}"))),
-        _ => Ok(Body::none()),
+        (_, None) => Ok(Body::none()),
+        (body_type, Some(_)) => Err(CassetteError::Format(format!(
+            "unsupported body type: {body_type}"
+        ))),
     }
 }
 
@@ -222,6 +225,34 @@ body_content = "xyz"
             error
                 .to_string()
                 .contains("invalid TOML response body in interaction 0"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_body_type_with_content() {
+        let error = Cassette::from_toml(
+            r#"
+version = 1
+
+[[interactions]]
+[interactions.request]
+method = "POST"
+uri = "https://example.com"
+body_type = "xml"
+body_content = "<message>hello</message>"
+
+[interactions.response]
+status = 200
+body_type = "none"
+"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid TOML request body in interaction 0: unsupported body type: xml"),
             "{error}"
         );
     }

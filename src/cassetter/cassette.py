@@ -240,6 +240,8 @@ class Cassette:
 
         if self._record_mode in _DISCARDING_MODES or not exists:
             self._inner = _RustCassette()
+            self._once_replay_only = False
+            self._play_counter = Counter()
             self._record_orders = []
             self._next_record_order = 0
             self._rebuild_match_inner()
