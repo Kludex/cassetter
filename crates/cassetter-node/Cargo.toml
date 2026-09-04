@@ -1,0 +1,22 @@
+[package]
+name = "cassetter-node"
+description = "napi-rs bindings for cassetter-core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cassetter-core.workspace = true
+serde_json.workspace = true
+napi = { version = "2", default-features = false, features = ["napi6", "serde-json"] }
+napi-derive = "2"
+
+[build-dependencies]
+napi-build = "2"
+
+[lints]
+workspace = true

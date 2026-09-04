@@ -240,6 +240,8 @@ class Cassette:
 
         if self._record_mode in _DISCARDING_MODES or not exists:
             self._inner = _RustCassette()
+            self._once_replay_only = False
+            self._play_counter = Counter()
             self._record_orders = []
             self._next_record_order = 0
             self._rebuild_match_inner()
@@ -524,7 +526,9 @@ class Cassette:
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = self._inner.take_ws_match(uri)
+        probe = WsInteraction(uri, {}, [], "")
+        scrubbed = scrub_ws_interaction(probe, self._security_config)
+        result = self._inner.take_ws_match(scrubbed.uri)
         if result is None:
             raise NoMatchError(f"no matching WebSocket interaction for {uri}")
 

@@ -1,0 +1,60 @@
+{
+  "name": "cassetter",
+  "version": "0.0.0",
+  "description": "HTTP cassette recorder for Node.js tests. Safe by default. Rust-powered.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "native/index.js",
+    "native/index.d.ts",
+    "native/*.node"
+  ],
+  "napi": {
+    "name": "cassetter",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-pc-windows-msvc",
+        "x86_64-unknown-linux-musl"
+      ]
+    }
+  },
+  "scripts": {
+    "build:native": "napi build --platform --release --cargo-cwd .. -p cassetter-node --cargo-name cassetter_node native",
+    "build:native:debug": "napi build --platform --cargo-cwd .. -p cassetter-node --cargo-name cassetter_node native",
+    "build": "npm run build:native && tsc",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "vcr",
+    "cassette",
+    "http",
+    "test",
+    "record",
+    "replay",
+    "mock",
+    "fetch"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
