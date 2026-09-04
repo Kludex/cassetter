@@ -1,0 +1,38 @@
+name: Validate Go release
+
+on:
+  push:
+    tags: ["go/v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - name: Validate module tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#go/}
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid Go module version: $VERSION" >&2
+            exit 1
+          fi
+          test "$(go list -m)" = "github.com/Kludex/cassetter/go"
+      - run: go test -race ./...
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: go

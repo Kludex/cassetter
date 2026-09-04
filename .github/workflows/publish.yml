@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   build-wheels:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -80,6 +81,7 @@ jobs:
           path: dist/*.whl
 
   build-sdist:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -100,7 +102,7 @@ jobs:
 
   publish:
     needs: [build-wheels, build-sdist]
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

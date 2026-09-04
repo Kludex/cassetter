@@ -29,7 +29,7 @@ uv add cassetter
 Use the Go module when you need HTTP, gRPC, or WebSocket cassette recording:
 
 ```bash
-go get github.com/Kludex/cassetter/go
+go get github.com/Kludex/cassetter/go@v0.1.0
 ```
 
 It reads and writes the same structured YAML and TOML formats, including VCR.py YAML migration. It supports all four
