@@ -21,7 +21,7 @@ interactions:
           - application/json
       body:
         type: text
-        content: '{"outer":{"items":[1,true,null,{"name":"café"}]}}'
+        content: '{"outer":{"items":[1,true,null,{"name":"caf\u00e9"}]}}'
   - request:
       method: GET
       uri: https://example.com/vendor-json
@@ -68,9 +68,11 @@ interactions:
       headers:
         content-type:
           - text/plain; charset=utf-8
+        content-encoding:
+          - gzip
       body:
-        type: text
-        content: "e\u0301 and cafe\u0301"
+        type: binary
+        content: 1f8b08000000000000ff4a3dd3a8909897a2909c98967aa611100000ffffd0326d950e000000
   - request:
       method: GET
       uri: https://example.com/binary
