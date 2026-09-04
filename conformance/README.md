@@ -1,48 +1,54 @@
 # Cross-language conformance
 
-Every cassetter binding shares one implementation (`crates/cassetter-core`), but
-each one still has a thin layer that converts between core types and its host
-language. This directory is the contract that layer must satisfy.
+Every cassetter SDK must read and write the same cassette data.
+The shared fixtures in this directory are the contract between implementations.
 
-## Files
+## Fixture sets
 
-| File | Purpose |
-|------|---------|
-| `cassette.yaml` | A cassette exercising every body type, multi-value headers, unicode, nested JSON, and all three protocols. |
-| `expected.json` | The canonical structure that parsing `cassette.yaml` must produce, in a language-neutral shape. |
+| Directory | Purpose |
+|---|---|
+| `format/` | Cassette parsing and save-and-reload compatibility. |
 
-## The contract
+Each fixture set contains a `cases.json` manifest.
+Every case names an input cassette and its canonical JSON representation.
 
-A binding conforms when, given `cassette.yaml`, it can produce `expected.json`:
+The format fixtures cover:
 
-- Bodies are `{type, content}` with `type` one of `json`, `text`, `binary`, `none`.
+- Every body type.
+- Multi-value headers and metadata.
+- Unicode text and nested JSON.
+- HTTP, gRPC, and WebSocket interactions.
+- Empty cassettes.
+
+Additional sets will cover invalid cassettes, request matching, filtering, body processing, and record modes.
+
+## Format contract
+
+A format case passes when an SDK parses its cassette into the corresponding canonical JSON value:
+
+- Bodies are `{type, content}` with `type` set to `json`, `text`, `binary`, or `none`.
 - A `none` body has no `content` key.
-- Binary content is lowercase hex.
-- Headers and metadata are maps of name to a **list** of values, even when there is one value.
-- Timestamps are passed through verbatim; bindings do not reformat them.
-- Saving a parsed cassette and re-parsing it must yield the same structure.
+- Binary content is lowercase hexadecimal.
+- Headers and metadata map each name to a list of values.
+- Timestamps pass through without reformatting.
+- Saving and reloading a cassette produces the same canonical value.
 
-## Who runs it
+## SDK coverage
 
-| Binding | Test |
-|---------|------|
+| SDK | Test |
+|---|---|
 | Python | `tests/test_conformance.py` |
 | Node | `ts/tests/conformance.test.ts` |
+| Go | `go/conformance_test.go` |
 
-Both assert against the same `expected.json`, so a change that makes one binding
-disagree with the other fails CI.
+Each SDK reads `cases.json`. Add a case once and every implementation receives it.
 
-## Adding a language
+## Adding a format case
 
-1. Write the thin binding crate under `crates/`.
-2. Port the canonicalizer from either existing test - it is ~40 lines.
-3. Assert it equals `expected.json`, plus the save/reload round-trip.
+1. Add the cassette under `format/`.
+2. Add its canonical JSON representation beside it.
+3. Register both files in `format/cases.json`.
+4. Run the Python, Node, and Go conformance tests.
 
-If those pass, the new binding reads and writes cassettes interchangeably with
-every other one.
-
-## Changing the fixture
-
-`expected.json` is generated, not hand-edited. Regenerate it from a binding and
-confirm the other binding still agrees before committing - if the two disagree,
-that is the drift this suite exists to catch.
+Generate canonical output from an SDK, but do not trust one implementation alone.
+Confirm all SDKs agree before committing a changed expected file.

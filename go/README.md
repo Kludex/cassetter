@@ -95,5 +95,6 @@ overwrite a separate output file.
 ## Scope
 
 The first release supports YAML cassettes and HTTP through
-`http.RoundTripper`. It preserves unrecognized top-level protocol sections when
-it rewrites a cassette. gRPC interceptors and WebSocket recording are planned.
+`http.RoundTripper`. `Load` exposes typed HTTP, gRPC, and WebSocket interactions,
+and rewrites preserve unrecognized top-level protocol sections. gRPC interceptors
+and WebSocket recording are planned.

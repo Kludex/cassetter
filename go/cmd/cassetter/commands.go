@@ -35,15 +35,36 @@ func inspectCommand(arguments []string, stdout io.Writer) error {
 			interaction.Request.URI,
 			interaction.Response.Status,
 		)
-		if interaction.RecordedAt != "" {
-			fmt.Fprintf(&output, " (%s)", interaction.RecordedAt)
-		}
-		output.WriteByte('\n')
+		writeRecordedAt(&output, interaction.RecordedAt)
+	}
+	fmt.Fprintf(&output, "gRPC interactions: %d\n", len(cassette.GRPCInteractions))
+	for index, interaction := range cassette.GRPCInteractions {
+		fmt.Fprintf(
+			&output,
+			"%d. %s -> %d %s",
+			index+1,
+			interaction.Request.Method,
+			interaction.Response.StatusCode,
+			interaction.Response.StatusMessage,
+		)
+		writeRecordedAt(&output, interaction.RecordedAt)
+	}
+	fmt.Fprintf(&output, "WebSocket interactions: %d\n", len(cassette.WebSocketInteractions))
+	for index, interaction := range cassette.WebSocketInteractions {
+		fmt.Fprintf(&output, "%d. %s -> %d frame(s)", index+1, interaction.URI, len(interaction.Frames))
+		writeRecordedAt(&output, interaction.RecordedAt)
 	}
 	if _, err := io.WriteString(stdout, output.String()); err != nil {
 		return fmt.Errorf("write output: %w", err)
 	}
 	return nil
+}
+
+func writeRecordedAt(output *strings.Builder, recordedAt string) {
+	if recordedAt != "" {
+		fmt.Fprintf(output, " (%s)", recordedAt)
+	}
+	output.WriteByte('\n')
 }
 
 func diffCommand(arguments []string, stdout io.Writer) error {

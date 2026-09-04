@@ -1,10 +1,4 @@
-/**
- * Cross-language conformance.
- *
- * Parses the shared fixture in `conformance/` and asserts it produces the
- * canonical structure every cassetter binding must agree on. The Python
- * binding runs the same assertions in `tests/test_conformance.py`.
- */
+/** Cross-language cassette-format conformance. */
 
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,87 +17,105 @@ import type {
 } from "../src/types.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const FIXTURE = join(ROOT, "conformance", "cassette.yaml");
-const EXPECTED = join(ROOT, "conformance", "expected.json");
+const FORMAT_FIXTURES = join(ROOT, "conformance", "format");
 
-function sortKeys<T extends object>(o: T): T {
+type FormatCase = {
+  name: string;
+  cassette: string;
+  expected: string;
+};
+
+const CASES = JSON.parse(
+  readFileSync(join(FORMAT_FIXTURES, "cases.json"), "utf-8"),
+) as FormatCase[];
+
+function sortKeys<T extends object>(value: T): T {
   return Object.fromEntries(
-    Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1)),
+    Object.entries(value).sort(([left], [right]) => (left < right ? -1 : 1)),
   ) as T;
 }
 
-function body(b: Body): object {
-  return b.type === "none" ? { type: "none" } : { type: b.type, content: b.content };
+function body(value: Body): object {
+  return value.type === "none"
+    ? { type: "none" }
+    : { type: value.type, content: value.content };
 }
 
-function headers(h: HeaderMap): HeaderMap {
-  return sortKeys(h);
+function headers(value: HeaderMap): HeaderMap {
+  return sortKeys(value);
 }
 
-function canonical(c: {
+function canonical(cassette: {
   version: number;
   interactions: HttpInteraction[];
   grpcInteractions: GrpcInteraction[];
   wsInteractions: WsInteraction[];
 }): object {
   return {
-    version: c.version,
-    http: c.interactions.map((i) => ({
-      method: i.request.method,
-      uri: i.request.uri,
-      requestHeaders: headers(i.request.headers),
-      requestBody: body(i.request.body),
-      status: i.response.status,
-      responseHeaders: headers(i.response.headers),
-      responseBody: body(i.response.body),
-      recordedAt: i.recordedAt,
+    version: cassette.version,
+    http: cassette.interactions.map((interaction) => ({
+      method: interaction.request.method,
+      uri: interaction.request.uri,
+      requestHeaders: headers(interaction.request.headers),
+      requestBody: body(interaction.request.body),
+      status: interaction.response.status,
+      responseHeaders: headers(interaction.response.headers),
+      responseBody: body(interaction.response.body),
+      recordedAt: interaction.recordedAt,
     })),
-    grpc: c.grpcInteractions.map((g) => ({
-      method: g.request.method,
-      metadata: headers(g.request.metadata),
-      requestBody: body(g.request.body),
-      statusCode: g.response.statusCode,
-      statusMessage: g.response.statusMessage,
-      responseMetadata: headers(g.response.metadata),
-      responseBody: body(g.response.body),
-      jsonDebug: g.jsonDebug ?? null,
-      recordedAt: g.recordedAt,
+    grpc: cassette.grpcInteractions.map((interaction) => ({
+      method: interaction.request.method,
+      metadata: headers(interaction.request.metadata),
+      requestBody: body(interaction.request.body),
+      statusCode: interaction.response.statusCode,
+      statusMessage: interaction.response.statusMessage,
+      responseMetadata: headers(interaction.response.metadata),
+      responseBody: body(interaction.response.body),
+      jsonDebug: interaction.jsonDebug ?? null,
+      recordedAt: interaction.recordedAt,
     })),
-    ws: c.wsInteractions.map((w) => ({
-      uri: w.uri,
-      headers: headers(w.headers),
-      frames: w.frames.map((f) => ({
-        direction: f.direction,
-        frameType: f.frameType,
-        body: body(f.body),
-        offsetMs: f.offsetMs,
+    ws: cassette.wsInteractions.map((interaction) => ({
+      uri: interaction.uri,
+      headers: headers(interaction.headers),
+      frames: interaction.frames.map((frame) => ({
+        direction: frame.direction,
+        frameType: frame.frameType,
+        body: body(frame.body),
+        offsetMs: frame.offsetMs,
       })),
-      recordedAt: w.recordedAt,
+      recordedAt: interaction.recordedAt,
     })),
   };
 }
 
-describe("cross-language conformance", () => {
-  const expected = JSON.parse(readFileSync(EXPECTED, "utf-8"));
+function expected(case_: FormatCase): object {
+  return JSON.parse(
+    readFileSync(join(FORMAT_FIXTURES, case_.expected), "utf-8"),
+  ) as object;
+}
 
-  it("parses the shared fixture into the canonical structure", () => {
-    expect(canonical(native.Cassette.load(FIXTURE))).toEqual(expected);
+describe("cross-language format conformance", () => {
+  it.each(CASES)("parses $name into the canonical structure", (case_) => {
+    const cassette = native.Cassette.load(join(FORMAT_FIXTURES, case_.cassette));
+    expect(canonical(cassette)).toEqual(expected(case_));
   });
 
-  it("round-trips the fixture through YAML without drift", () => {
-    const dir = mkdtempSync(join(tmpdir(), "cassetter-conf-"));
+  it.each(CASES)("round-trips $name through YAML without drift", (case_) => {
+    const directory = mkdtempSync(join(tmpdir(), "cassetter-conf-"));
     try {
-      const out = join(dir, "roundtrip.yaml");
-      native.Cassette.load(FIXTURE).save(out);
-      expect(canonical(native.Cassette.load(out))).toEqual(expected);
+      const output = join(directory, case_.cassette);
+      native.Cassette.load(join(FORMAT_FIXTURES, case_.cassette)).save(output);
+      expect(canonical(native.Cassette.load(output))).toEqual(expected(case_));
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 
   it("preserves unicode and multi-value headers", () => {
-    const c = native.Cassette.load(FIXTURE);
-    expect(c.interactions[1].request.body.content).toBe("café — naïve ✓");
-    expect(c.interactions[0].request.headers["x-multi"]).toEqual(["one", "two"]);
+    const cassette = native.Cassette.load(
+      join(FORMAT_FIXTURES, "all-protocols.yaml"),
+    );
+    expect(cassette.interactions[1].request.body.content).toBe("café — naïve ✓");
+    expect(cassette.interactions[0].request.headers["x-multi"]).toEqual(["one", "two"]);
   });
 });

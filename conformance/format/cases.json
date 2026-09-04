@@ -1,0 +1,12 @@
+[
+  {
+    "name": "all protocols",
+    "cassette": "all-protocols.yaml",
+    "expected": "all-protocols.json"
+  },
+  {
+    "name": "empty cassette",
+    "cassette": "empty.yaml",
+    "expected": "empty.json"
+  }
+]

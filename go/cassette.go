@@ -10,11 +10,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Cassette contains recorded HTTP interactions in the cassetter v1 format.
+// Cassette contains recorded interactions in the cassetter v1 format.
 type Cassette struct {
-	Version      int               `yaml:"version"`
-	Interactions []HTTPInteraction `yaml:"interactions"`
-	extra        map[string]yaml.Node
+	Version               int                    `yaml:"version"`
+	Interactions          []HTTPInteraction      `yaml:"interactions"`
+	GRPCInteractions      []GRPCInteraction      `yaml:"grpc_interactions,omitempty"`
+	WebSocketInteractions []WebSocketInteraction `yaml:"ws_interactions,omitempty"`
+	extra                 map[string]yaml.Node
 }
 
 // Load reads a YAML cassette from path.
@@ -77,31 +79,20 @@ func (c *Cassette) Save(path string) error {
 	return nil
 }
 
-func (c *Cassette) validate() error {
-	if c.Version != 0 && c.Version != 1 {
-		return fmt.Errorf("unsupported cassette version %d", c.Version)
-	}
-	for index, interaction := range c.Interactions {
-		if interaction.Request.Method == "" {
-			return fmt.Errorf("interaction %d has an empty request method", index+1)
-		}
-		if interaction.Request.URI == "" {
-			return fmt.Errorf("interaction %d has an empty request URI", index+1)
-		}
-		if interaction.Response.Status < 100 || interaction.Response.Status > 999 {
-			return fmt.Errorf("interaction %d has invalid response status %d", index+1, interaction.Response.Status)
-		}
-	}
-	return nil
-}
-
-// MarshalYAML preserves protocol sections that this Go implementation does not interpret yet.
+// MarshalYAML preserves unrecognized top-level sections.
 func (c Cassette) MarshalYAML() (any, error) {
 	var node yaml.Node
 	value := struct {
-		Version      int               `yaml:"version"`
-		Interactions []HTTPInteraction `yaml:"interactions"`
-	}{Version: c.Version, Interactions: c.Interactions}
+		Version               int                    `yaml:"version"`
+		Interactions          []HTTPInteraction      `yaml:"interactions"`
+		GRPCInteractions      []GRPCInteraction      `yaml:"grpc_interactions,omitempty"`
+		WebSocketInteractions []WebSocketInteraction `yaml:"ws_interactions,omitempty"`
+	}{
+		Version:               c.Version,
+		Interactions:          c.Interactions,
+		GRPCInteractions:      c.GRPCInteractions,
+		WebSocketInteractions: c.WebSocketInteractions,
+	}
 	if value.Version == 0 {
 		value.Version = 1
 	}
@@ -124,11 +115,13 @@ func (c Cassette) MarshalYAML() (any, error) {
 	return &node, nil
 }
 
-// UnmarshalYAML reads known HTTP fields and retains all other top-level fields.
+// UnmarshalYAML reads known fields and retains all other top-level fields.
 func (c *Cassette) UnmarshalYAML(node *yaml.Node) error {
 	var value struct {
-		Version      int               `yaml:"version"`
-		Interactions []HTTPInteraction `yaml:"interactions"`
+		Version               int                    `yaml:"version"`
+		Interactions          []HTTPInteraction      `yaml:"interactions"`
+		GRPCInteractions      []GRPCInteraction      `yaml:"grpc_interactions,omitempty"`
+		WebSocketInteractions []WebSocketInteraction `yaml:"ws_interactions,omitempty"`
 	}
 	if err := node.Decode(&value); err != nil {
 		return err
@@ -138,10 +131,12 @@ func (c *Cassette) UnmarshalYAML(node *yaml.Node) error {
 	}
 	c.Version = value.Version
 	c.Interactions = value.Interactions
+	c.GRPCInteractions = value.GRPCInteractions
+	c.WebSocketInteractions = value.WebSocketInteractions
 	c.extra = make(map[string]yaml.Node)
 	for index := 0; index+1 < len(node.Content); index += 2 {
 		key := node.Content[index].Value
-		if key != "version" && key != "interactions" {
+		if key != "version" && key != "interactions" && key != "grpc_interactions" && key != "ws_interactions" {
 			c.extra[key] = *node.Content[index+1]
 		}
 	}

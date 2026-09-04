@@ -9,19 +9,25 @@ import (
 func scrubBody(body Body, patterns []string, replacement string) Body {
 	switch body.Type {
 	case BodyTypeJSON:
-		encoded, err := json.Marshal(body.Content)
-		if err == nil {
-			var normalized any
-			if json.Unmarshal(encoded, &normalized) == nil && containsSecret(normalized, patterns) {
-				body.Content = scrubJSON(normalized, patterns, replacement)
-			}
-		}
+		body.Content = scrubJSONContent(body.Content, patterns, replacement)
 	case BodyTypeText:
 		if text, ok := body.Content.(string); ok {
 			body.Content = scrubText(text, patterns, replacement)
 		}
 	}
 	return body
+}
+
+func scrubJSONContent(value any, patterns []string, replacement string) any {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	var normalized any
+	if json.Unmarshal(encoded, &normalized) != nil || !containsSecret(normalized, patterns) {
+		return value
+	}
+	return scrubJSON(normalized, patterns, replacement)
 }
 
 func scrubJSON(value any, patterns []string, replacement string) any {

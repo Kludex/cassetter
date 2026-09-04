@@ -30,12 +30,41 @@ interactions:
         type: json
         content:
           access_token: secret
+grpc_interactions:
+  - request:
+      method: /example.Service/Get
+      metadata:
+        authorization:
+          - Bearer secret
+      body:
+        type: none
+    response:
+      status_code: 0
+      status_message: OK
+      metadata: {}
+      body:
+        type: none
+    json_debug:
+      password: secret
+ws_interactions:
+  - uri: wss://example.com/stream?token=secret
+    headers: {}
+    frames:
+      - direction: send
+        frame_type: text
+        body:
+          type: json
+          content:
+            client_secret: secret
+        offset_ms: 0
 `
 	if err := os.WriteFile(input, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	inspect := runCLI(t, "inspect", input)
-	if !strings.Contains(inspect, "1. GET https://example.com?api_key=secret -> 200") {
+	if !strings.Contains(inspect, "1. GET https://example.com?api_key=secret -> 200") ||
+		!strings.Contains(inspect, "1. /example.Service/Get -> 0 OK") ||
+		!strings.Contains(inspect, "1. wss://example.com/stream?token=secret -> 1 frame(s)") {
 		t.Fatalf("inspect output = %q", inspect)
 	}
 	runCLI(t, "scrub", input, output)
@@ -43,7 +72,9 @@ interactions:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(scrubbed), "secret") || !strings.Contains(string(scrubbed), "[FILTERED]") {
+	scrubbedText := string(scrubbed)
+	if strings.Contains(scrubbedText, "Bearer secret") || strings.Contains(scrubbedText, "=secret") ||
+		strings.Contains(scrubbedText, ": secret\n") || !strings.Contains(scrubbedText, "[FILTERED]") {
 		t.Fatalf("scrubbed cassette = %s", scrubbed)
 	}
 	difference := runCLIStatus(t, 1, "diff", input, output)

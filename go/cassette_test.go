@@ -44,6 +44,8 @@ grpc_interactions:
       body:
         type: binary
         content: ""
+future_interactions:
+  - value: retained
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -55,6 +57,12 @@ grpc_interactions:
 	if got := cassette.Interactions[0].Response.Body.Content; !bytes.Equal(got.([]byte), []byte{0, 255}) {
 		t.Fatalf("binary body = %v", got)
 	}
+	if got := cassette.GRPCInteractions[0].Request.Method; got != "/example.Service/Get" {
+		t.Fatalf("gRPC method = %q", got)
+	}
+	if got := cassette.GRPCInteractions[0].Response.StatusMessage; got != "OK" {
+		t.Fatalf("gRPC status message = %q", got)
+	}
 	if err := cassette.Save(path); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +71,10 @@ grpc_interactions:
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(saved), "grpc_interactions:") {
-		t.Fatal("Save removed the unimplemented gRPC section")
+		t.Fatal("Save removed the gRPC section")
+	}
+	if !strings.Contains(string(saved), "future_interactions:") {
+		t.Fatal("Save removed an unknown protocol section")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
