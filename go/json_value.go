@@ -11,14 +11,22 @@ func validateJSONDebug(value any) error {
 }
 
 func normalizeJSONDebug(value any) (any, error) {
-	normalized := normalizeJSONDebugValue(value)
-	if _, err := json.Marshal(normalized); err != nil {
+	normalized, err := normalizeJSONValue(value)
+	if err != nil {
 		return nil, fmt.Errorf("gRPC json_debug must contain JSON-compatible data: %w", err)
 	}
 	return normalized, nil
 }
 
-func normalizeJSONDebugValue(value any) any {
+func normalizeJSONValue(value any) (any, error) {
+	normalized := normalizeJSONValueContent(value)
+	if _, err := json.Marshal(normalized); err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func normalizeJSONValueContent(value any) any {
 	switch typed := value.(type) {
 	case map[any]any:
 		object := make(map[string]any, len(typed))
@@ -27,19 +35,19 @@ func normalizeJSONDebugValue(value any) any {
 			if !ok {
 				keyString = fmt.Sprint(key)
 			}
-			object[keyString] = normalizeJSONDebugValue(child)
+			object[keyString] = normalizeJSONValueContent(child)
 		}
 		return object
 	case map[string]any:
 		object := make(map[string]any, len(typed))
 		for key, child := range typed {
-			object[key] = normalizeJSONDebugValue(child)
+			object[key] = normalizeJSONValueContent(child)
 		}
 		return object
 	case []any:
 		array := make([]any, len(typed))
 		for index, child := range typed {
-			array[index] = normalizeJSONDebugValue(child)
+			array[index] = normalizeJSONValueContent(child)
 		}
 		return array
 	default:

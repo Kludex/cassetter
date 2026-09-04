@@ -18,7 +18,25 @@
       "statusMessage": "OK"
     }
   ],
-  "http": [],
+  "http": [
+    {
+      "method": "POST",
+      "recordedAt": "",
+      "requestBody": {
+        "content": {
+          "1": "value"
+        },
+        "type": "json"
+      },
+      "requestHeaders": {},
+      "responseBody": {
+        "type": "none"
+      },
+      "responseHeaders": {},
+      "status": 204,
+      "uri": "https://example.com/numeric-key"
+    }
+  ],
   "version": 1,
   "ws": []
 }

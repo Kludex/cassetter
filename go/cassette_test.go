@@ -139,7 +139,7 @@ func TestSaveRejectsInvalidBody(t *testing.T) {
 	t.Parallel()
 	bodies := []cassetter.Body{
 		{Type: cassetter.BodyTypeText, Content: []byte("not text")},
-		{Type: cassetter.BodyTypeJSON, Content: map[any]any{1: "not JSON"}},
+		{Type: cassetter.BodyTypeJSON, Content: map[string]any{"value": math.NaN()}},
 	}
 	for index, body := range bodies {
 		cassette := &cassetter.Cassette{
@@ -188,7 +188,7 @@ interactions:
       body:
         type: json
         content:
-          1: not JSON
+          value: .nan
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)

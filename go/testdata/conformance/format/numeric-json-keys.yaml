@@ -1,5 +1,18 @@
 version: 1
-interactions: []
+interactions:
+  - request:
+      method: POST
+      uri: https://example.com/numeric-key
+      headers: {}
+      body:
+        type: json
+        content:
+          1: value
+    response:
+      status: 204
+      headers: {}
+      body:
+        type: none
 grpc_interactions:
   - request:
       method: /example.Service/Get

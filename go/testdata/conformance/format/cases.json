@@ -5,9 +5,9 @@
     "expected": "all-protocols.json"
   },
   {
-    "name": "numeric gRPC debug key",
-    "cassette": "numeric-grpc-debug-key.yaml",
-    "expected": "numeric-grpc-debug-key.json"
+    "name": "numeric JSON keys",
+    "cassette": "numeric-json-keys.yaml",
+    "expected": "numeric-json-keys.json"
   },
   {
     "name": "empty cassette",
