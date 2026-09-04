@@ -86,7 +86,7 @@ func convertDirectory(
 		if err != nil {
 			return fmt.Errorf("resolve destination: %w", err)
 		}
-		destinationKey := strings.ToLower(filepath.Clean(destinationAbsolute))
+		destinationKey := filepath.Clean(destinationAbsolute)
 		if previous, found := destinations[destinationKey]; found {
 			return fmt.Errorf("sources %s and %s map to the same destination %s", previous, source, destination)
 		}

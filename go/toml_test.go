@@ -182,6 +182,24 @@ func TestCassetteRejectsProtocolsInTOML(t *testing.T) {
 	}
 }
 
+func TestCassetteRejectsUnknownSectionsInTOML(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	yamlPath := filepath.Join(directory, "cassette.yaml")
+	content := "version: 1\ninteractions: []\nfuture_interactions:\n  - value\n"
+	if err := os.WriteFile(yamlPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cassette, err := cassetter.Load(yamlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cassette.Save(filepath.Join(directory, "cassette.toml"))
+	if err == nil || !strings.Contains(err.Error(), "unrecognized top-level sections") {
+		t.Fatalf("save error = %v", err)
+	}
+}
+
 func TestCassetteRejectsInvalidTOMLBodies(t *testing.T) {
 	t.Parallel()
 	bodies := map[string]string{

@@ -49,6 +49,9 @@ func (c *Cassette) marshalTOML() ([]byte, error) {
 	if len(c.GRPCInteractions) > 0 || len(c.WebSocketInteractions) > 0 {
 		return nil, fmt.Errorf("TOML cassettes cannot store gRPC or WebSocket interactions; use YAML")
 	}
+	if len(c.extra) > 0 {
+		return nil, fmt.Errorf("TOML cassettes cannot store unrecognized top-level sections; use YAML")
+	}
 	version := c.Version
 	if version == 0 {
 		version = 1
