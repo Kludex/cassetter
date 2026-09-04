@@ -4,28 +4,44 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
-func bodyFromBytes(content []byte, contentType string) Body {
+func bodyFromBytes(content []byte, contentType string) (Body, error) {
 	if len(content) == 0 {
-		return Body{Type: BodyTypeNone}
+		return Body{Type: BodyTypeNone}, nil
+	}
+	validText := utf8.Valid(content)
+	if validText {
+		content = []byte(norm.NFC.String(string(content)))
 	}
 	mediaType, _, _ := mime.ParseMediaType(contentType)
 	if mediaType == "application/json" || strings.HasSuffix(mediaType, "+json") || contentType == "" {
 		var value any
-		if json.Unmarshal(content, &value) == nil {
-			return Body{Type: BodyTypeJSON, Content: value}
+		decoder := json.NewDecoder(bytes.NewReader(content))
+		decoder.UseNumber()
+		if decoder.Decode(&value) == nil {
+			var extra any
+			if decoder.Decode(&extra) == io.EOF {
+				content, err := normalizeJSONUnicode(materializeJSONNumbers(value))
+				if err != nil {
+					return Body{}, fmt.Errorf("normalize JSON body: %w", err)
+				}
+				return Body{Type: BodyTypeJSON, Content: content}, nil
+			}
 		}
 	}
-	if utf8.Valid(content) {
-		return Body{Type: BodyTypeText, Content: string(content)}
+	if validText {
+		return Body{Type: BodyTypeText, Content: string(content)}, nil
 	}
-	return Body{Type: BodyTypeBinary, Content: bytes.Clone(content)}
+	return Body{Type: BodyTypeBinary, Content: bytes.Clone(content)}, nil
 }
 
 func bodyBytes(body Body) ([]byte, error) {

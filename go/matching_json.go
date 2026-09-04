@@ -1,6 +1,7 @@
 package cassetter
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -12,7 +13,9 @@ func filteredJSON(value any, ignored []string) ([]byte, bool) {
 		return nil, false
 	}
 	var normalized any
-	if json.Unmarshal(content, &normalized) != nil {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	if decoder.Decode(&normalized) != nil {
 		return nil, false
 	}
 	content, err = json.Marshal(filterJSONPaths(normalized, ignored, ""))

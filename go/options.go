@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // RecordMode controls whether a transport replays or records requests.
@@ -60,6 +61,12 @@ type transportConfig struct {
 	matchers        []Matcher
 	ignoreJSONPaths []string
 	uriNormalizer   func(string) string
+	maxAge          *time.Duration
+	expiryAction    ExpiryAction
+	ignoreLocalhost bool
+	ignoreHosts     []string
+	requestHook     RequestHook
+	responseHook    ResponseHook
 }
 
 // WithPath sets the YAML cassette path.
@@ -113,9 +120,10 @@ func NewTransport(base http.RoundTripper, options ...Option) *Transport {
 		base = http.DefaultTransport
 	}
 	config := transportConfig{
-		mode:     RecordModeOnce,
-		security: DefaultSecurityConfig(),
-		matchers: []Matcher{MatcherMethod, MatcherURI},
+		mode:         RecordModeOnce,
+		security:     DefaultSecurityConfig(),
+		matchers:     []Matcher{MatcherMethod, MatcherURI},
+		expiryAction: ExpiryWarn,
 	}
 	for _, option := range options {
 		option.apply(&config)

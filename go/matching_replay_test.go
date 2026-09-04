@@ -1,6 +1,7 @@
 package cassetter_test
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -165,6 +166,36 @@ func TestTransportHeaderMatchDoesNotReadBody(t *testing.T) {
 	}
 	if err := response.Body.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTransportJSONBodyMatcherDistinguishesLargeNumbers(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	saveMatchingCassette(t, path, cassetter.HTTPRequest{
+		Method: http.MethodPost,
+		URI:    "https://example.com/value",
+		Body: cassetter.Body{Type: cassetter.BodyTypeJSON, Content: map[string]any{
+			"id": json.Number("18446744073709551616"),
+		}},
+	})
+	client := &http.Client{Transport: cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeNone),
+		cassetter.WithMatchers(cassetter.MatcherJSONBody),
+	)}
+	request, err := http.NewRequest(
+		http.MethodPost,
+		"https://example.com/value",
+		strings.NewReader(`{"id":18446744073709551617}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if _, err := client.Do(request); !errors.Is(err, cassetter.ErrNoMatch) {
+		t.Fatalf("request error = %v", err)
 	}
 }
 

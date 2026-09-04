@@ -2,7 +2,9 @@ package cassetter
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -44,6 +46,38 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if err := t.Initialize(); err != nil {
 		return nil, errors.Join(err, closeRequestBody(request))
 	}
+	if err := t.checkOpen(); err != nil {
+		return nil, errors.Join(err, closeRequestBody(request))
+	}
+	if request.URL == nil {
+		return nil, errors.Join(errors.New("cassetter request URL is nil"), closeRequestBody(request))
+	}
+	request = request.Clone(request.Context())
+	if t.shouldBypass(request.URL) {
+		return t.base.RoundTrip(request)
+	}
+	if t.config.requestHook != nil {
+		originalBody := request.Body
+		err := t.config.requestHook(request)
+		sameBody := originalBody == nil && request.Body == nil
+		if originalBody != nil && request.Body != nil {
+			left := reflect.ValueOf(originalBody)
+			right := reflect.ValueOf(request.Body)
+			sameBody = left.Type() == right.Type() && left.Comparable() && left.Equal(right)
+		}
+		if !sameBody {
+			request.GetBody = nil
+		}
+		if err != nil {
+			if errors.Is(err, ErrSkipRecording) {
+				return t.base.RoundTrip(request)
+			}
+			return nil, errors.Join(fmt.Errorf("cassetter request hook: %w", err), closeRequestBody(request))
+		}
+	}
+	if request.URL == nil {
+		return nil, errors.Join(errors.New("cassetter request hook removed the request URL"), closeRequestBody(request))
+	}
 	uri := request.URL.String()
 	if t.config.mode != RecordModeAll && t.config.mode != RecordModeRewrite {
 		probe, err := t.requestForMatching(request)
@@ -81,6 +115,23 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		t.finishRecording(order, nil)
 		return nil, err
 	}
+	if response == nil {
+		t.finishRecording(order, nil)
+		return nil, errors.New("cassetter base transport returned a nil response")
+	}
+	if t.config.responseHook != nil {
+		if err := t.config.responseHook(response); err != nil {
+			t.finishRecording(order, nil)
+			if errors.Is(err, ErrSkipRecording) {
+				return response, nil
+			}
+			var closeErr error
+			if response.Body != nil {
+				closeErr = response.Body.Close()
+			}
+			return nil, errors.Join(fmt.Errorf("cassetter response hook: %w", err), closeErr)
+		}
+	}
 	responseHeaders := recordHeaders(response.Header)
 	responseStatus := response.StatusCode
 	finalize := func(content []byte) error {
@@ -92,17 +143,25 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		if err != nil {
 			return err
 		}
+		requestBody, err := bodyFromBytes(requestContent, headerValue(requestHeaders, "content-type"))
+		if err != nil {
+			return err
+		}
+		responseBody, err := bodyFromBytes(responseContent, headerValue(responseHeaders, "content-type"))
+		if err != nil {
+			return err
+		}
 		interaction := HTTPInteraction{
 			Request: HTTPRequest{
 				Method:  requestMethod,
 				URI:     uri,
 				Headers: requestHeaders,
-				Body:    bodyFromBytes(requestContent, headerValue(requestHeaders, "content-type")),
+				Body:    requestBody,
 			},
 			Response: HTTPResponse{
 				Status:  responseStatus,
 				Headers: responseHeaders,
-				Body:    bodyFromBytes(responseContent, headerValue(responseHeaders, "content-type")),
+				Body:    responseBody,
 			},
 			RecordedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		}
