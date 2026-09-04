@@ -13,6 +13,8 @@ FIXTURES = Path(__file__).parent.parent / "conformance" / "body-processing"
 def body_bytes(body: Body) -> bytes:
     if body.body_type == "binary":
         return cast(bytes, body.content)
+    if body.body_type == "text":
+        return cast(str, body.content).encode()
     return b""
 
 

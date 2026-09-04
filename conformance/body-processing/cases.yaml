@@ -20,8 +20,8 @@ interactions:
         content-type:
           - application/json
       body:
-        type: binary
-        content: 7b226f75746572223a7b226974656d73223a5b312c747275652c6e756c6c2c7b226e616d65223a22636166c3a9227d5d7d7d
+        type: text
+        content: '{"outer":{"items":[1,true,null,{"name":"café"}]}}'
   - request:
       method: GET
       uri: https://example.com/vendor-json
@@ -69,8 +69,8 @@ interactions:
         content-type:
           - text/plain; charset=utf-8
       body:
-        type: binary
-        content: 65cc8120616e642063616665cc81
+        type: text
+        content: "e\u0301 and cafe\u0301"
   - request:
       method: GET
       uri: https://example.com/binary
