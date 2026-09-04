@@ -79,13 +79,13 @@ func (s *recordingGRPCClientStream) finalize(terminalError error) error {
 			Request: GRPCRequest{
 				Method:   s.method,
 				Metadata: grpcMetadataHeader(outgoingMetadata),
-				Body:     Body{Type: BodyTypeBinary, Content: encodeGRPCChunks(requestChunks)},
+				Body:     grpcStreamBody(requestChunks, s.description.ClientStreams),
 			},
 			Response: GRPCResponse{
 				StatusCode:    uint32(statusCode),
 				StatusMessage: statusMessage,
 				Metadata:      mergeGRPCMetadata(headerMetadata, trailerMetadata),
-				Body:          Body{Type: BodyTypeBinary, Content: encodeGRPCChunks(responseChunks)},
+				Body:          grpcStreamBody(responseChunks, s.description.ServerStreams),
 			},
 			RecordedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		}

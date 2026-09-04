@@ -1,12 +1,14 @@
 package cassetter_test
 
 import (
+	"bytes"
 	"context"
 	"path/filepath"
 	"testing"
 
 	"github.com/Kludex/cassetter/go"
 	grpc_testing "google.golang.org/grpc/interop/grpc_testing"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGRPCInterceptorsRecordAndReplayUnaryAndStreamingCalls(t *testing.T) {
@@ -43,6 +45,20 @@ func TestGRPCInterceptorsRecordAndReplayUnaryAndStreamingCalls(t *testing.T) {
 	payloadDebug := requestDebug["payload"].(map[string]any)
 	if got := payloadDebug["body"]; got != "[FILTERED]" {
 		t.Fatalf("recorded debug payload body = %v, want [FILTERED]", got)
+	}
+	serverStreamRequest := cassette.GRPCInteractions[2].Request.Body.Content.([]byte)
+	if len(serverStreamRequest) != 0 {
+		t.Fatalf("server-streaming request uses chunk framing: %x", serverStreamRequest)
+	}
+	clientStreamResponse := cassette.GRPCInteractions[3].Response.Body.Content.([]byte)
+	expectedClientStreamResponse, err := proto.Marshal(
+		&grpc_testing.StreamingInputCallResponse{AggregatedPayloadSize: 6},
+	)
+	if err != nil {
+		t.Fatalf("marshal expected client-streaming response: %v", err)
+	}
+	if !bytes.Equal(clientStreamResponse, expectedClientStreamResponse) {
+		t.Fatalf("client-streaming response = %x, want %x", clientStreamResponse, expectedClientStreamResponse)
 	}
 
 	replayer := cassetter.NewGRPCRecorder(

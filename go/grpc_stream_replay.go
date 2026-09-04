@@ -23,6 +23,7 @@ type replayGRPCClientStream struct {
 
 func newReplayGRPCStream(
 	ctx context.Context,
+	description *grpc.StreamDesc,
 	response GRPCResponse,
 	options []grpc.CallOption,
 ) (grpc.ClientStream, error) {
@@ -30,9 +31,14 @@ func newReplayGRPCStream(
 	if err != nil {
 		return nil, err
 	}
-	chunks, err := decodeGRPCChunks(content)
-	if err != nil {
-		return nil, err
+	var chunks [][]byte
+	if description.ServerStreams {
+		chunks, err = decodeGRPCChunks(content)
+		if err != nil {
+			return nil, err
+		}
+	} else if response.StatusCode == uint32(codes.OK) {
+		chunks = [][]byte{content}
 	}
 	applyGRPCCallMetadata(options, response.Metadata)
 	return &replayGRPCClientStream{

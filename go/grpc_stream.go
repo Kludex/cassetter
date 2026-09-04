@@ -42,7 +42,7 @@ func (t *Transport) interceptStreamGRPC(
 			return nil, err
 		}
 		if found {
-			return newReplayGRPCStream(ctx, interaction.Response, options)
+			return newReplayGRPCStream(ctx, description, interaction.Response, options)
 		}
 	}
 	if !t.canRecord {
@@ -65,6 +65,16 @@ func (t *Transport) interceptStreamGRPC(
 		method:       method,
 		order:        order,
 	}, nil
+}
+
+func grpcStreamBody(chunks [][]byte, streamed bool) Body {
+	var content []byte
+	if streamed {
+		content = encodeGRPCChunks(chunks)
+	} else if len(chunks) > 0 {
+		content = chunks[0]
+	}
+	return Body{Type: BodyTypeBinary, Content: content}
 }
 
 func grpcStreamStatus(terminalError error) (codes.Code, string) {
