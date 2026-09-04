@@ -43,7 +43,7 @@ func decodeYAMLBody(node *yaml.Node) (Body, error) {
 }
 
 func decodeYAMLBodyScalar(node *yaml.Node) (Body, error) {
-	if node.Tag == "!!null" || node.Tag != "!!str" && node.Tag != "!!binary" {
+	if node.Tag == "!!null" || node.Tag != "!!str" && node.Tag != "!!binary" && node.Tag != "!!timestamp" {
 		return Body{Type: BodyTypeNone}, nil
 	}
 	var content string

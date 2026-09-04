@@ -42,7 +42,7 @@ func yamlHeaderValue(node *yaml.Node) (string, bool) {
 	if node.Kind != yaml.ScalarNode || node.Tag == "!!null" {
 		return "", false
 	}
-	if node.Tag == "!!str" || node.Tag == "!!binary" {
+	if node.Tag == "!!str" || node.Tag == "!!binary" || node.Tag == "!!timestamp" {
 		var value string
 		if node.Decode(&value) != nil {
 			return "", false
