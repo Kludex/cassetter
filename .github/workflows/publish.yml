@@ -1,20 +1,64 @@
-name: Publish to PyPI
+name: Release
 
 on:
-  release:
-    types: [published]
-  # Lets the wheel matrix be smoke-tested before a tag exists, instead of
-  # discovering a broken leg after the release is already immutable.
+  push:
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: Stable SemVer version to smoke-test without the `v` prefix
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
+  version:
+    name: validate release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            version=${TAG#v}
+          else
+            version=$INPUT_VERSION
+          fi
+          python3 - "$version" <<'PY'
+          import re
+          import sys
+
+          version = sys.argv[1]
+          if re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version) is None:
+              raise SystemExit(f"invalid stable release version: {version}")
+          PY
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: tagged commit CI
+    needs: [version]
+    uses: ./.github/workflows/ci.yml
+
+  validate-go:
+    name: Go release validation
+    needs: [version]
+    uses: ./.github/workflows/go-release.yml
+    with:
+      version: ${{ format('v{0}', needs.version.outputs.version) }}
+
   build-wheels:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    name: build wheel (${{ matrix.os }}, ${{ matrix.target }}, ${{ matrix.manylinux || 'auto' }})
+    needs: [version, ci]
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -34,12 +78,11 @@ jobs:
           - os: windows-latest
             target: x86_64
     steps:
-      - uses: actions/checkout@v7
-      # The Linux legs run maturin inside the manylinux container, which ships
-      # its own interpreters. macOS and Windows run it natively, where only one
-      # Python exists unless it is installed first.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - if: matrix.os != 'ubuntu-latest'
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: |
             3.10
@@ -48,70 +91,414 @@ jobs:
             3.13
             3.14
           allow-prereleases: true
-      - name: Set version from tag
-        if: github.event_name == 'release'
+      - name: Set release version
         shell: bash
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
-      - uses: PyO3/maturin-action@v1
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: sed -i.bak "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --manifest-path crates/cassetter-python/Cargo.toml --interpreter python3.10 python3.11 python3.12 python3.13 python3.14
           manylinux: ${{ matrix.manylinux || 'auto' }}
-      # Free-threaded CPython uses its own ABI tag, so a cp314 wheel will not
-      # install there and the module declares gil_used = false. It is installed
-      # only now because a free-threaded 3.14 answers to `python3.14` as well,
-      # and maturin picks it over the GIL build - on Windows whatever the PATH
-      # order - which would leave the release with no cp314 wheel. 3.13t is not
-      # shipped at all: PyO3 refuses the free-threaded build below 3.14.
       - if: matrix.os != 'ubuntu-latest'
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14t"
           allow-prereleases: true
-      - uses: PyO3/maturin-action@v1
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --manifest-path crates/cassetter-python/Cargo.toml --interpreter python3.14t
           manylinux: ${{ matrix.manylinux || 'auto' }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}-${{ matrix.manylinux || 'auto' }}
           path: dist/*.whl
+          if-no-files-found: error
 
   build-sdist:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    name: build Python source distribution
+    needs: [version, ci]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - name: Set version from tag
-        if: github.event_name == 'release'
-        shell: bash
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
-      - uses: PyO3/maturin-action@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set release version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
           args: --out dist --manifest-path crates/cassetter-python/Cargo.toml
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sdist
           path: dist/*.tar.gz
+          if-no-files-found: error
 
-  publish:
-    needs: [build-wheels, build-sdist]
-    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v')
+  build-node-native:
+    name: build Node addon (${{ matrix.target }})
+    needs: [version, ci]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            cross: none
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            cross: napi
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            cross: zig
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            cross: zig
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            cross: none
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            cross: none
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            cross: none
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            cross: none
+    defaults:
+      run:
+        working-directory: ts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - if: matrix.cross == 'zig'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.15.2
+          use-cache: false
+      - if: matrix.cross == 'zig'
+        uses: taiki-e/install-action@5bf6ce016fd2e72eefc647cbca1e4213f65955b8 # v2
+        with:
+          tool: cargo-zigbuild
+      - run: npm ci
+      - name: Build native addon
+        shell: bash
+        env:
+          CROSS: ${{ matrix.cross }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          args=()
+          if [ "$CROSS" = napi ]; then
+            args+=(--use-napi-cross)
+          elif [ "$CROSS" = zig ]; then
+            args+=(-x)
+          fi
+          npm run build:native -- --target "$TARGET" "${args[@]}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: node-${{ matrix.target }}
+          path: ts/native/cassetter.*.node
+          if-no-files-found: error
+
+  package-npm:
+    name: package npm release
+    needs: [version, ci, build-node-native]
     runs-on: ubuntu-latest
-    environment: pypi
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run build:native
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: node-*
+          path: ts/native
+          merge-multiple: true
+      - name: Verify native addons
+        shell: bash
+        run: |
+          expected=(
+            native/cassetter.darwin-arm64.node
+            native/cassetter.darwin-x64.node
+            native/cassetter.linux-arm64-gnu.node
+            native/cassetter.linux-arm64-musl.node
+            native/cassetter.linux-x64-gnu.node
+            native/cassetter.linux-x64-musl.node
+            native/cassetter.win32-arm64-msvc.node
+            native/cassetter.win32-x64-msvc.node
+          )
+          for addon in "${expected[@]}"; do
+            test -f "$addon"
+          done
+          test "$(find native -name 'cassetter.*.node' | wc -l | tr -d ' ')" = "${#expected[@]}"
+      - run: npm version --no-git-tag-version "${VERSION}"
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx tsc
+      - name: Pack and inspect npm artifact
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir npm-dist
+          npm pack --json --pack-destination npm-dist > npm-pack.json
+          node --input-type=module - "$VERSION" <<'JS'
+          import { readFileSync } from "node:fs";
+
+          const version = process.argv[2];
+          const [packed] = JSON.parse(readFileSync("npm-pack.json", "utf8"));
+          if (packed.filename !== `cassetter-${version}.tgz`) {
+            throw new Error(`unexpected npm artifact ${packed.filename}`);
+          }
+          const paths = new Set(packed.files.map(({ path }) => path));
+          for (const path of [
+            "LICENSE",
+            "README.md",
+            "dist/index.js",
+            "dist/index.d.ts",
+            "native/index.js",
+            "native/index.d.ts",
+            "native/package.json",
+            "native/cassetter.darwin-arm64.node",
+            "native/cassetter.darwin-x64.node",
+            "native/cassetter.linux-arm64-gnu.node",
+            "native/cassetter.linux-arm64-musl.node",
+            "native/cassetter.linux-x64-gnu.node",
+            "native/cassetter.linux-x64-musl.node",
+            "native/cassetter.win32-arm64-msvc.node",
+            "native/cassetter.win32-x64-msvc.node",
+          ]) {
+            if (!paths.has(path)) throw new Error(`npm artifact is missing ${path}`);
+          }
+          JS
+      - name: Install npm artifact
+        shell: bash
+        run: |
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          cd "$work"
+          npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/ts/npm-dist/cassetter-${VERSION}.tgz"
+          node --input-type=module -e 'import { formatVersion } from "cassetter"; if (formatVersion() !== 1) process.exit(1)'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: npm-dist
+          path: ts/npm-dist/*.tgz
+          if-no-files-found: error
+
+  package-rust:
+    name: package Rust release
+    needs: [version, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Set release version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
+      - run: cargo package -p cassetter-core --allow-dirty
+      - name: Inspect Rust artifact
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          crate="target/package/cassetter-core-${VERSION}.crate"
+          test -f "$crate"
+          tar -tzf "$crate" > crate-files.txt
+          grep -Fx "cassetter-core-${VERSION}/Cargo.toml" crate-files.txt
+          grep -Fx "cassetter-core-${VERSION}/LICENSE" crate-files.txt
+          grep -Fx "cassetter-core-${VERSION}/README.md" crate-files.txt
+          grep -Fx "cassetter-core-${VERSION}/src/lib.rs" crate-files.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: crates-io-dist
+          path: target/package/cassetter-core-*.crate
+          if-no-files-found: error
+
+  tag-go:
+    name: tag Go module
+    needs: [version, validate-go, publish-pypi, publish-npm, publish-crates-io]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.publish-pypi.result == 'success' && needs.publish-npm.result == 'success' && needs.publish-crates-io.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create Go module tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          GO_TAG: go/v${{ needs.version.outputs.version }}
+          ROOT_TAG: ${{ github.ref_name }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const goTag = process.env.GO_TAG;
+            const rootTag = process.env.ROOT_TAG;
+
+            const resolve = async (tag) => {
+              const reference = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              let target = reference.data.object;
+              while (target.type === "tag") {
+                const annotated = await github.rest.git.getTag({ owner, repo, tag_sha: target.sha });
+                target = annotated.data.object;
+              }
+              return target;
+            };
+
+            const releaseTarget = await resolve(rootTag);
+            if (releaseTarget.type !== "commit") {
+              throw new Error(`Tag ${rootTag} does not resolve to a commit`);
+            }
+
+            try {
+              const existingTarget = await resolve(goTag);
+              if (existingTarget.type !== "commit" || existingTarget.sha !== releaseTarget.sha) {
+                throw new Error(`Tag ${goTag} already exists at ${existingTarget.sha}, expected ${releaseTarget.sha}`);
+              }
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            try {
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/tags/${goTag}`,
+                sha: releaseTarget.sha,
+              });
+            } catch (error) {
+              if (error.status !== 422) throw error;
+              const existingTarget = await resolve(goTag);
+              if (existingTarget.type !== "commit" || existingTarget.sha !== releaseTarget.sha) {
+                throw new Error(`Tag ${goTag} already exists at ${existingTarget.sha}, expected ${releaseTarget.sha}`);
+              }
+            }
+
+  publish-pypi:
+    name: publish to PyPI
+    needs: [version, build-wheels, build-sdist]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.build-wheels.result == 'success' && needs.build-sdist.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/cassetter/${{ needs.version.outputs.version }}
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
+          pattern: wheels-*
           path: dist
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sdist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: dist/
+
+  publish-npm:
+    name: publish to npm
+    needs: [version, package-npm]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.package-npm.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/cassetter/v/${{ needs.version.outputs.version }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-dist
+          path: npm-dist
+      - run: npm publish ./npm-dist/cassetter-*.tgz --access public
+
+  publish-crates-io:
+    name: publish to crates.io
+    needs: [version, package-rust]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.package-rust.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/cassetter-core/${{ needs.version.outputs.version }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: crates-io-dist
+          path: crates-io-dist
+      - name: Extract verified crate
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          tar -xzf "crates-io-dist/cassetter-core-${VERSION}.crate" -C crates-io-dist
+          rm "crates-io-dist/cassetter-core-${VERSION}/Cargo.toml.orig"
+      - name: Authenticate to crates.io
+        id: crates-io-auth
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
+      - name: Publish verified crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: cargo publish --manifest-path "crates-io-dist/cassetter-core-${VERSION}/Cargo.toml" --no-verify --allow-dirty
+
+  smoke-check:
+    name: check release artifact smoke test
+    needs: [ci, validate-go, build-wheels, build-sdist, package-npm, package-rust]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}
+
+  release-check:
+    name: check coordinated release
+    needs: [tag-go, publish-pypi, publish-npm, publish-crates-io]
+    if: ${{ always() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}

@@ -15,6 +15,7 @@
     "dist",
     "native/index.js",
     "native/index.d.ts",
+    "native/package.json",
     "native/*.node"
   ],
   "napi": {
@@ -48,6 +49,19 @@
     "fetch"
   ],
   "license": "MIT",
+  "homepage": "https://kludex.github.io/cassetter/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kludex/cassetter.git",
+    "directory": "ts"
+  },
+  "bugs": {
+    "url": "https://github.com/Kludex/cassetter/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=18.0.0"
   },
