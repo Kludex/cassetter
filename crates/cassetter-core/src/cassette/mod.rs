@@ -208,7 +208,7 @@ impl Cassette {
     pub fn from_toml(content: &str) -> Result<Cassette> {
         let raw: format_toml::TomlCassette = toml::from_str(content)
             .map_err(|e| CassetteError::Format(format!("TOML parse error: {e}")))?;
-        Ok(format_toml::from_toml(raw))
+        format_toml::from_toml(raw)
     }
 
     /// Serialize to YAML text.

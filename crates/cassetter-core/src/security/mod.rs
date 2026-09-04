@@ -135,15 +135,21 @@ pub fn scrub_interaction(
 pub fn scrub_ws_interaction(interaction: &WsInteraction, config: &SecurityConfig) -> WsInteraction {
     let mut scrubbed = interaction.clone();
     headers::filter_headers(&mut scrubbed.headers, &config.filter_headers);
+    if let Some(uri) = headers::filter_query_params(
+        &scrubbed.uri,
+        &config.filter_query_parameters,
+        &config.replacement,
+    ) {
+        scrubbed.uri = uri;
+    }
     for frame in &mut scrubbed.frames {
         frame.body = config.scrubber.scrub_body(&frame.body, &config.replacement);
     }
     scrubbed
 }
 
-/// Scrub a gRPC interaction: remove sensitive metadata from request and
-/// response, and scrub sensitive patterns from the `json_debug` payload.
-/// Binary protobuf bodies are stored as-is (they cannot be pattern-scrubbed).
+/// Scrub a gRPC interaction: remove sensitive metadata and scrub sensitive
+/// patterns from request bodies, response bodies, and `json_debug`.
 pub fn scrub_grpc_interaction(
     interaction: &GrpcInteraction,
     config: &SecurityConfig,
@@ -151,6 +157,12 @@ pub fn scrub_grpc_interaction(
     let mut scrubbed = interaction.clone();
     headers::filter_headers(&mut scrubbed.request.metadata, &config.filter_headers);
     headers::filter_headers(&mut scrubbed.response.metadata, &config.filter_headers);
+    scrubbed.request.body = config
+        .scrubber
+        .scrub_body(&scrubbed.request.body, &config.replacement);
+    scrubbed.response.body = config
+        .scrubber
+        .scrub_body(&scrubbed.response.body, &config.replacement);
     if let Some(debug) = &scrubbed.json_debug {
         scrubbed.json_debug = Some(config.scrubber.scrub_json_value(debug, &config.replacement));
     }
@@ -216,7 +228,7 @@ mod tests {
     #[test]
     fn test_scrub_ws_frame_bodies() {
         let interaction = WsInteraction {
-            uri: "wss://api.example.com/v1".to_string(),
+            uri: "wss://api.example.com/v1?access_token=tok_live".to_string(),
             headers: HashMap::new(),
             frames: vec![
                 WsFrame {
@@ -245,6 +257,10 @@ mod tests {
 
         let scrubbed = scrub_ws_interaction(&interaction, &default_config());
 
+        assert_eq!(
+            scrubbed.uri,
+            "wss://api.example.com/v1?access_token=[FILTERED]"
+        );
         match &scrubbed.frames[0].body.inner {
             BodyContent::Json(v) => {
                 assert_eq!(v["access_token"], "[FILTERED]");
@@ -263,5 +279,61 @@ mod tests {
             other => panic!("expected text body, got {other:?}"),
         }
         assert_eq!(scrubbed.frames[2].body, interaction.frames[2].body);
+    }
+
+    #[test]
+    fn test_scrub_grpc_bodies() {
+        let interaction = GrpcInteraction {
+            request: GrpcRequest {
+                method: "/pkg.Svc/M".to_string(),
+                metadata: HashMap::new(),
+                body: Body::json(serde_json::json!({
+                    "api_key": "secret",
+                    "message": "hello"
+                })),
+            },
+            response: GrpcResponse {
+                status_code: 0,
+                status_message: "OK".to_string(),
+                metadata: HashMap::new(),
+                body: Body::text(r#"{"api-key":"secret","ok":true}"#.to_string()),
+            },
+            json_debug: None,
+            recorded_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+
+        let scrubbed = scrub_grpc_interaction(&interaction, &default_config());
+
+        match &scrubbed.request.body.inner {
+            BodyContent::Json(value) => {
+                assert_eq!(value["api_key"], "[FILTERED]");
+                assert_eq!(value["message"], "hello");
+            }
+            other => panic!("expected JSON body, got {other:?}"),
+        }
+        match &scrubbed.response.body.inner {
+            BodyContent::Text(value) => {
+                assert!(value.contains(r#""api-key":"[FILTERED]""#), "{value}");
+                assert!(value.contains(r#""ok":true"#), "{value}");
+            }
+            other => panic!("expected text body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_default_aws_query_parameters_are_scrubbed() {
+        let interaction = WsInteraction {
+            uri: "wss://example.com?X-Amz-Credential=cred&X-Amz-Signature=sig&X-Amz-Security-Token=token"
+                .to_string(),
+            headers: HashMap::new(),
+            frames: Vec::new(),
+            recorded_at: String::new(),
+        };
+
+        let scrubbed = scrub_ws_interaction(&interaction, &default_config());
+
+        assert!(!scrubbed.uri.contains("cred"), "{}", scrubbed.uri);
+        assert!(!scrubbed.uri.contains("=sig"), "{}", scrubbed.uri);
+        assert!(!scrubbed.uri.contains("=token"), "{}", scrubbed.uri);
     }
 }

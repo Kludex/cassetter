@@ -524,7 +524,9 @@ class Cassette:
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = self._inner.take_ws_match(uri)
+        probe = WsInteraction(uri, {}, [], "")
+        scrubbed = scrub_ws_interaction(probe, self._security_config)
+        result = self._inner.take_ws_match(scrubbed.uri)
         if result is None:
             raise NoMatchError(f"no matching WebSocket interaction for {uri}")
 

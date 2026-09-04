@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Cassette;
 use crate::protocol::http::{Body, BodyContent, HttpInteraction, HttpRequest, HttpResponse};
+use crate::{CassetteError, Result};
 
 /// TOML-compatible cassette format.
 ///
@@ -83,38 +84,51 @@ pub fn to_toml(cassette: &Cassette, order: &[usize]) -> TomlCassette {
     }
 }
 
-pub fn from_toml(raw: TomlCassette) -> Cassette {
+pub fn from_toml(raw: TomlCassette) -> Result<Cassette> {
     let interactions: Vec<HttpInteraction> = raw
         .interactions
         .into_iter()
-        .map(|i| {
+        .enumerate()
+        .map(|(index, i)| {
+            let request_body = body_from_toml(&i.request.body_type, i.request.body_content)
+                .map_err(|error| {
+                    CassetteError::Format(format!(
+                        "invalid TOML request body in interaction {index}: {error}"
+                    ))
+                })?;
+            let response_body = body_from_toml(&i.response.body_type, i.response.body_content)
+                .map_err(|error| {
+                    CassetteError::Format(format!(
+                        "invalid TOML response body in interaction {index}: {error}"
+                    ))
+                })?;
             let request = HttpRequest {
                 method: i.request.method,
                 uri: i.request.uri,
                 headers: i.request.headers.into_iter().collect(),
-                body: body_from_toml(&i.request.body_type, i.request.body_content),
+                body: request_body,
             };
             let response = HttpResponse {
                 status: i.response.status,
                 headers: i.response.headers.into_iter().collect(),
-                body: body_from_toml(&i.response.body_type, i.response.body_content),
+                body: response_body,
             };
-            HttpInteraction {
+            Ok(HttpInteraction {
                 request,
                 response,
                 recorded_at: i.recorded_at.unwrap_or_default(),
-            }
+            })
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     let played_indices = vec![false; interactions.len()];
 
-    Cassette {
+    Ok(Cassette {
         version: raw.version,
         interactions,
         played_indices,
         ..Cassette::default()
-    }
+    })
 }
 
 /// Order headers deterministically for serialization.
@@ -139,31 +153,99 @@ fn body_to_toml(body: &Body) -> (String, Option<String>) {
     }
 }
 
-fn body_from_toml(body_type: &str, content: Option<String>) -> Body {
-    match body_type {
-        "json" => {
-            if let Some(s) = content {
-                if let Ok(val) = serde_json::from_str(&s) {
-                    return Body::json(val);
-                }
-            }
-            Body::none()
-        }
-        "text" => {
-            if let Some(s) = content {
-                Body::text(s)
-            } else {
-                Body::none()
-            }
-        }
-        "binary" => {
-            if let Some(s) = content {
-                if let Ok(bytes) = crate::body::hex::decode(&s) {
-                    return Body::binary(bytes);
-                }
-            }
-            Body::none()
-        }
-        _ => Body::none(),
+fn body_from_toml(body_type: &str, content: Option<String>) -> Result<Body> {
+    match (body_type, content) {
+        ("json", Some(content)) => serde_json::from_str(&content)
+            .map(Body::json)
+            .map_err(|error| CassetteError::Format(format!("invalid JSON content: {error}"))),
+        ("text", Some(content)) => Ok(Body::text(content)),
+        ("binary", Some(content)) => crate::body::hex::decode(&content)
+            .map(Body::binary)
+            .map_err(|error| CassetteError::Format(format!("invalid binary content: {error}"))),
+        _ => Ok(Body::none()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_malformed_json_request_body() {
+        let error = Cassette::from_toml(
+            r#"
+version = 1
+
+[[interactions]]
+[interactions.request]
+method = "POST"
+uri = "https://example.com"
+body_type = "json"
+body_content = "{"
+
+[interactions.response]
+status = 200
+body_type = "none"
+"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid TOML request body in interaction 0"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_binary_response_body() {
+        let error = Cassette::from_toml(
+            r#"
+version = 1
+
+[[interactions]]
+[interactions.request]
+method = "GET"
+uri = "https://example.com"
+body_type = "none"
+
+[interactions.response]
+status = 200
+body_type = "binary"
+body_content = "xyz"
+"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid TOML response body in interaction 0"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn accepts_declared_body_without_content_as_none() {
+        let cassette = Cassette::from_toml(
+            r#"
+version = 1
+
+[[interactions]]
+[interactions.request]
+method = "POST"
+uri = "https://example.com"
+body_type = "json"
+
+[interactions.response]
+status = 200
+body_type = "binary"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(cassette.interactions[0].request.body, Body::none());
+        assert_eq!(cassette.interactions[0].response.body, Body::none());
     }
 }

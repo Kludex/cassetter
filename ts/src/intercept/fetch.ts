@@ -6,34 +6,46 @@ import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap, type HttpResponse } from "../types.js";
 import { isLocalhost, type Interceptor } from "./base.js";
 
+type FetchPatch = {
+  active: boolean;
+  previous: typeof globalThis.fetch;
+};
+
+const FETCH_PATCHES = new WeakMap<typeof globalThis.fetch, FetchPatch>();
+
+function activeFetch(candidate: typeof globalThis.fetch): typeof globalThis.fetch {
+  let current = candidate;
+  let patch = FETCH_PATCHES.get(current);
+  while (patch && !patch.active) {
+    current = patch.previous;
+    patch = FETCH_PATCHES.get(current);
+  }
+  return current;
+}
+
 export class FetchInterceptor implements Interceptor {
-  private _cassette: Cassette | null = null;
-  private _originalFetch: typeof globalThis.fetch | null = null;
-  /** The function this interceptor put on the global, to recognise it later. */
   private _patched: typeof globalThis.fetch | null = null;
 
   /** Replace the global `fetch` with one backed by `cassette`. */
   install(cassette: Cassette): void {
-    const originalFetch = globalThis.fetch;
-    this._cassette = cassette;
-    this._originalFetch = originalFetch;
+    const patch: FetchPatch = {
+      active: true,
+      previous: globalThis.fetch,
+    };
 
     const patched = async (
       input: string | URL | Request,
       init?: RequestInit,
     ): Promise<Response> => {
-      // Another scope may have patched over this one and then left, putting
-      // this closure back on the global after its own scope ended. Pass
-      // straight through rather than recording into a finished cassette.
-      if (this._cassette === null) {
-        return originalFetch(input, init);
+      if (!patch.active) {
+        return activeFetch(patch.previous)(input, init);
       }
 
       const request = new Request(input, init);
       const { method, url: uri } = request;
 
       if (cassette.ignoreLocalhost && isLocalhost(uri)) {
-        return originalFetch(input, init);
+        return patch.previous(input, init);
       }
 
       const headers = extractHeaders(request.headers);
@@ -53,7 +65,7 @@ export class FetchInterceptor implements Interceptor {
       // write a different cassette on every run.
       const order = cassette.reserveRecordOrder();
 
-      const real = await originalFetch(request.clone());
+      const real = await patch.previous(request.clone());
       const responseBody = Buffer.from(await real.clone().arrayBuffer());
 
       cassette.record(
@@ -62,10 +74,9 @@ export class FetchInterceptor implements Interceptor {
         headers,
         requestBody,
         real.status,
-        // `arrayBuffer()` hands back decoded bytes while the upstream
-        // content-encoding header survives on the response. Passing it through
-        // would have the recorder try to decompress what is already plain.
-        extractHeadersSkipEncoding(real.headers),
+        // `arrayBuffer()` hands back decoded bytes while the upstream encoding
+        // and length headers describe the compressed representation.
+        extractDecodedResponseHeaders(real.headers),
         responseBody,
         order,
       );
@@ -73,27 +84,30 @@ export class FetchInterceptor implements Interceptor {
       return real;
     };
 
+    FETCH_PATCHES.set(patched, patch);
     this._patched = patched;
     globalThis.fetch = patched;
   }
 
-  /** Put the previous `fetch` back, if this interceptor still owns the global. */
+  /** Put the previous active `fetch` back if this interceptor owns the global. */
   uninstall(): void {
-    // Only take the global back if it is still ours. Two overlapping scopes
-    // tear down in whatever order they finish, and restoring unconditionally
-    // would drop an interceptor that is still live.
-    if (this._patched && globalThis.fetch === this._patched && this._originalFetch) {
-      globalThis.fetch = this._originalFetch;
+    if (!this._patched) return;
+
+    const patch = FETCH_PATCHES.get(this._patched);
+    if (patch) {
+      patch.active = false;
+      if (globalThis.fetch === this._patched) {
+        globalThis.fetch = activeFetch(patch.previous);
+      }
     }
-    this._cassette = null;
-    this._originalFetch = null;
     this._patched = null;
   }
 }
 
-function extractHeadersSkipEncoding(headers: Headers): HeaderMap {
+function extractDecodedResponseHeaders(headers: Headers): HeaderMap {
   const out = extractHeaders(headers);
   delete out["content-encoding"];
+  delete out["content-length"];
   return out;
 }
 

@@ -37,8 +37,6 @@ fn preview(s: &str, max: usize) -> (&str, bool) {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Body {
-    #[serde(rename = "type")]
-    pub body_type: String,
     #[serde(flatten)]
     pub inner: BodyContent,
 }
@@ -47,7 +45,6 @@ impl Body {
     /// An empty body.
     pub fn none() -> Self {
         Body {
-            body_type: "none".to_string(),
             inner: BodyContent::None,
         }
     }
@@ -55,7 +52,6 @@ impl Body {
     /// A body holding parsed JSON.
     pub fn json(value: serde_json::Value) -> Self {
         Body {
-            body_type: "json".to_string(),
             inner: BodyContent::Json(value),
         }
     }
@@ -63,7 +59,6 @@ impl Body {
     /// A body holding text.
     pub fn text(s: String) -> Self {
         Body {
-            body_type: "text".to_string(),
             inner: BodyContent::Text(s),
         }
     }
@@ -71,18 +66,13 @@ impl Body {
     /// A body holding raw bytes.
     pub fn binary(b: Vec<u8>) -> Self {
         Body {
-            body_type: "binary".to_string(),
             inner: BodyContent::Binary(b),
         }
     }
 
-    /// Build a body from an already-constructed content value, keeping the
-    /// discriminator in sync.
+    /// Build a body from an already-constructed content value.
     pub fn from_content(inner: BodyContent) -> Self {
-        Body {
-            body_type: inner.type_name().to_string(),
-            inner,
-        }
+        Body { inner }
     }
 
     /// Short human-readable summary. Bindings surface this as `__repr__`,
@@ -195,6 +185,22 @@ impl HttpInteraction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_body_uses_one_type_discriminator() {
+        let bodies = [
+            Body::json(serde_json::json!({"ok": true})),
+            Body::text("hello".to_string()),
+            Body::binary(vec![0, 1]),
+            Body::none(),
+        ];
+
+        for body in bodies {
+            let serialized = serde_json::to_string(&body).unwrap();
+            assert_eq!(serialized.matches(r#""type""#).count(), 1, "{serialized}");
+            assert_eq!(serde_json::from_str::<Body>(&serialized).unwrap(), body);
+        }
+    }
 
     #[test]
     fn test_repr_does_not_append_ellipsis_to_short_text() {

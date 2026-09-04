@@ -21,6 +21,7 @@ import {
   getHeader,
 } from "../src/cassette.js";
 import { RecordMode } from "../src/recording.js";
+import type { MatchConfig } from "../src/types.js";
 
 const SAMPLE = `version: 1
 interactions:
@@ -175,15 +176,17 @@ describe("play", () => {
   });
 
   it("respects a custom matchOn with ignored JSON paths", () => {
-    const c = new Cassette(join(dir, "m.yaml"), {
+    const path = join(dir, "m.yaml");
+    const matchConfig: MatchConfig = {
+      matchOn: ["method", "uri", "json_body"],
+      ignoreJsonPaths: ["timestamp"],
+    };
+    const recorded = new Cassette(path, {
       recordMode: RecordMode.ALL,
-      matchConfig: {
-        matchOn: ["method", "uri", "json_body"],
-        ignoreJsonPaths: ["timestamp"],
-      },
+      matchConfig,
     });
-    c.load();
-    c.record(
+    recorded.load();
+    recorded.record(
       "POST",
       "https://api.example.com/q",
       { "content-type": ["application/json"] },
@@ -192,9 +195,16 @@ describe("play", () => {
       { "content-type": ["application/json"] },
       Buffer.from(JSON.stringify({ ok: true })),
     );
+    recorded.save();
+
+    const replayed = new Cassette(path, {
+      recordMode: RecordMode.NONE,
+      matchConfig,
+    });
+    replayed.load();
 
     // Same query, different ignored timestamp -> still a match.
-    const res = c.play(
+    const res = replayed.play(
       "POST",
       "https://api.example.com/q",
       { "content-type": ["application/json"] },
@@ -202,6 +212,20 @@ describe("play", () => {
     );
     expect(res.status).toBe(200);
   });
+
+  it.each([RecordMode.ALL, RecordMode.REWRITE])(
+    "%s mode does not replay a newly recorded interaction",
+    (recordMode) => {
+      const c = new Cassette(join(dir, "discard.yaml"), { recordMode });
+      c.load();
+      c.record("GET", "https://api.example.com/users", {}, null, 200, {}, null);
+
+      expect(() =>
+        c.play("GET", "https://api.example.com/users", {}, null),
+      ).toThrow(NoMatchError);
+      expect(c.interactions).toHaveLength(1);
+    },
+  );
 
   it("marks an interaction played so it is not reused first", () => {
     const c = new Cassette(write("t.yaml"), { recordMode: RecordMode.NONE });
@@ -459,6 +483,22 @@ describe("scrubbed values still replay", () => {
     expect(b.play("POST", "https://api.example.com/login", headers, live).status).toBe(
       200,
     );
+  });
+});
+
+describe("WebSocket security", () => {
+  it("replays a URI whose query parameter was filtered", () => {
+    const path = join(dir, "ws.yaml");
+    const uri = "wss://api.example.com/socket?access_token=secret";
+    const recorded = new Cassette(path, { recordMode: RecordMode.ALL });
+    recorded.load();
+    recorded.recordWs(uri, {}, []);
+    recorded.save();
+
+    const replayed = new Cassette(path, { recordMode: RecordMode.NONE });
+    replayed.load();
+
+    expect(replayed.playWs(uri).uri).toContain("access_token=[FILTERED]");
   });
 });
 

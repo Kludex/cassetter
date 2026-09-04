@@ -1,10 +1,15 @@
 /// Check if a content-type header indicates JSON.
 pub fn is_json_content_type(content_type: &str) -> bool {
-    let ct = content_type.to_lowercase();
-    ct.contains("application/json")
-        || ct.contains("application/vnd.api+json")
-        || ct.contains("+json")
-        || ct.contains("application/ld+json")
+    let media_type = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    media_type == "application/json"
+        || media_type
+            .split_once('/')
+            .is_some_and(|(_, subtype)| subtype.ends_with("+json"))
 }
 
 /// Parse bytes as JSON.
@@ -22,6 +27,11 @@ mod tests {
         assert!(is_json_content_type("application/json; charset=utf-8"));
         assert!(is_json_content_type("application/vnd.api+json"));
         assert!(is_json_content_type("application/ld+json"));
+        assert!(is_json_content_type(
+            " application/problem+json ; charset=utf-8"
+        ));
+        assert!(!is_json_content_type("application/jsonp"));
+        assert!(!is_json_content_type("text/plain; profile=+json"));
         assert!(!is_json_content_type("text/html"));
         assert!(!is_json_content_type("application/xml"));
     }

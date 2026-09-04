@@ -134,6 +134,11 @@ export class Cassette {
     return this._inner ? this._inner.wsInteractions : [];
   }
 
+  /** Whether this mode may replay an existing interaction. */
+  get canReplay(): boolean {
+    return !DISCARDING_MODES.includes(this._recordMode);
+  }
+
   /** Whether an unmatched request may go to the network and be recorded. */
   get canRecord(): boolean {
     if (
@@ -248,6 +253,9 @@ export class Cassette {
   ): HttpResponse {
     if (!this._inner) {
       throw new NoMatchError("cassette not loaded");
+    }
+    if (!this.canReplay) {
+      throw new NoMatchError(`replay disabled in ${this._recordMode} mode`);
     }
 
     const processed = processBody(
@@ -376,7 +384,11 @@ export class Cassette {
     if (!this._inner) {
       throw new NoMatchError("cassette not loaded");
     }
-    const hit = this._inner.takeWsMatch(uri);
+    const probe = scrubWsInteraction(
+      { uri, headers: {}, frames: [], recordedAt: "" },
+      this._securityConfig,
+    );
+    const hit = this._inner.takeWsMatch(probe.uri);
     if (hit === null) {
       throw new NoMatchError(`no matching WebSocket interaction for ${uri}`);
     }

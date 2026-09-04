@@ -215,6 +215,29 @@ describe("useCassette options", () => {
     expect(yaml).not.toContain("built-in-body");
   });
 
+  it.each(["all", "rewrite"] as const)(
+    "%s records every identical request",
+    async (recordMode) => {
+      const path = join(dir, `${recordMode}.yaml`);
+      let upstreamCalls = 0;
+      stubUpstream(() => {
+        upstreamCalls += 1;
+        return new Response(JSON.stringify({ call: upstreamCalls }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+
+      const cassette = await useCassette(path, { recordMode }, async () => {
+        await fetch("https://api.example.com/same");
+        await fetch("https://api.example.com/same");
+      });
+
+      expect(upstreamCalls).toBe(2);
+      expect(cassette.interactions).toHaveLength(2);
+    },
+  );
+
   it("rewrite re-records over an existing cassette", async () => {
     const path = join(dir, "rw.yaml");
     stubUpstream(
@@ -293,6 +316,7 @@ describe("response decoding", () => {
     const rec = cassette.interactions[0];
     expect(rec.response.body.content).toEqual({ compressed: false });
     expect(rec.response.headers["content-encoding"]).toBeUndefined();
+    expect(rec.response.headers["content-length"]).toBeUndefined();
   });
 });
 
@@ -321,12 +345,28 @@ describe("overlapping scopes", () => {
     inner.uninstall();
   });
 
+  it("restores the original fetch after out-of-order teardown", () => {
+    stubUpstream(() => new Response("{}", { status: 200 }));
+    const original = globalThis.fetch;
+    const outer = new FetchInterceptor();
+    const inner = new FetchInterceptor();
+    const cassette = scope("identity.yaml");
+
+    outer.install(cassette);
+    inner.install(cassette);
+    outer.uninstall();
+    inner.uninstall();
+
+    expect(globalThis.fetch).toBe(original);
+  });
+
   it("stops intercepting once every scope has ended", async () => {
     let upstream = 0;
     stubUpstream(() => {
       upstream += 1;
       return new Response("{}", { status: 200 });
     });
+    const original = globalThis.fetch;
 
     const outer = new FetchInterceptor();
     const inner = new FetchInterceptor();
@@ -337,11 +377,9 @@ describe("overlapping scopes", () => {
     outer.uninstall();
     inner.uninstall();
 
-    // Interleaved teardown can leave a spent closure on the global - it has no
-    // stack to restore identity from. It must delegate to the real fetch
-    // rather than record into a cassette whose scope has ended.
     await fetch("https://api.example.com/after");
 
+    expect(globalThis.fetch).toBe(original);
     expect(upstream).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
   });

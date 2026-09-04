@@ -53,13 +53,13 @@ impl Body {
                 )))
             }
         };
-        Ok(Body(core::protocol::http::Body { body_type, inner }))
+        Ok(Body(core::protocol::http::Body { inner }))
     }
 
     /// Which of `json`, `text`, `binary`, or `none` this body holds.
     #[getter]
     fn body_type(&self) -> &str {
-        &self.0.body_type
+        self.0.inner.type_name()
     }
 
     /// The body's value: parsed JSON, a string, bytes, or `None`.

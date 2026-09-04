@@ -149,7 +149,6 @@ mod tests {
 
     fn json_body(raw: &str) -> Body {
         Body {
-            body_type: "json".to_string(),
             inner: BodyContent::Json(serde_json::from_str(raw).unwrap()),
         }
     }
