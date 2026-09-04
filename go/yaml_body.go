@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -66,7 +67,7 @@ func decodeYAMLBodyScalar(node *yaml.Node) (Body, error) {
 			return Body{Type: BodyTypeJSON, Content: content}, nil
 		}
 	}
-	return Body{Type: BodyTypeText, Content: content}, nil
+	return Body{Type: BodyTypeText, Content: norm.NFC.String(content)}, nil
 }
 
 func decodeYAMLBodyEnvelope(bodyType BodyType, contentNode *yaml.Node) (Body, error) {
@@ -86,7 +87,7 @@ func decodeYAMLBodyEnvelope(bodyType BodyType, contentNode *yaml.Node) (Body, er
 		if contentNode.Tag != "!!str" || contentNode.Decode(&content) != nil {
 			return Body{}, fmt.Errorf("text body content must be a string")
 		}
-		return Body{Type: bodyType, Content: content}, nil
+		return Body{Type: bodyType, Content: norm.NFC.String(content)}, nil
 	case BodyTypeBinary:
 		var content string
 		if contentNode.Tag != "!!str" || contentNode.Decode(&content) != nil {

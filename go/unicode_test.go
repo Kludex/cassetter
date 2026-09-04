@@ -11,7 +11,7 @@ import (
 	"github.com/Kludex/cassetter/go"
 )
 
-func TestCassetteNormalizesLoadedJSONToNFC(t *testing.T) {
+func TestCassetteNormalizesLoadedBodiesToNFC(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "cassette.yaml")
 	cassette := &cassetter.Cassette{
@@ -24,7 +24,10 @@ func TestCassetteNormalizesLoadedJSONToNFC(t *testing.T) {
 					"cafe\u0301": "cafe\u0301",
 				}},
 			},
-			Response: cassetter.HTTPResponse{Status: http.StatusOK},
+			Response: cassetter.HTTPResponse{
+				Status: http.StatusOK,
+				Body:   cassetter.Body{Type: cassetter.BodyTypeText, Content: "cafe\u0301"},
+			},
 		}},
 	}
 	if err := cassette.Save(path); err != nil {
@@ -36,7 +39,10 @@ func TestCassetteNormalizesLoadedJSONToNFC(t *testing.T) {
 	}
 	content := loaded.Interactions[0].Request.Body.Content.(map[string]any)
 	if content["café"] != "café" {
-		t.Fatalf("loaded body = %#v", content)
+		t.Fatalf("loaded request body = %#v", content)
+	}
+	if loaded.Interactions[0].Response.Body.Content != "café" {
+		t.Fatalf("loaded response body = %#v", loaded.Interactions[0].Response.Body)
 	}
 }
 

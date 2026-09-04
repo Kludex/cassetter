@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 func bodyToTOML(body Body) (BodyType, *string, error) {
@@ -64,7 +66,7 @@ func bodyFromTOML(bodyType BodyType, content *string) (Body, error) {
 		content := normalizeJSONUnicode(materializeJSONNumbers(value))
 		return Body{Type: bodyType, Content: content}, nil
 	case BodyTypeText:
-		return Body{Type: bodyType, Content: *content}, nil
+		return Body{Type: bodyType, Content: norm.NFC.String(*content)}, nil
 	case BodyTypeBinary:
 		value, err := hex.DecodeString(*content)
 		if err != nil {
