@@ -53,6 +53,21 @@ func replayGRPCMetadata(headers http.Header) metadata.MD {
 	return values
 }
 
+func finishGRPCCallOptions(options []grpc.CallOption, callErr error) {
+	for _, option := range options {
+		switch typed := option.(type) {
+		case grpc.OnFinishCallOption:
+			if typed.OnFinish != nil {
+				typed.OnFinish(callErr)
+			}
+		case *grpc.OnFinishCallOption:
+			if typed != nil && typed.OnFinish != nil {
+				typed.OnFinish(callErr)
+			}
+		}
+	}
+}
+
 func applyGRPCCallMetadata(options []grpc.CallOption, headers http.Header) {
 	values := replayGRPCMetadata(headers)
 	for _, option := range options {

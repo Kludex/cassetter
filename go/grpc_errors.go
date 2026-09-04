@@ -1,8 +1,11 @@
 package cassetter
 
 import (
+	"context"
 	"errors"
 	"fmt"
+
+	"google.golang.org/grpc/status"
 )
 
 // NoGRPCMatchError describes a gRPC call with no matching interaction.
@@ -18,6 +21,13 @@ func (e *NoGRPCMatchError) Error() string {
 // Unwrap allows errors.Is(err, ErrNoMatch).
 func (e *NoGRPCMatchError) Unwrap() error {
 	return ErrNoMatch
+}
+
+func grpcContextError(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return status.FromContextError(err).Err()
+	}
+	return nil
 }
 
 func joinGRPCErrors(callErr error, recordingErr error) error {

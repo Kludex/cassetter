@@ -22,12 +22,22 @@ func exerciseGRPCClient(t *testing.T, client grpc_testing.TestServiceClient) {
 	)
 	var header metadata.MD
 	var trailer metadata.MD
-	unary, err := client.UnaryCall(ctx, unaryRequest(), grpc.Header(&header), grpc.Trailer(&trailer))
+	unaryFinished := 0
+	unary, err := client.UnaryCall(
+		ctx,
+		unaryRequest(),
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+		grpc.OnFinish(func(error) { unaryFinished++ }),
+	)
 	if err != nil {
 		t.Fatalf("unary call: %v", err)
 	}
 	if got := string(unary.GetPayload().GetBody()); got != "unary" {
 		t.Fatalf("unary payload = %q, want unary", got)
+	}
+	if unaryFinished != 1 {
+		t.Fatalf("unary OnFinish calls = %d, want 1", unaryFinished)
 	}
 	if got := header.Get("x-server"); len(got) != 1 || got[0] != "header" {
 		t.Fatalf("unary header = %v, want header", got)
@@ -44,7 +54,12 @@ func exerciseGRPCClient(t *testing.T, client grpc_testing.TestServiceClient) {
 		t.Fatalf("empty call error = %v, want permission denied", err)
 	}
 
-	serverStream, err := client.StreamingOutputCall(context.Background(), &grpc_testing.StreamingOutputCallRequest{})
+	serverStreamFinished := 0
+	serverStream, err := client.StreamingOutputCall(
+		context.Background(),
+		&grpc_testing.StreamingOutputCallRequest{},
+		grpc.OnFinish(func(error) { serverStreamFinished++ }),
+	)
 	if err != nil {
 		t.Fatalf("create server stream: %v", err)
 	}
@@ -68,6 +83,9 @@ func exerciseGRPCClient(t *testing.T, client grpc_testing.TestServiceClient) {
 	}
 	if len(serverValues) != 2 || serverValues[0] != "first" || serverValues[1] != "second" {
 		t.Fatalf("server stream values = %v", serverValues)
+	}
+	if serverStreamFinished != 1 {
+		t.Fatalf("server stream OnFinish calls = %d, want 1", serverStreamFinished)
 	}
 
 	clientStream, err := client.StreamingInputCall(context.Background())

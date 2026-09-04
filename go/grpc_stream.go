@@ -31,25 +31,39 @@ func (t *Transport) interceptStreamGRPC(
 	options ...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	if err := t.Initialize(); err != nil {
+		finishGRPCCallOptions(options, err)
 		return nil, err
 	}
 	if err := t.checkOpen(); err != nil {
+		finishGRPCCallOptions(options, err)
+		return nil, err
+	}
+	if err := grpcContextError(ctx); err != nil {
+		finishGRPCCallOptions(options, err)
 		return nil, err
 	}
 	if t.config.mode != RecordModeAll && t.config.mode != RecordModeRewrite {
 		interaction, found, err := t.takeGRPCMatch(method)
 		if err != nil {
+			finishGRPCCallOptions(options, err)
 			return nil, err
 		}
 		if found {
-			return newReplayGRPCStream(ctx, description, interaction.Response, options)
+			stream, err := newReplayGRPCStream(ctx, description, interaction.Response, options)
+			if err != nil {
+				finishGRPCCallOptions(options, err)
+			}
+			return stream, err
 		}
 	}
 	if !t.canRecord {
-		return nil, &NoGRPCMatchError{Method: method}
+		err := &NoGRPCMatchError{Method: method}
+		finishGRPCCallOptions(options, err)
+		return nil, err
 	}
 	order, err := t.reserveGRPCRecording(method)
 	if err != nil {
+		finishGRPCCallOptions(options, err)
 		return nil, err
 	}
 	stream, streamErr := streamer(ctx, description, connection, method, options...)

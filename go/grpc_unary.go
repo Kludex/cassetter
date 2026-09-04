@@ -36,29 +36,42 @@ func (t *Transport) interceptUnaryGRPC(
 	options ...grpc.CallOption,
 ) error {
 	if err := t.Initialize(); err != nil {
+		finishGRPCCallOptions(options, err)
 		return err
 	}
 	if err := t.checkOpen(); err != nil {
+		finishGRPCCallOptions(options, err)
+		return err
+	}
+	if err := grpcContextError(ctx); err != nil {
+		finishGRPCCallOptions(options, err)
 		return err
 	}
 	requestContent, err := marshalGRPCMessage(request)
 	if err != nil {
+		finishGRPCCallOptions(options, err)
 		return err
 	}
 	if t.config.mode != RecordModeAll && t.config.mode != RecordModeRewrite {
 		interaction, found, err := t.takeGRPCMatch(method)
 		if err != nil {
+			finishGRPCCallOptions(options, err)
 			return err
 		}
 		if found {
-			return replayUnaryGRPC(interaction.Response, reply, options)
+			err := replayUnaryGRPC(interaction.Response, reply, options)
+			finishGRPCCallOptions(options, err)
+			return err
 		}
 	}
 	if !t.canRecord {
-		return &NoGRPCMatchError{Method: method}
+		err := &NoGRPCMatchError{Method: method}
+		finishGRPCCallOptions(options, err)
+		return err
 	}
 	order, err := t.reserveGRPCRecording(method)
 	if err != nil {
+		finishGRPCCallOptions(options, err)
 		return err
 	}
 	var headerMetadata metadata.MD

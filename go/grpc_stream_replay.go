@@ -17,8 +17,13 @@ type replayGRPCClientStream struct {
 	chunks        [][]byte
 	statusCode    codes.Code
 	statusMessage string
+	serverStreams bool
+	options       []grpc.CallOption
 	mu            sync.Mutex
 	next          int
+	finishMu      sync.Mutex
+	didFinish     bool
+	finished      chan struct{}
 }
 
 func newReplayGRPCStream(
@@ -41,16 +46,33 @@ func newReplayGRPCStream(
 		chunks = [][]byte{content}
 	}
 	applyGRPCCallMetadata(options, response.Metadata)
-	return &replayGRPCClientStream{
+	stream := &replayGRPCClientStream{
 		ctx:           ctx,
 		metadata:      replayGRPCMetadata(response.Metadata),
 		chunks:        chunks,
 		statusCode:    codes.Code(response.StatusCode),
 		statusMessage: response.StatusMessage,
-	}, nil
+		serverStreams: description.ServerStreams,
+		options:       append([]grpc.CallOption(nil), options...),
+		finished:      make(chan struct{}),
+	}
+	if done := ctx.Done(); done != nil {
+		go func() {
+			select {
+			case <-done:
+				stream.finish(grpcContextError(ctx))
+			case <-stream.finished:
+			}
+		}()
+	}
+	return stream, nil
 }
 
 func (s *replayGRPCClientStream) Header() (metadata.MD, error) {
+	if err := grpcContextError(s.ctx); err != nil {
+		s.finish(err)
+		return nil, err
+	}
 	return s.metadata.Copy(), nil
 }
 
@@ -59,6 +81,10 @@ func (s *replayGRPCClientStream) Trailer() metadata.MD {
 }
 
 func (s *replayGRPCClientStream) CloseSend() error {
+	if err := grpcContextError(s.ctx); err != nil {
+		s.finish(err)
+		return err
+	}
 	return nil
 }
 
@@ -67,20 +93,62 @@ func (s *replayGRPCClientStream) Context() context.Context {
 }
 
 func (s *replayGRPCClientStream) SendMsg(message any) error {
+	if err := grpcContextError(s.ctx); err != nil {
+		s.finish(err)
+		return err
+	}
 	_, err := marshalGRPCMessage(message)
+	if err != nil {
+		s.finish(err)
+	}
 	return err
 }
 
 func (s *replayGRPCClientStream) RecvMsg(message any) error {
+	if err := grpcContextError(s.ctx); err != nil {
+		s.finish(err)
+		return err
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if err := grpcContextError(s.ctx); err != nil {
+		s.mu.Unlock()
+		s.finish(err)
+		return err
+	}
 	if s.next < len(s.chunks) {
 		content := s.chunks[s.next]
 		s.next++
-		return unmarshalGRPCMessage(content, message)
+		serverStreams := s.serverStreams
+		s.mu.Unlock()
+		if err := unmarshalGRPCMessage(content, message); err != nil {
+			s.finish(err)
+			return err
+		}
+		if !serverStreams {
+			s.finish(nil)
+		}
+		return nil
 	}
-	if s.statusCode != codes.OK {
-		return status.Error(s.statusCode, s.statusMessage)
+	statusCode := s.statusCode
+	statusMessage := s.statusMessage
+	s.mu.Unlock()
+	if statusCode != codes.OK {
+		err := status.Error(statusCode, statusMessage)
+		s.finish(err)
+		return err
 	}
+	s.finish(nil)
 	return io.EOF
+}
+
+func (s *replayGRPCClientStream) finish(err error) {
+	s.finishMu.Lock()
+	if s.didFinish {
+		s.finishMu.Unlock()
+		return
+	}
+	s.didFinish = true
+	close(s.finished)
+	s.finishMu.Unlock()
+	finishGRPCCallOptions(s.options, err)
 }
