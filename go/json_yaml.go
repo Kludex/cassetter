@@ -56,7 +56,7 @@ func decodeYAMLJSONValue(node *yaml.Node) (any, error) {
 		switch node.Tag {
 		case "!!null":
 			return nil, nil
-		case "!!str":
+		case "!!str", "!!timestamp":
 			return node.Value, nil
 		case "!!bool":
 			return strconv.ParseBool(node.Value)
