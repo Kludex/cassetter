@@ -139,6 +139,58 @@ func TestCLIConvertsDirectoryIntoOutputDirectory(t *testing.T) {
 	}
 }
 
+func TestCLIConvertRejectsCollidingDestinations(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	yamlPath := filepath.Join(directory, "same.yaml")
+	tomlPath := filepath.Join(directory, "same.toml")
+	if err := os.WriteFile(yamlPath, []byte(secretVCRCassette), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cassette := &cassetter.Cassette{
+		Version: 1,
+		Interactions: []cassetter.HTTPInteraction{{
+			Request:  cassetter.HTTPRequest{Method: http.MethodGet, URI: "https://other.example.com"},
+			Response: cassetter.HTTPResponse{Status: http.StatusNoContent},
+		}},
+	}
+	if err := cassette.Save(tomlPath); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(tomlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := runCLIStatus(t, 1, "convert", "--force", directory, "toml")
+	if !strings.Contains(output, "map to the same destination") {
+		t.Fatalf("convert output = %q", output)
+	}
+	after, err := os.ReadFile(tomlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("colliding conversion modified its destination")
+	}
+}
+
+func TestCLIConvertExcludesNestedOutput(t *testing.T) {
+	t.Parallel()
+	input := filepath.Join(t.TempDir(), "input")
+	output := filepath.Join(input, "out")
+	if err := os.MkdirAll(input, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(input, "cassette.yaml"), []byte(secretVCRCassette), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runCLI(t, "convert", input, output)
+	runCLI(t, "convert", "--force", input, output)
+	if _, err := os.Stat(filepath.Join(output, "out")); !os.IsNotExist(err) {
+		t.Fatalf("nested output was converted recursively: %v", err)
+	}
+}
+
 func TestCLIConvertsVCRInPlace(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "cassette.yaml")

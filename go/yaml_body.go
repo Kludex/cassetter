@@ -24,10 +24,14 @@ func decodeYAMLBody(node *yaml.Node) (Body, error) {
 	typeNode, hasType := mappingValue(node, "type")
 	contentNode, hasContent := mappingValue(node, "content")
 	if hasType && typeNode.Tag == "!!str" && knownBodyType(BodyType(typeNode.Value)) && onlyBodyEnvelopeKeys(node) {
-		if !hasContent || contentNode.Tag == "!!null" {
+		bodyType := BodyType(typeNode.Value)
+		if !hasContent {
 			return Body{Type: BodyTypeNone}, nil
 		}
-		return decodeYAMLBodyEnvelope(BodyType(typeNode.Value), contentNode)
+		if contentNode.Tag == "!!null" && bodyType != BodyTypeJSON {
+			return Body{Type: BodyTypeNone}, nil
+		}
+		return decodeYAMLBodyEnvelope(bodyType, contentNode)
 	}
 	if stringNode, found := mappingValue(node, "string"); found {
 		return decodeYAMLBodyScalar(stringNode)

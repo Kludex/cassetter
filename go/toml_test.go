@@ -79,6 +79,47 @@ func TestCassetteRoundTripsTOML(t *testing.T) {
 	}
 }
 
+func TestCassettePreservesJSONNullAndDecimal(t *testing.T) {
+	t.Parallel()
+	for _, extension := range []string{".yaml", ".toml"} {
+		extension := extension
+		t.Run(extension, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "cassette"+extension)
+			cassette := &cassetter.Cassette{
+				Version: 1,
+				Interactions: []cassetter.HTTPInteraction{{
+					Request: cassetter.HTTPRequest{
+						Method: http.MethodPost,
+						URI:    "https://example.com",
+						Body:   cassetter.Body{Type: cassetter.BodyTypeJSON, Content: nil},
+					},
+					Response: cassetter.HTTPResponse{
+						Status: http.StatusOK,
+						Body: cassetter.Body{Type: cassetter.BodyTypeJSON, Content: map[string]any{
+							"value": json.Number("0.123456789012345678901"),
+						}},
+					},
+				}},
+			}
+			if err := cassette.Save(path); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := cassetter.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if body := loaded.Interactions[0].Request.Body; body.Type != cassetter.BodyTypeJSON || body.Content != nil {
+				t.Fatalf("null body = %#v", body)
+			}
+			value := loaded.Interactions[0].Response.Body.Content.(map[string]any)["value"]
+			if fmt.Sprint(value) != "0.123456789012345678901" {
+				t.Fatalf("decimal = %v", value)
+			}
+		})
+	}
+}
+
 func TestTransportRecordsAndReplaysTOML(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "cassette.toml")

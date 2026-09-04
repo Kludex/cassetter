@@ -4,10 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -63,81 +60,6 @@ func convertCommand(arguments []string, stdout io.Writer, stderr io.Writer) erro
 	}
 	if _, err := fmt.Fprintf(stdout, "Converted %d interaction(s): %s -> %s\n", total, paths[0], paths[1]); err != nil {
 		return fmt.Errorf("write output: %w", err)
-	}
-	return nil
-}
-
-func convertDirectory(
-	input string,
-	output string,
-	targetFormat string,
-	force bool,
-	scrub bool,
-	stdout io.Writer,
-	stderr io.Writer,
-) error {
-	outputRoot := output
-	targetExtension := ""
-	if format, ok := bareTargetFormat(output); ok {
-		outputRoot = input
-		if targetFormat != "" {
-			format = targetFormat
-		}
-		targetExtension = "." + format
-	} else if targetFormat != "" {
-		targetExtension = "." + targetFormat
-	}
-	var sources []string
-	if err := filepath.WalkDir(input, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && isCassettePath(path) && !strings.Contains(entry.Name(), ".tmp.") {
-			sources = append(sources, path)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("walk input: %w", err)
-	}
-	sort.Strings(sources)
-	if len(sources) == 0 {
-		return fmt.Errorf("no cassette files found in %s", input)
-	}
-	converted := 0
-	failed := 0
-	for _, source := range sources {
-		relative, err := filepath.Rel(input, source)
-		if err != nil {
-			return err
-		}
-		destination := filepath.Join(outputRoot, relative)
-		if targetExtension != "" {
-			destination = strings.TrimSuffix(destination, filepath.Ext(destination)) + targetExtension
-		}
-		if err := requireConversionOutput(source, destination, force); err != nil {
-			if _, writeErr := fmt.Fprintf(stderr, "skip: %v\n", err); writeErr != nil {
-				return fmt.Errorf("write output: %w", writeErr)
-			}
-			continue
-		}
-		total, err := convertFile(source, destination, scrub)
-		if err != nil {
-			failed++
-			if _, writeErr := fmt.Fprintf(stderr, "error: %s: %v\n", source, err); writeErr != nil {
-				return fmt.Errorf("write output: %w", writeErr)
-			}
-			continue
-		}
-		converted++
-		if _, err := fmt.Fprintf(stdout, "%s -> %s (%d interaction(s))\n", relative, destination, total); err != nil {
-			return fmt.Errorf("write output: %w", err)
-		}
-	}
-	if _, err := fmt.Fprintf(stdout, "Converted %d file(s), failed %d\n", converted, failed); err != nil {
-		return fmt.Errorf("write output: %w", err)
-	}
-	if failed > 0 {
-		return errConversionFailures
 	}
 	return nil
 }
