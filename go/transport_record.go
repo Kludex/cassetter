@@ -18,6 +18,7 @@ func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 	output := *t.cassette
 	output.Interactions = orderedRecordings(candidateInteractions, candidateOrders)
 	output.GRPCInteractions = orderedRecordings(t.cassette.GRPCInteractions, t.grpcOrders)
+	output.WebSocketInteractions = orderedRecordings(t.cassette.WebSocketInteractions, t.webSocketOrders)
 	if err := output.Save(t.config.path); err != nil {
 		t.saveEmpty = false
 		return err

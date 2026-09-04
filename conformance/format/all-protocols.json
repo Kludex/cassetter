@@ -146,6 +146,15 @@
           "direction": "recv",
           "frameType": "binary",
           "offsetMs": 250
+        },
+        {
+          "body": {
+            "content": "03f064656e696564",
+            "type": "binary"
+          },
+          "direction": "recv",
+          "frameType": "close",
+          "offsetMs": 300
         }
       ],
       "headers": {

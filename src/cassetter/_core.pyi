@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 BodyType = Literal["json", "text", "binary", "none"]
-FrameType = Literal["text", "binary"]
+FrameType = Literal["text", "binary", "close"]
 Direction = Literal["send", "recv"]
 Matcher = Literal["method", "uri", "headers", "body", "json_body"]
 

@@ -61,7 +61,7 @@ export interface GrpcInteraction {
 
 export interface WsFrame {
   direction: "send" | "recv";
-  frameType: "text" | "binary";
+  frameType: "text" | "binary" | "close";
   body: Body;
   offsetMs: number;
 }

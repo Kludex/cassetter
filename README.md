@@ -26,15 +26,15 @@ uv add cassetter
 
 ## Go
 
-Use the Go module when you need HTTP recording through `http.RoundTripper` or gRPC client interceptors:
+Use the Go module when you need HTTP, gRPC, or WebSocket cassette recording:
 
 ```bash
 go get github.com/Kludex/cassetter/go
 ```
 
 It reads and writes the same structured YAML and TOML formats, including VCR.py YAML migration. It supports all four
-gRPC call patterns with YAML cassettes. It also provides `inspect`, `diff`, `scrub`, and `convert` commands. See the
-[Go documentation](go/README.md) for complete examples and record modes.
+gRPC call patterns and WebSocket text and binary messages with YAML cassettes. It also provides `inspect`, `diff`,
+`scrub`, and `convert` commands. See the [Go documentation](go/README.md) for complete examples and record modes.
 
 ## Quick start
 
@@ -371,7 +371,9 @@ ws_interactions:
         offset_ms: 120
 ```
 
-On replay, `recv()` returns recorded frames in order without a real connection, then raises `ConnectionClosedOK` when they're exhausted (like a real connection at end-of-stream). `send()` is a no-op. Both text and binary frames are supported, and both `async with websockets.connect(...)` and `ws = await websockets.connect(...)` work.
+On replay, `recv()` returns recorded frames in order without a real connection, then raises the recorded close status.
+Older cassettes without a close frame use `ConnectionClosedOK`. `send()` is a no-op. Text, binary, and close frames
+are supported, and both `async with websockets.connect(...)` and `ws = await websockets.connect(...)` work.
 
 ## Streaming / SSE support
 

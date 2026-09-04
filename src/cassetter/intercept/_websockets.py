@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import struct
 import time
 from collections.abc import AsyncIterator, Generator
 from typing import Any
 
 import websockets
 import websockets.asyncio.client
-from websockets.exceptions import ConnectionClosedOK
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+from websockets.frames import Close, CloseCode
 
 from cassetter._core import Body, WsFrame, WsInteraction
 from cassetter._state import get_current_cassette
@@ -16,11 +18,22 @@ from cassetter.cassette import NoMatchError
 class VCRWebSocket:
     """Wraps a real WebSocket connection to record sent/received frames."""
 
-    def __init__(self, real_ws: Any, uri: str, headers: dict[str, list[str]]) -> None:
+    def __init__(
+        self,
+        real_ws: Any,
+        uri: str,
+        headers: dict[str, list[str]],
+        subprotocol: str | None = None,
+    ) -> None:
         self._real = real_ws
         self._uri = uri
         self._headers = headers
+        if subprotocol is not None:
+            self._headers["sec-websocket-protocol"] = [subprotocol]
+        self.subprotocol = subprotocol
         self._frames: list[WsFrame] = []
+        self._terminal_recorded = False
+        self._flushed = False
         self._start_time = time.monotonic()
 
     async def send(self, message: str | bytes) -> None:
@@ -33,7 +46,17 @@ class VCRWebSocket:
         await self._real.send(message)
 
     async def recv(self) -> str | bytes:
-        data: str | bytes = await self._real.recv()
+        try:
+            data: str | bytes = await self._real.recv()
+        except websockets.exceptions.ConnectionClosed as exc:
+            if not self._terminal_recorded:
+                self._terminal_recorded = True
+                close = exc.rcvd or Close(1006, "")
+                content = struct.pack(">H", close.code) + close.reason.encode()
+                offset_ms = int((time.monotonic() - self._start_time) * 1000)
+                self._frames.append(WsFrame("recv", "close", Body("binary", content), offset_ms))
+                self._flush()
+            raise
         offset_ms = int((time.monotonic() - self._start_time) * 1000)
         if isinstance(data, bytes):
             frame = WsFrame("recv", "binary", Body("binary", data), offset_ms)
@@ -48,9 +71,10 @@ class VCRWebSocket:
 
     def _flush(self) -> None:
         cassette = get_current_cassette()
-        if self._frames and cassette is not None:
+        if not self._flushed and cassette is not None:
             cassette.record_ws(self._uri, self._headers, self._frames)
             self._frames = []
+            self._flushed = True
 
     async def __aenter__(self) -> VCRWebSocket:
         return self
@@ -75,7 +99,16 @@ class VCRWebSocketReplay:
 
     def __init__(self, interaction: WsInteraction) -> None:
         self._frames = interaction.frames
-        self._recv_frames = [f for f in self._frames if f.direction == "recv"]
+        self._recv_frames = [f for f in self._frames if f.direction == "recv" and f.frame_type != "close"]
+        self._close = next((f for f in self._frames if f.direction == "recv" and f.frame_type == "close"), None)
+        self.subprotocol = next(
+            (
+                values[0]
+                for name, values in interaction.headers.items()
+                if name.lower() == "sec-websocket-protocol" and values
+            ),
+            None,
+        )
         self._recv_index = 0
 
     async def send(self, message: str | bytes) -> None:
@@ -83,6 +116,15 @@ class VCRWebSocketReplay:
 
     async def recv(self) -> str | bytes:
         if self._recv_index >= len(self._recv_frames):
+            if self._close is not None:
+                content = self._close.body.content
+                data = content if isinstance(content, bytes) else b""
+                if len(data) < 2:
+                    raise ValueError("recorded WebSocket close body is shorter than its status code")
+                close = Close(struct.unpack(">H", data[:2])[0], data[2:].decode())
+                if close.code in (1000, 1001, CloseCode.NO_STATUS_RCVD):
+                    raise ConnectionClosedOK(close, None)
+                raise ConnectionClosedError(close, None)
             # Recorded frames are exhausted; signal a clean end-of-stream the
             # way a real connection does, so `await ws.recv()` callers see
             # ConnectionClosed instead of a bare StopAsyncIteration.
@@ -142,7 +184,7 @@ class _PatchedConnect:
         conn = self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
         real_ws = await conn  # pragma: no cover
         headers = extract_ws_headers(self._kwargs)  # pragma: no cover
-        self._ws = VCRWebSocket(real_ws, self._uri, headers)  # pragma: no cover
+        self._ws = VCRWebSocket(real_ws, self._uri, headers, real_ws.subprotocol)  # pragma: no cover
         return self._ws  # pragma: no cover
 
     async def _cleanup(self) -> None:

@@ -22,7 +22,7 @@ The format fixtures cover:
 - Every body type.
 - Multi-value headers and metadata.
 - Unicode text and nested JSON.
-- HTTP, gRPC, and WebSocket interactions.
+- HTTP, gRPC, and WebSocket interactions, including WebSocket close statuses.
 - YAML and TOML storage.
 - VCR.py status, header, body, and `parsed_body` migration.
 - Empty cassettes.
