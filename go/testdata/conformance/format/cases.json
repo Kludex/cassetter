@@ -10,6 +10,16 @@
     "expected": "numeric-json-keys.json"
   },
   {
+    "name": "VCR.py migration",
+    "cassette": "vcr-py.yaml",
+    "expected": "vcr-py.json"
+  },
+  {
+    "name": "TOML HTTP bodies",
+    "cassette": "http-bodies.toml",
+    "expected": "http-bodies.json"
+  },
+  {
     "name": "empty cassette",
     "cassette": "empty.yaml",
     "expected": "empty.json"

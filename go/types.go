@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,58 +66,13 @@ func (b Body) MarshalYAML() (any, error) {
 	}{Type: bodyType, Content: content}, nil
 }
 
-// UnmarshalYAML reads a body envelope from the cassetter format.
+// UnmarshalYAML reads cassetter and VCR.py body representations.
 func (b *Body) UnmarshalYAML(node *yaml.Node) error {
-	var value struct {
-		Type BodyType `yaml:"type"`
-	}
-	if err := node.Decode(&value); err != nil {
+	body, err := decodeYAMLBody(node)
+	if err != nil {
 		return err
 	}
-	if value.Type == "" {
-		value.Type = BodyTypeNone
-	}
-	contentNode, hasContent := mappingValue(node, "content")
-	switch value.Type {
-	case BodyTypeNone:
-		*b = Body{Type: BodyTypeNone}
-	case BodyTypeBinary:
-		var text string
-		if !hasContent || contentNode.Tag != "!!str" || contentNode.Decode(&text) != nil {
-			return fmt.Errorf("binary body content must be a hexadecimal string")
-		}
-		content, err := hex.DecodeString(text)
-		if err != nil {
-			return fmt.Errorf("decode binary body: %w", err)
-		}
-		*b = Body{Type: value.Type, Content: content}
-	case BodyTypeText:
-		var content string
-		if !hasContent || contentNode.Tag != "!!str" || contentNode.Decode(&content) != nil {
-			return fmt.Errorf("text body content must be a string")
-		}
-		*b = Body{Type: value.Type, Content: norm.NFC.String(content)}
-	case BodyTypeJSON:
-		var content any
-		if hasContent {
-			var err error
-			content, err = decodeYAMLJSONValue(contentNode)
-			if err != nil {
-				return fmt.Errorf("JSON body content: %w", err)
-			}
-		}
-		normalized, err := normalizeJSONValue(content)
-		if err != nil {
-			return fmt.Errorf("JSON body content: %w", err)
-		}
-		normalized, err = normalizeJSONUnicode(normalized)
-		if err != nil {
-			return fmt.Errorf("JSON body content: %w", err)
-		}
-		*b = Body{Type: value.Type, Content: normalized}
-	default:
-		return fmt.Errorf("unknown body type %q", value.Type)
-	}
+	*b = body
 	return nil
 }
 

@@ -1,0 +1,39 @@
+version = 1
+
+[[interactions]]
+recorded_at = "2026-02-01T00:00:00Z"
+
+[interactions.request]
+method = "POST"
+uri = "https://api.example.com/json"
+body_type = "json"
+body_content = '{"nested":{"active":true,"value":null},"items":[1,"two"]}'
+
+[interactions.request.headers]
+content-type = ["application/json"]
+x-multi = ["one", "two"]
+
+[interactions.response]
+status = 200
+body_type = "text"
+body_content = "café"
+
+[interactions.response.headers]
+content-type = ["text/plain; charset=utf-8"]
+
+[[interactions]]
+recorded_at = "2026-02-02T00:00:00Z"
+
+[interactions.request]
+method = "PUT"
+uri = "https://api.example.com/binary"
+body_type = "binary"
+body_content = "0001ff"
+
+[interactions.request.headers]
+
+[interactions.response]
+status = 204
+body_type = "none"
+
+[interactions.response.headers]

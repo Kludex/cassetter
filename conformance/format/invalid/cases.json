@@ -20,6 +20,18 @@
     "cassette": "non-finite-grpc-debug-number.yaml"
   },
   {
+    "name": "malformed TOML JSON body",
+    "cassette": "malformed-toml-json-body.toml"
+  },
+  {
+    "name": "malformed TOML binary body",
+    "cassette": "malformed-toml-binary-body.toml"
+  },
+  {
+    "name": "unsupported TOML body type",
+    "cassette": "unsupported-toml-body-type.toml"
+  },
+  {
     "name": "missing WebSocket frame direction",
     "cassette": "missing-ws-direction.yaml"
   },

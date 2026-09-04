@@ -1,0 +1,56 @@
+interactions:
+  - request:
+      method: POST
+      uri: https://api.example.com/json
+      headers:
+        x-scalar: value
+        x-number: 42
+        x-bool: true
+        x-null: null
+        x-mixed:
+          - one
+          - 2
+          - false
+          - null
+          - nested: ignored
+      body:
+        string: '{"model":"café","id":42}'
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        content-type:
+          - !!binary |
+            YXBwbGljYXRpb24vanNvbg==
+      body:
+        string: !!binary |
+          AAH//g==
+  - request:
+      method: POST
+      uri: https://api.example.com/mapping
+      headers: {}
+      body:
+        model: llama
+        stream: false
+    response:
+      status:
+        code: 201
+      headers: {}
+      body:
+        string: plain text
+  - request:
+      method: GET
+      uri: https://api.example.com/parsed
+      headers: {}
+      body:
+        string: ignored
+      parsed_body:
+        token: parsed
+        values:
+          - 1
+          - null
+    response:
+      status: 204
+      headers: {}
+      body: null

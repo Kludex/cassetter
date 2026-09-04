@@ -69,7 +69,7 @@ type transportConfig struct {
 	responseHook    ResponseHook
 }
 
-// WithPath sets the YAML cassette path.
+// WithPath sets the cassette path. A .toml extension selects TOML; other extensions use YAML.
 func WithPath(path string) Option {
 	return optionFunc(func(config *transportConfig) {
 		config.path = path

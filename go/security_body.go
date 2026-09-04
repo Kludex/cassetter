@@ -43,12 +43,7 @@ func materializeJSONNumbers(value any) any {
 		if integer, err := strconv.ParseUint(string(typed), 10, 64); err == nil {
 			return integer
 		}
-		if !strings.ContainsAny(string(typed), ".eE") {
-			return typed
-		}
-		if number, err := strconv.ParseFloat(string(typed), 64); err == nil {
-			return number
-		}
+		return typed
 	case map[string]any:
 		for key, child := range typed {
 			typed[key] = materializeJSONNumbers(child)

@@ -1,0 +1,12 @@
+version = 1
+
+[[interactions]]
+[interactions.request]
+method = "POST"
+uri = "https://example.com"
+body_type = "xml"
+body_content = "<value/>"
+
+[interactions.response]
+status = 200
+body_type = "none"
