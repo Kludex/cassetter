@@ -8,6 +8,7 @@ The shared fixtures in this directory are the contract between implementations.
 | Directory | Purpose |
 |---|---|
 | `format/` | Cassette parsing and save-and-reload compatibility. |
+| `format/invalid/` | Malformed cassettes that every SDK must reject. |
 
 Each fixture set contains a `cases.json` manifest.
 Every case names an input cassette and its canonical JSON representation.
@@ -19,8 +20,9 @@ The format fixtures cover:
 - Unicode text and nested JSON.
 - HTTP, gRPC, and WebSocket interactions.
 - Empty cassettes.
+- Missing required gRPC and WebSocket fields.
 
-Additional sets will cover invalid cassettes, request matching, filtering, body processing, and record modes.
+Additional sets will cover request matching, filtering, body processing, and record modes.
 
 ## Format contract
 
@@ -32,6 +34,7 @@ A format case passes when an SDK parses its cassette into the corresponding cano
 - Headers and metadata map each name to a list of values.
 - Timestamps pass through without reformatting.
 - Saving and reloading a cassette produces the same canonical value.
+- Every case in `format/invalid/cases.json` fails to load.
 
 ## SDK coverage
 

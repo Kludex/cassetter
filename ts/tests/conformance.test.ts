@@ -25,9 +25,17 @@ type FormatCase = {
   expected: string;
 };
 
+type InvalidFormatCase = {
+  name: string;
+  cassette: string;
+};
+
 const CASES = JSON.parse(
   readFileSync(join(FORMAT_FIXTURES, "cases.json"), "utf-8"),
 ) as FormatCase[];
+const INVALID_CASES = JSON.parse(
+  readFileSync(join(FORMAT_FIXTURES, "invalid", "cases.json"), "utf-8"),
+) as InvalidFormatCase[];
 
 function sortKeys<T extends object>(value: T): T {
   return Object.fromEntries(
@@ -109,6 +117,12 @@ describe("cross-language format conformance", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it.each(INVALID_CASES)("rejects $name", (case_) => {
+    expect(() =>
+      native.Cassette.load(join(FORMAT_FIXTURES, "invalid", case_.cassette)),
+    ).toThrow();
   });
 
   it("preserves unicode and multi-value headers", () => {

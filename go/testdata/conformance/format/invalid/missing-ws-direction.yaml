@@ -1,0 +1,8 @@
+version: 1
+interactions: []
+ws_interactions:
+  - uri: wss://example.com
+    frames:
+      - frame_type: text
+        body:
+          type: none

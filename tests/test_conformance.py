@@ -21,6 +21,17 @@ class FormatCase(TypedDict):
     expected: str
 
 
+class InvalidFormatCase(TypedDict):
+    name: str
+    cassette: str
+
+
+FORMAT_CASES: list[FormatCase] = json.loads((FORMAT_FIXTURES / "cases.json").read_text(encoding="utf-8"))
+INVALID_FORMAT_CASES: list[InvalidFormatCase] = json.loads(
+    (FORMAT_FIXTURES / "invalid" / "cases.json").read_text(encoding="utf-8")
+)
+
+
 def _body(body: Body) -> dict[str, Any]:
     if body.body_type == "binary":
         return {"type": "binary", "content": body.content.hex()}
@@ -83,24 +94,29 @@ def _canonical(cassette: Cassette) -> dict[str, Any]:
     }
 
 
-def _cases() -> list[FormatCase]:
-    cases: list[FormatCase] = json.loads((FORMAT_FIXTURES / "cases.json").read_text(encoding="utf-8"))
-    return cases
-
-
-@pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
+@pytest.mark.parametrize("case", FORMAT_CASES, ids=[case["name"] for case in FORMAT_CASES])
 def test_fixture_matches_canonical_structure(case: FormatCase) -> None:
     cassette = Cassette.load(str(FORMAT_FIXTURES / case["cassette"]))
     expected = json.loads((FORMAT_FIXTURES / case["expected"]).read_text(encoding="utf-8"))
     assert _canonical(cassette) == expected
 
 
-@pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
+@pytest.mark.parametrize("case", FORMAT_CASES, ids=[case["name"] for case in FORMAT_CASES])
 def test_roundtrip_through_yaml_has_no_drift(tmp_path: Path, case: FormatCase) -> None:
     output = tmp_path / case["cassette"]
     Cassette.load(str(FORMAT_FIXTURES / case["cassette"])).save(str(output))
     expected = json.loads((FORMAT_FIXTURES / case["expected"]).read_text(encoding="utf-8"))
     assert _canonical(Cassette.load(str(output))) == expected
+
+
+@pytest.mark.parametrize(
+    "case",
+    INVALID_FORMAT_CASES,
+    ids=[case["name"] for case in INVALID_FORMAT_CASES],
+)
+def test_invalid_fixture_is_rejected(case: InvalidFormatCase) -> None:
+    with pytest.raises(ValueError):
+        Cassette.load(str(FORMAT_FIXTURES / "invalid" / case["cassette"]))
 
 
 def test_unicode_and_multi_value_headers_survive() -> None:

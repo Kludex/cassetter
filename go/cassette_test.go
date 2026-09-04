@@ -109,6 +109,20 @@ func TestSaveRejectsInvalidInteractions(t *testing.T) {
 				Response: cassetter.HTTPResponse{Status: 0},
 			}},
 		},
+		"WebSocket direction": {
+			Version: 1,
+			WebSocketInteractions: []cassetter.WebSocketInteraction{{
+				URI:    "wss://example.com",
+				Frames: []cassetter.WebSocketFrame{{FrameType: "text"}},
+			}},
+		},
+		"WebSocket frame type": {
+			Version: 1,
+			WebSocketInteractions: []cassetter.WebSocketInteraction{{
+				URI:    "wss://example.com",
+				Frames: []cassetter.WebSocketFrame{{Direction: "send"}},
+			}},
+		},
 	}
 	for name, cassette := range tests {
 		t.Run(name, func(t *testing.T) {

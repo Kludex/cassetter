@@ -26,6 +26,14 @@ func (c *Cassette) validate() error {
 		if interaction.URI == "" {
 			return fmt.Errorf("WebSocket interaction %d has an empty URI", index+1)
 		}
+		for frameIndex, frame := range interaction.Frames {
+			if frame.Direction == "" {
+				return fmt.Errorf("WebSocket interaction %d frame %d has an empty direction", index+1, frameIndex+1)
+			}
+			if frame.FrameType == "" {
+				return fmt.Errorf("WebSocket interaction %d frame %d has an empty frame type", index+1, frameIndex+1)
+			}
+		}
 	}
 	return nil
 }
