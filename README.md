@@ -20,6 +20,16 @@ VCR.py works, but has fundamental problems:
 uv add cassetter
 ```
 
+## Go
+
+Use the Go module when you need cassette recording through `http.RoundTripper`:
+
+```bash
+go get github.com/Kludex/cassetter/go
+```
+
+It reads and writes the same structured YAML format. It also provides `inspect`, `diff`, and `scrub` commands. See the [Go documentation](go/README.md) for the complete example and record modes.
+
 ## Quick start
 
 ### With pytest (recommended)
