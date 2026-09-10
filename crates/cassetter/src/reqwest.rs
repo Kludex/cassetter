@@ -32,7 +32,7 @@ impl Client {
     /// Execute a request, replaying a match or recording the live response.
     pub async fn execute(&self, mut request: Request) -> Result<Response> {
         let request_bytes = collect_request_body(&mut request).await?;
-        let headers = headers_to_map(request.headers())?;
+        let headers = headers_to_map(request.headers());
         let recorded_request = HttpRequest::new(
             request.method().as_str().to_string(),
             request.url().as_str().to_string(),
@@ -65,13 +65,7 @@ impl Client {
                         return Err(Error::Reqwest(error));
                     }
                 };
-                let response_headers_map = match headers_to_map(&response_headers) {
-                    Ok(headers) => headers,
-                    Err(error) => {
-                        self.recorder.fail_recording(order, &error)?;
-                        return Err(error);
-                    }
-                };
+                let response_headers_map = headers_to_map(&response_headers);
                 let response_body = match process_body(
                     response_bytes.to_vec(),
                     header(&response_headers_map, "content-type"),

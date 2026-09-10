@@ -87,7 +87,7 @@ pub(crate) fn retag_content_length(
     body: &Body,
 ) -> Result<()> {
     let length = match &body.inner {
-        BodyContent::None => 0,
+        BodyContent::None => return Ok(()),
         BodyContent::Binary(value) => value.len(),
         BodyContent::Text(value) => value.len(),
         BodyContent::Json(value) => serde_json::to_vec(value)

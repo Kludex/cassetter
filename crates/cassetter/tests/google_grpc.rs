@@ -41,12 +41,19 @@ async fn google_cloud_tasks_records_and_replays_successes_and_errors() {
         .unwrap_err();
     assert_eq!(error.code(), tonic::Code::NotFound);
     assert_eq!(error.message(), "queue missing");
-    assert_eq!(live_calls.load(Ordering::SeqCst), 2);
+    let error = client
+        .get_queue(request("queues/proxy-error"))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), tonic::Code::Unavailable);
+    assert!(error.message().contains("HTTP status code 503"));
+    assert_eq!(live_calls.load(Ordering::SeqCst), 3);
     recorder.finish().await.unwrap();
 
     let cassette = std::fs::read_to_string(&path).unwrap();
     assert!(cassette.contains("/google.cloud.tasks.v2.CloudTasks/GetQueue"));
     assert!(cassette.contains("status_code: 5"));
+    assert!(cassette.contains("status_code: 14"));
     assert!(cassette.contains("x-server-header"));
     assert!(cassette.contains("x-server-trailer"));
     assert!(!cassette.contains("Bearer secret"));
@@ -74,6 +81,12 @@ async fn google_cloud_tasks_records_and_replays_successes_and_errors() {
     assert_eq!(error.code(), tonic::Code::NotFound);
     assert_eq!(error.message(), "queue missing");
     assert!(error.metadata().get("x-server-trailer").is_some());
+    let error = client
+        .get_queue(request("queues/proxy-error"))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), tonic::Code::Unavailable);
+    assert!(error.message().contains("HTTP status code 503"));
 
     let mismatch = client.get_queue(request("queues/other")).await.unwrap_err();
     assert!(mismatch
@@ -112,15 +125,17 @@ impl Service<Request<tonic::body::Body>> for GoogleTransport {
 
     fn call(&mut self, _request: Request<tonic::body::Body>) -> Self::Future {
         let call = self.calls.fetch_add(1, Ordering::SeqCst);
-        if call == 0 {
-            let payload = Queue {
-                name: "queues/one".to_string(),
-                ..Queue::default()
+        match call {
+            0 => {
+                let payload = Queue {
+                    name: "queues/one".to_string(),
+                    ..Queue::default()
+                }
+                .encode_to_vec();
+                ready(Ok(grpc_response(payload, 0, "", true)))
             }
-            .encode_to_vec();
-            ready(Ok(grpc_response(payload, 0, "", true)))
-        } else {
-            ready(Ok(grpc_response(Vec::new(), 5, "queue%20missing", true)))
+            1 => ready(Ok(grpc_response(Vec::new(), 5, "queue%20missing", true))),
+            _ => ready(Ok(http_error_response())),
         }
     }
 }
@@ -143,6 +158,13 @@ impl Service<Request<tonic::body::Body>> for OfflineTransport {
         self.calls.fetch_add(1, Ordering::SeqCst);
         panic!("offline replay reached the live Google transport")
     }
+}
+
+fn http_error_response() -> Response<tonic::body::Body> {
+    Response::builder()
+        .status(503)
+        .body(tonic::body::Body::empty())
+        .unwrap()
 }
 
 fn grpc_response(

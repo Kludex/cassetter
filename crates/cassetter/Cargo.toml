@@ -45,7 +45,7 @@ prost = "0.14"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 serde.workspace = true
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
 tonic = { version = "0.14", features = ["transport"] }
 tonic-health = "0.14"
 tower = { version = "0.5", features = ["util"] }

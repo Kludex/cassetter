@@ -19,20 +19,17 @@ pub(crate) async fn collect_request_body(request: &mut Request) -> Result<bytes:
     Ok(bytes)
 }
 
-pub(crate) fn headers_to_map(
-    headers: &reqwest::header::HeaderMap,
-) -> Result<HashMap<String, Vec<String>>> {
+pub(crate) fn headers_to_map(headers: &reqwest::header::HeaderMap) -> HashMap<String, Vec<String>> {
     let mut output = HashMap::new();
     for (name, value) in headers {
-        let value = value.to_str().map_err(|error| {
-            Error::InvalidTransportData(format!("HTTP header {name:?} is not text: {error}"))
-        })?;
-        output
-            .entry(name.as_str().to_string())
-            .or_insert_with(Vec::new)
-            .push(value.to_string());
+        if let Ok(value) = value.to_str() {
+            output
+                .entry(name.as_str().to_string())
+                .or_insert_with(Vec::new)
+                .push(value.to_string());
+        }
     }
-    Ok(output)
+    output
 }
 
 pub(crate) fn replay_response(url: reqwest::Url, response: HttpResponse) -> Result<Response> {

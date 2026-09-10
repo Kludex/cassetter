@@ -127,15 +127,10 @@ impl Recorder {
             let mut state = self.lock()?;
             ensure_open(&state)?;
             let mut interaction = scrub_interaction(&interaction, &state.security);
-            let retagged =
-                retag_content_length(&mut interaction.request.headers, &interaction.request.body)
-                    .and_then(|()| {
-                        retag_content_length(
-                            &mut interaction.response.headers,
-                            &interaction.response.body,
-                        )
-                    });
-            if let Err(error) = retagged {
+            if let Err(error) = retag_content_length(
+                &mut interaction.response.headers,
+                &interaction.response.body,
+            ) {
                 state.pending.remove(&order);
                 state.errors.push(error.to_string());
                 return Err(error);

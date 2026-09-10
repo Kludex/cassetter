@@ -27,7 +27,7 @@ async fn records_and_replays_http_responses_and_errors_offline() {
 
     let recorder = Recorder::builder(&path)
         .record_mode(RecordMode::All)
-        .match_on(["method", "uri", "json_body"])
+        .match_on(["method", "uri", "headers", "json_body"])
         .unwrap()
         .build()
         .unwrap();
@@ -53,7 +53,7 @@ async fn records_and_replays_http_responses_and_errors_offline() {
 
     let replay = Recorder::builder(&path)
         .record_mode(RecordMode::None)
-        .match_on(["method", "uri", "json_body"])
+        .match_on(["method", "uri", "headers", "json_body"])
         .unwrap()
         .build()
         .unwrap();
@@ -86,6 +86,102 @@ async fn records_and_replays_http_responses_and_errors_offline() {
             ..
         }
     ));
+    replay.finish().await.unwrap();
+}
+
+#[tokio::test]
+async fn skips_opaque_headers_that_cassettes_cannot_represent() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("opaque.yaml");
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = vec![0; 4096];
+        let _ = stream.read(&mut request).await.unwrap();
+        let mut response = b"HTTP/1.1 200 OK\r\nx-opaque: ".to_vec();
+        response.extend_from_slice(&[0xff]);
+        response.extend_from_slice(b"\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok");
+        stream.write_all(&response).await.unwrap();
+    });
+    let url = Url::parse(&format!("http://{address}/opaque")).unwrap();
+    let recorder = Recorder::builder(&path)
+        .record_mode(RecordMode::All)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+    assert_eq!(
+        client
+            .execute(Request::new(Method::GET, url.clone()))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+        "ok"
+    );
+    recorder.finish().await.unwrap();
+    server.await.unwrap();
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("x-opaque"));
+
+    let replay = Recorder::builder(path)
+        .record_mode(RecordMode::None)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), replay.clone());
+    assert_eq!(
+        client
+            .execute(Request::new(Method::GET, url))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+        "ok"
+    );
+    replay.finish().await.unwrap();
+}
+
+#[tokio::test]
+async fn preserves_content_length_for_bodyless_responses() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("head.yaml");
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = vec![0; 4096];
+        let _ = stream.read(&mut request).await.unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 123\r\nconnection: close\r\n\r\n")
+            .await
+            .unwrap();
+    });
+    let url = Url::parse(&format!("http://{address}/head")).unwrap();
+    let recorder = Recorder::builder(&path)
+        .record_mode(RecordMode::All)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+    let response = client
+        .execute(Request::new(Method::HEAD, url.clone()))
+        .await
+        .unwrap();
+    assert_eq!(response.headers()["content-length"], "123");
+    recorder.finish().await.unwrap();
+    server.await.unwrap();
+
+    let replay = Recorder::builder(path)
+        .record_mode(RecordMode::None)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), replay.clone());
+    let response = client
+        .execute(Request::new(Method::HEAD, url))
+        .await
+        .unwrap();
+    assert_eq!(response.headers()["content-length"], "123");
+    assert!(response.bytes().await.unwrap().is_empty());
     replay.finish().await.unwrap();
 }
 
@@ -221,6 +317,10 @@ fn request(url: Url, value: &str, credential: &str) -> Request {
     request
         .headers_mut()
         .insert("x-goog-api-key", "google-api-key".parse().unwrap());
-    *request.body_mut() = Some(reqwest::Body::from(format!(r#"{{"name":"{value}"}}"#)));
+    let body = format!(r#"{{ "name": "{value}" }}"#);
+    request
+        .headers_mut()
+        .insert("content-length", body.len().into());
+    *request.body_mut() = Some(reqwest::Body::from(body));
     request
 }

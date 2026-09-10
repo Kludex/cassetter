@@ -116,7 +116,7 @@ where
                     let interaction = (|| {
                         let response_payload = decode_optional_grpc_frame(&framed_response)?;
                         let (status_code, status_message) =
-                            grpc_status(&response_parts.headers, &trailers);
+                            grpc_status(response_parts.status, &response_parts.headers, &trailers)?;
                         let mut metadata = metadata_to_map(&response_parts.headers)?;
                         merge_metadata(&mut metadata, metadata_to_map(&trailers)?);
                         Ok::<_, Error>(GrpcInteraction::new(

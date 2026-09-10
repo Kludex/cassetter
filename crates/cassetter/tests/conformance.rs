@@ -175,6 +175,12 @@ async fn shared_record_mode_fixtures_have_the_expected_results() {
             .build()
             .unwrap();
         let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+        assert_eq!(
+            case.requests.len(),
+            case.expected_outcomes.len(),
+            "{} has mismatched requests and expected outcomes",
+            case.name
+        );
         for (uri, outcome) in case.requests.iter().zip(&case.expected_outcomes) {
             let url = uri.replace("https://example.com", &base);
             let result = client
@@ -195,7 +201,10 @@ async fn shared_record_mode_fixtures_have_the_expected_results() {
             }
         }
         recorder.finish().await.unwrap();
-        server.await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .expect("record-mode server did not receive the expected calls")
+            .unwrap();
 
         match case.expected_file {
             None => assert!(!path.exists(), "{}", case.name),
