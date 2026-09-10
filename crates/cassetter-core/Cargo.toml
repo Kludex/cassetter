@@ -15,7 +15,7 @@ categories = ["development-tools::testing"]
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-serde-saphyr = "1.0.0"
+serde-saphyr = "=1.1.0"
 flate2 = "1"
 brotli = { version = "9", default-features = false, features = ["std"] }
 zstd = { version = "0.13", default-features = false }
