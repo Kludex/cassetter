@@ -6,7 +6,7 @@ pub mod ordering;
 use std::path::Path;
 
 use crate::matching::config::MatchConfig;
-use crate::protocol::grpc::GrpcInteraction;
+use crate::protocol::grpc::{GrpcInteraction, GrpcRequest};
 use crate::protocol::http::{HttpInteraction, HttpRequest};
 use crate::protocol::ws::WsInteraction;
 use crate::{CassetteError, Result};
@@ -50,6 +50,19 @@ impl Cassette {
         self.interactions.push(interaction);
         self.played_indices.push(false);
         self.index = None;
+    }
+
+    /// Insert an HTTP interaction at an output position, unplayed.
+    pub fn insert_interaction(&mut self, index: usize, interaction: HttpInteraction) -> Result<()> {
+        if index > self.interactions.len() {
+            return Err(CassetteError::IndexOutOfRange(
+                "interaction insert index out of range".to_string(),
+            ));
+        }
+        self.interactions.insert(index, interaction);
+        self.played_indices.insert(index, false);
+        self.index = None;
+        Ok(())
     }
 
     /// Mark an HTTP interaction played.
@@ -112,6 +125,22 @@ impl Cassette {
         self.grpc_played.push(false);
     }
 
+    /// Insert a gRPC interaction at an output position, unplayed.
+    pub fn insert_grpc_interaction(
+        &mut self,
+        index: usize,
+        interaction: GrpcInteraction,
+    ) -> Result<()> {
+        if index > self.grpc_interactions.len() {
+            return Err(CassetteError::IndexOutOfRange(
+                "gRPC interaction insert index out of range".to_string(),
+            ));
+        }
+        self.grpc_interactions.insert(index, interaction);
+        self.grpc_played.insert(index, false);
+        Ok(())
+    }
+
     /// Mark a gRPC interaction played.
     pub fn mark_grpc_played(&mut self, index: usize) -> Result<()> {
         if index >= self.grpc_played.len() {
@@ -127,6 +156,22 @@ impl Cassette {
     pub fn take_grpc_match(&mut self, method: &str) -> Option<(usize, GrpcInteraction)> {
         let idx = crate::matching::find_grpc_match_index(
             method,
+            &self.grpc_interactions,
+            &self.grpc_played,
+        )?;
+        if let Some(played) = self.grpc_played.get_mut(idx) {
+            *played = true;
+        }
+        Some((idx, self.grpc_interactions[idx].clone()))
+    }
+
+    /// Find a gRPC interaction with the same method and request body, then mark it played.
+    pub fn take_grpc_request_match(
+        &mut self,
+        request: &GrpcRequest,
+    ) -> Option<(usize, GrpcInteraction)> {
+        let idx = crate::matching::find_grpc_request_match_index(
+            request,
             &self.grpc_interactions,
             &self.grpc_played,
         )?;

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/cassetter-core",
+    "crates/cassetter",
     "crates/cassetter-python",
     "crates/cassetter-node",
 ]
@@ -9,13 +10,13 @@ members = [
 [workspace.package]
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/Kludex/cassetter"
 homepage = "https://kludex.github.io/cassetter/"
 
 [workspace.dependencies]
-cassetter-core = { path = "crates/cassetter-core" }
+cassetter-core = { path = "crates/cassetter-core", version = "=0.0.0" }
 serde = { version = "1", features = ["derive"] }
 # `preserve_order` keeps a recorded JSON body in the order the server sent it, so a
 # cassette stays a faithful recording rather than an alphabetized rewrite of one.

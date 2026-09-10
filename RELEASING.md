@@ -12,7 +12,7 @@ release.
 | --- | --- | --- |
 | `pypi` | `cassetter` | `.github/workflows/publish.yml` |
 | `npm` | `cassetter` | `.github/workflows/publish.yml` |
-| `crates-io` | `cassetter-core` | `.github/workflows/publish.yml` |
+| `crates-io` | `cassetter-core`, then `cassetter` | `.github/workflows/publish.yml` |
 
 Configure each registry to trust its environment and this workflow. PyPI, npm,
 and crates.io issue short-lived tokens through OpenID Connect (OIDC), so the
@@ -30,8 +30,9 @@ gh run watch "${run_url##*/}" --exit-status
 ```
 
 Use the intended release version. A manual run executes the complete CI suite,
-builds every artifact, installs the npm package, packages the Rust crate, and
-validates the Go module. It does not publish or create a tag.
+builds every artifact, installs the npm package, packages both Rust crates, and
+validates the Go module. It does not publish or create a tag. A tag run publishes
+`cassetter-core` before the dependent `cassetter` Rust SDK.
 
 ## Create the release tag
 
@@ -72,6 +73,7 @@ all four ecosystems.
 python -m pip index versions cassetter
 npm view cassetter@0.11.0 version
 cargo info cassetter-core@0.11.0
+cargo info cassetter@0.11.0
 GOPROXY=https://proxy.golang.org go list -m github.com/Kludex/cassetter/go@v0.11.0
 ```
 

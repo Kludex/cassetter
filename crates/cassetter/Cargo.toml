@@ -1,0 +1,54 @@
+[package]
+name = "cassetter"
+description = "Async Rust HTTP and gRPC cassette recording and replay."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/cassetter"
+readme = "README.md"
+keywords = ["cassette", "http", "grpc", "recording", "testing"]
+categories = ["development-tools::testing", "web-programming::http-client"]
+exclude = ["tests"]
+
+[features]
+default = ["reqwest", "tonic"]
+reqwest = ["dep:bytes", "dep:http", "dep:http-body-util", "dep:reqwest"]
+tonic = [
+    "dep:bytes",
+    "dep:http",
+    "dep:http-body",
+    "dep:http-body-util",
+    "dep:percent-encoding",
+    "dep:tonic",
+    "dep:tower-service",
+]
+
+[dependencies]
+cassetter-core.workspace = true
+jiff = { version = "0.2.15", default-features = false, features = ["std"] }
+bytes = { version = "1", optional = true }
+http = { version = "1", optional = true }
+http-body = { version = "1", optional = true }
+http-body-util = { version = "0.1", optional = true }
+percent-encoding = { version = "2", optional = true }
+reqwest = { version = "0.13", default-features = false, optional = true }
+serde_json.workspace = true
+tonic = { version = "0.14", default-features = false, features = ["codegen"], optional = true }
+tower-service = { version = "0.3", optional = true }
+
+[dev-dependencies]
+googleapis-tonic-google-cloud-tasks-v2 = "=0.34.0"
+prost = "0.14"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde.workspace = true
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
+tonic = { version = "0.14", features = ["transport"] }
+tonic-health = "0.14"
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

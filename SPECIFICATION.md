@@ -280,15 +280,15 @@ Bindings that exchange plain data rather than wrapping every type in a native cl
 
 - **Test bindings against each other at runtime.** Requires every language's toolchain in one CI job. Rejected as fragile; a committed fixture gives each binding an independent check.
 
-**Why this choice:** a new binding gets a concrete definition of correct, and a change that makes two bindings disagree fails CI instead of surfacing as an unreadable cassette later.
+**Why this choice:** a new binding gets a concrete definition of correct, and a change that makes SDKs disagree fails CI instead of surfacing as an unreadable cassette later.
 
 ## 9. Scope and non-goals
 
 ### Implemented
 - Binding-free Rust core shared by every language, with a cross-language conformance suite
-- Python bindings (PyO3) and Node bindings (napi-rs)
-- HTTP recording/replay for httpx, aiohttp, requests, urllib3 (Python) and `fetch` (Node)
-- gRPC message recording via grpcio
+- Python bindings (PyO3), Node bindings (napi-rs), and native Go and Rust SDKs
+- HTTP recording/replay for httpx, aiohttp, requests, urllib3, `fetch`, Go `net/http`, and Rust `reqwest`
+- gRPC recording via grpcio, Go interceptors, and injected Rust `tonic` transports
 - WebSocket frame recording via websockets
 - Structured YAML cassette format with typed bodies
 - Safe-by-default security filtering

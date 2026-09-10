@@ -2,7 +2,7 @@ pub mod config;
 pub mod matchers;
 
 use crate::cassette::index::CassetteIndex;
-use crate::protocol::grpc::GrpcInteraction;
+use crate::protocol::grpc::{GrpcInteraction, GrpcRequest};
 use crate::protocol::http::{HttpInteraction, HttpRequest};
 use crate::protocol::ws::WsInteraction;
 use config::MatchConfig;
@@ -98,6 +98,29 @@ pub fn find_grpc_match_index(
     let mut fallback = None;
     for (idx, interaction) in interactions.iter().enumerate() {
         if interaction.request.method != method {
+            continue;
+        }
+        if !played.get(idx).copied().unwrap_or(false) {
+            return Some(idx);
+        }
+        if fallback.is_none() {
+            fallback = Some(idx);
+        }
+    }
+    fallback
+}
+
+/// Index of a gRPC interaction matching the method and serialized request body.
+/// Prefers unplayed interactions; falls back to an already-played interaction.
+pub fn find_grpc_request_match_index(
+    request: &GrpcRequest,
+    interactions: &[GrpcInteraction],
+    played: &[bool],
+) -> Option<usize> {
+    let mut fallback = None;
+    for (idx, interaction) in interactions.iter().enumerate() {
+        if interaction.request.method != request.method || interaction.request.body != request.body
+        {
             continue;
         }
         if !played.get(idx).copied().unwrap_or(false) {
@@ -230,5 +253,31 @@ mod tests {
     fn test_unknown_matcher_is_rejected_at_construction() {
         assert!(MatchConfig::new(Some(vec!["bogus".to_string()]), None).is_err());
         assert!(MatchConfig::new(Some(vec![]), None).is_err());
+    }
+
+    #[test]
+    fn test_grpc_request_matching_includes_the_body() {
+        use crate::protocol::grpc::{GrpcRequest, GrpcResponse};
+
+        let interaction = GrpcInteraction::new(
+            GrpcRequest::new(
+                "/demo.Service/Get".to_string(),
+                None,
+                Some(Body::binary(vec![1])),
+            ),
+            GrpcResponse::new(0, None, None, None),
+            String::new(),
+            None,
+        );
+        let different = GrpcRequest::new(
+            "/demo.Service/Get".to_string(),
+            None,
+            Some(Body::binary(vec![2])),
+        );
+
+        assert_eq!(
+            find_grpc_request_match_index(&different, &[interaction], &[false]),
+            None
+        );
     }
 }

@@ -1,9 +1,7 @@
 version: 2
 updates:
-  # serde-saphyr is on the critical path for parsing every cassette and is
-  # still 0.0.x, which cargo pins exactly - only dependabot can move it.
   - package-ecosystem: cargo
-    directory: /rust
+    directory: /
     schedule:
       interval: weekly
     cooldown:
