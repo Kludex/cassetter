@@ -2,9 +2,9 @@
 
 Rust-powered HTTP cassette recorder. Safe by default.
 
-Available for **Python** (this README) and **Node/TypeScript** ([`ts/`](ts)).
-Both are thin bindings over one Rust core, so a cassette recorded by either
-is readable by the other.
+Available for **Python** (this README), **Node/TypeScript** ([`ts/`](ts)),
+**Go** ([`go/`](go)), and **Rust** ([`crates/cassetter/`](crates/cassetter)).
+Every SDK uses the same cassette format.
 
 ## Why?
 
@@ -35,6 +35,18 @@ go get github.com/Kludex/cassetter/go@v0.1.0
 It reads and writes the same structured YAML and TOML formats, including VCR.py YAML migration. It supports all four
 gRPC call patterns and WebSocket text and binary messages with YAML cassettes. It also provides `inspect`, `diff`,
 `scrub`, and `convert` commands. See the [Go documentation](go/README.md) for complete examples and record modes.
+
+## Rust
+
+Use the Rust crate when the code under test sends requests through `reqwest` or a generated `tonic` client:
+
+```bash
+cargo add cassetter reqwest
+```
+
+The Rust SDK uses explicit transport injection. It supports async HTTP and unary gRPC recording, exact protobuf
+request matching, concurrent use, safe filtering, and explicit finalization. See the
+[Rust documentation](crates/cassetter/README.md) for complete examples and current streaming limits.
 
 ## Quick start
 
@@ -606,11 +618,12 @@ so the parts that matter cannot drift apart.
 ```
 crates/
   cassetter-core/     pure Rust: format, matching, security, body processing
+  cassetter/          async Rust SDK   -> reqwest and tonic
   cassetter-python/   PyO3 bindings    -> cassetter._core
   cassetter-node/     napi-rs bindings -> cassetter.node
 src/cassetter/        Python package (interceptors, pytest plugin, CLI)
 ts/                   Node package (fetch interception)
-conformance/          shared fixture both bindings must reproduce
+conformance/          shared fixtures every SDK must reproduce
 ```
 
 A binding only implements what is genuinely language-specific: HTTP library
@@ -624,7 +637,7 @@ bindings - see its README for the contract.
 
 ## Development
 
-Requires a Rust toolchain, Python 3.10+, and Node 18+ for the Node binding.
+Requires Rust 1.88+, Python 3.10+, and Node 18+ for the Node binding.
 
 ```bash
 git clone https://github.com/Kludex/cassetter.git

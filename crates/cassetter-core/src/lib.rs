@@ -11,6 +11,7 @@ pub mod cassette;
 pub mod interop;
 pub mod matching;
 pub mod protocol;
+pub mod recording;
 pub mod security;
 
 use std::fmt;

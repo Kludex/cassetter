@@ -60,6 +60,7 @@ A format case passes when an SDK parses its cassette into the corresponding cano
 | Python | `tests/test_conformance.py`, `tests/test_*_conformance.py` |
 | Node | `ts/tests/*conformance.test.ts` |
 | Go | `go/conformance_test.go`, `go/*_conformance_test.go` |
+| Rust | `crates/cassetter/tests/conformance.rs` |
 
 Each SDK reads the shared manifests. Add a case once and every implementation receives it.
 The nested Go module includes a synchronized copy under `go/testdata/conformance/`.
@@ -74,6 +75,7 @@ $ cp -R conformance go/testdata/conformance
 $ uv run pytest tests/test_conformance.py tests/test_*_conformance.py
 $ (cd ts && npm test -- --run tests/conformance.test.ts tests/behavior-conformance.test.ts tests/record-modes-conformance.test.ts)
 $ (cd go && go test ./...)
+$ cargo test -p cassetter --test conformance
 ```
 
 Add the input and expected result to the appropriate directory.

@@ -13,5 +13,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Use a language SDK when you need client interception. The core crate provides
+Use the [`cassetter`](https://crates.io/crates/cassetter) crate when you need
+async `reqwest` or unary `tonic` transport integration. The core crate provides
 protocol-neutral data structures and persistence for custom integrations.

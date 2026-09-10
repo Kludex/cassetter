@@ -37,6 +37,18 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  rust-msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # 1.88.0
+        with:
+          toolchain: 1.88.0
+      - run: sudo apt-get update && sudo apt-get install -y libpython3-dev
+      - run: cargo check --workspace --all-targets
+
   go-test:
     permissions:
       contents: read
@@ -141,7 +153,7 @@ jobs:
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:
     if: always()
-    needs: [lint, rust-test, go-test, audit, test, node]
+    needs: [lint, rust-test, rust-msrv, go-test, audit, test, node]
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed
