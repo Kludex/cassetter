@@ -53,8 +53,10 @@ Some URI differences are noise: an AWS request carries the region in the hostnam
 ```python
 import re
 
+
 def normalize(uri: str) -> str:
     return re.sub(r"bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com", "bedrock-runtime.REGION.amazonaws.com", uri)
+
 
 with use_cassette("cassette.yaml", uri_normalizer=normalize):
     ...

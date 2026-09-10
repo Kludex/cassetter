@@ -58,6 +58,7 @@ Mark tests with `@pytest.mark.vcr`:
 import httpx
 import pytest
 
+
 @pytest.mark.vcr
 async def test_api_call():
     async with httpx.AsyncClient() as client:
@@ -71,6 +72,7 @@ If you need direct access to the cassette (e.g. to inspect recorded interactions
 
 ```python
 from cassetter import Cassette
+
 
 @pytest.mark.vcr
 async def test_with_cassette(cassette: Cassette):
@@ -271,10 +273,12 @@ async def task_a():
         async with httpx.AsyncClient() as client:
             return await client.get("https://api.example.com/data")
 
+
 async def task_b():
     with use_cassette("cassettes/b.yaml", record_mode="none"):
         async with httpx.AsyncClient() as client:
             return await client.get("https://api.example.com/data")
+
 
 # Each task uses its own cassette - no cross-contamination
 results = await asyncio.gather(task_a(), task_b())
@@ -441,12 +445,14 @@ Use a callback that runs before each request is recorded or replayed. Return the
 ```python
 from cassetter import RawRequest, SkipRecording, use_cassette
 
+
 def my_hook(request: RawRequest) -> RawRequest:
     if not request.uri.startswith("https://api.mycompany.com"):
         raise SkipRecording
     # Strip auth header before recording
     request.headers.pop("authorization", None)
     return request
+
 
 with use_cassette("cassette.yaml", before_record_request=my_hook):
     ...
@@ -459,12 +465,14 @@ Modify or discard responses before they are recorded. Return the (possibly modif
 ```python
 from cassetter import RawResponse, SkipRecording, use_cassette
 
+
 def my_hook(response: RawResponse) -> RawResponse:
     if response.status >= 500:
         raise SkipRecording  # don't record server errors
     # Strip a volatile header
     response.headers.pop("x-request-id", None)
     return response
+
 
 with use_cassette("cassette.yaml", before_record_response=my_hook):
     ...
@@ -509,8 +517,7 @@ Or per-test:
 
 ```python
 @pytest.mark.vcr(max_age="7d", on_expiry="fail")
-async def test_fresh_data():
-    ...
+async def test_fresh_data(): ...
 ```
 
 ## Orphan detection
