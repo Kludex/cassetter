@@ -31,8 +31,7 @@ Or per test, through the marker:
 
 ```python
 @pytest.mark.vcr(max_age="7d", on_expiry="fail")
-async def test_fresh_data():
-    ...
+async def test_fresh_data(): ...
 ```
 
 !!! tip
