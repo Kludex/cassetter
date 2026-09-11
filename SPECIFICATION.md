@@ -219,7 +219,7 @@ When `record_mode=none` and a cassette file doesn't exist, the fixture creates a
 
 ## 7. Configuration object
 
-`Cassetter` is a frozen dataclass holding the options shared by a group of cassettes. It exposes `use_cassette(name, **overrides)`, and `cassette_library_dir` - the directory cassette names are resolved against.
+`Cassetter` is a frozen dataclass holding the options shared by a group of cassettes. It exposes `use_cassette(name, **overrides)`, `cassette_library_dir` - the directory cassette names are resolved against - and `cassette_extension` (`yaml`, `yml`, or `toml`) for names that have no cassette suffix.
 
 ```python
 recorder = Cassetter(cassette_library_dir="tests/cassettes", record_mode="none")

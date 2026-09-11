@@ -79,6 +79,23 @@ must not consume each other's interactions.
 Always call `Recorder::finish`. It saves an empty replacement cassette when
 needed and reports persistence failures or calls cancelled while recording.
 
+## Cassette format
+
+YAML is the default. Use a `.toml` path for TOML, or set the suffix for names
+that do not already end in `.yaml`, `.yml`, or `.toml`:
+
+```rust,no_run
+use cassetter::Recorder;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let recorder = Recorder::builder("tests/cassettes/users")
+    .cassette_extension("toml")?
+    .build()?;
+# let _ = recorder;
+# Ok(())
+# }
+```
+
 ## Current limits
 
 - HTTP request and response bodies are buffered in memory.

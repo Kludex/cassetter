@@ -21,6 +21,29 @@ from cassetter.recording import RecordMode
 if TYPE_CHECKING:
     from cassetter._core import Matcher
 
+_CASSETTE_EXTENSIONS = frozenset({"yaml", "yml", "toml"})
+
+
+def normalize_cassette_extension(value: str) -> str:
+    """Return a canonical cassette extension (`yaml`, `yml`, or `toml`)."""
+    extension = value.lower().removeprefix(".")
+    if extension not in _CASSETTE_EXTENSIONS:
+        allowed = ", ".join(sorted(_CASSETTE_EXTENSIONS))
+        raise ValueError(f"cassette_extension must be one of {allowed}, got {value!r}")
+    return extension
+
+
+def apply_cassette_extension(path: str, extension: str) -> str:
+    """Append `extension` when `path` is not already a cassette file.
+
+    Only `.yaml`, `.yml`, and `.toml` count as a format suffix, so names that
+    contain other dots (parametrized pytest ids, for example) still get one.
+    """
+    existing = os.path.splitext(path)[1].lower().removeprefix(".")
+    if existing in _CASSETTE_EXTENSIONS:
+        return path
+    return f"{path}.{extension}"
+
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Cassetter:
@@ -40,6 +63,7 @@ class Cassetter:
     """
 
     cassette_library_dir: str | os.PathLike[str] | None = None
+    cassette_extension: str = "yaml"
     record_mode: RecordMode | str | None = None
     match_on: list[Matcher] | None = None
     ignore_json_paths: list[str] | None = None
@@ -56,6 +80,9 @@ class Cassetter:
     before_record_response: BeforeRecordResponse | None = None
     uri_normalizer: UriNormalizer | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "cassette_extension", normalize_cassette_extension(self.cassette_extension))
+
     def cassette(self, name: str | os.PathLike[str]) -> Cassette:
         """Build an unloaded cassette for `name`, resolved against `cassette_library_dir`.
 
@@ -68,6 +95,7 @@ class Cassetter:
         record_mode = RecordMode.ONCE if self.record_mode is None else self.record_mode
         library_dir = self.cassette_library_dir
         path = os.fspath(name) if library_dir is None else os.path.join(library_dir, os.fspath(name))
+        path = apply_cassette_extension(path, self.cassette_extension)
         return Cassette(
             path,
             record_mode=RecordMode.from_str(record_mode) if isinstance(record_mode, str) else record_mode,

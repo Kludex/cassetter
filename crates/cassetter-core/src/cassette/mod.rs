@@ -3,7 +3,7 @@ pub mod format_toml;
 pub mod index;
 pub mod ordering;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::matching::config::MatchConfig;
 use crate::protocol::grpc::{GrpcInteraction, GrpcRequest};
@@ -378,9 +378,90 @@ impl Cassette {
     }
 }
 
+const CASSETTE_EXTENSIONS: [&str; 3] = ["toml", "yaml", "yml"];
+
 /// Whether this path names a TOML cassette rather than a YAML one.
 pub fn is_toml(path: &str) -> bool {
     Path::new(path)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+}
+
+/// Canonical cassette suffix: `yaml`, `yml`, or `toml`.
+pub fn normalize_cassette_extension(value: &str) -> Result<String> {
+    let extension = value
+        .strip_prefix('.')
+        .unwrap_or(value)
+        .to_ascii_lowercase();
+    if CASSETTE_EXTENSIONS.contains(&extension.as_str()) {
+        Ok(extension)
+    } else {
+        Err(CassetteError::Value(format!(
+            "cassette_extension must be one of {}, got {value:?}",
+            CASSETTE_EXTENSIONS.join(", ")
+        )))
+    }
+}
+
+/// Append `extension` when `path` is not already a cassette file.
+///
+/// Only `.yaml`, `.yml`, and `.toml` count as a format suffix, so names that
+/// contain other dots still get one.
+pub fn apply_cassette_extension(path: impl AsRef<Path>, extension: &str) -> PathBuf {
+    let path = path.as_ref();
+    let existing = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if CASSETTE_EXTENSIONS.contains(&existing.as_str()) {
+        return path.to_path_buf();
+    }
+    let mut os_string = path.as_os_str().to_os_string();
+    os_string.push(".");
+    os_string.push(extension);
+    PathBuf::from(os_string)
+}
+
+#[cfg(test)]
+mod extension_tests {
+    use super::{apply_cassette_extension, normalize_cassette_extension};
+    use std::path::PathBuf;
+
+    #[test]
+    fn normalize_accepts_aliases() {
+        assert_eq!(normalize_cassette_extension("yaml").unwrap(), "yaml");
+        assert_eq!(normalize_cassette_extension(".YML").unwrap(), "yml");
+        assert_eq!(normalize_cassette_extension("TOML").unwrap(), "toml");
+    }
+
+    #[test]
+    fn normalize_rejects_unknown_values() {
+        let error = normalize_cassette_extension("json").unwrap_err();
+        assert!(error.to_string().contains("cassette_extension"));
+    }
+
+    #[test]
+    fn apply_appends_when_suffix_is_missing() {
+        assert_eq!(
+            apply_cassette_extension("openai", "toml"),
+            PathBuf::from("openai.toml")
+        );
+    }
+
+    #[test]
+    fn apply_keeps_an_explicit_cassette_suffix() {
+        assert_eq!(
+            apply_cassette_extension("openai.yaml", "toml"),
+            PathBuf::from("openai.yaml")
+        );
+    }
+
+    #[test]
+    fn apply_appends_when_the_name_contains_other_dots() {
+        assert_eq!(
+            apply_cassette_extension("test_func[gpt-5.4]", "yaml"),
+            PathBuf::from("test_func[gpt-5.4].yaml")
+        );
+    }
 }

@@ -65,7 +65,16 @@ It only replays when the cassette already exists.
 | `RecordModeAll` | Record every request and replace existing interactions. |
 | `RecordModeRewrite` | Remove the cassette first, then record every request. |
 
-Use a `.toml` path to store HTTP cassettes as TOML. Other extensions use YAML.
+Use a `.toml` path to store HTTP cassettes as TOML. Other cassette extensions use YAML.
+Names without `.yaml`, `.yml`, or `.toml` pick up `WithCassetteExtension` (default `yaml`):
+
+```go
+cassetter.NewTransport(
+    http.DefaultTransport,
+    cassetter.WithPath("tests/cassettes/openai"),
+    cassetter.WithCassetteExtension("toml"),
+)
+```
 
 ## Record and replay gRPC
 

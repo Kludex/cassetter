@@ -116,8 +116,13 @@ matcher is rejected rather than silently matching everything.
 YAML by default; use a `.toml` extension for TOML. TOML loads faster and
 produces smaller files, but cannot store gRPC or WebSocket interactions.
 
+A path without `.yaml`, `.yml`, or `.toml` picks up `cassetteExtension`
+(default `yaml`):
+
 ```ts
-await useCassette("cassette.toml", async () => { ... });
+await useCassette("tests/cassettes/users", {
+  cassetteExtension: "toml",
+}, async () => { ... });
 ```
 
 ## Cassette expiry

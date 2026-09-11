@@ -19,7 +19,7 @@ with recorder.use_cassette("anthropic.yaml"):
     ...
 ```
 
-It accepts every option `use_cassette()` accepts, plus `cassette_library_dir`. Anything you leave out keeps its default.
+It accepts every option `use_cassette()` accepts, plus `cassette_library_dir` and `cassette_extension`. Anything you leave out keeps its default.
 
 The object is callable, so `recorder("openai.yaml")` is the same as `recorder.use_cassette("openai.yaml")`.
 
@@ -35,6 +35,19 @@ with recorder.use_cassette("openai.yaml"):  # src/evals/cassettes/openai.yaml
 ```
 
 Names can include subdirectories, and an absolute path is used as is. Without `cassette_library_dir`, the name is the path, exactly like `use_cassette()`.
+
+## Cassette format
+
+`cassette_extension` is the suffix added when a cassette name lacks a supported cassette suffix (`.yaml`, `.yml`, or `.toml`). The default is `yaml`. Use `yml` or `toml` to change what unmarked pytest tests and names like `"openai"` or `"openai.v1"` write:
+
+```python
+recorder = Cassetter(cassette_library_dir="tests/cassettes", cassette_extension="toml")
+
+with recorder.use_cassette("openai"):  # tests/cassettes/openai.toml
+    ...
+```
+
+A name that already ends in `.yaml`, `.yml`, or `.toml` keeps that suffix, so one configuration can still mix formats.
 
 ## Override one cassette
 

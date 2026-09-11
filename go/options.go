@@ -55,24 +55,34 @@ func (option optionFunc) apply(config *transportConfig) {
 }
 
 type transportConfig struct {
-	path            string
-	mode            RecordMode
-	security        SecurityConfig
-	matchers        []Matcher
-	ignoreJSONPaths []string
-	uriNormalizer   func(string) string
-	maxAge          *time.Duration
-	expiryAction    ExpiryAction
-	ignoreLocalhost bool
-	ignoreHosts     []string
-	requestHook     RequestHook
-	responseHook    ResponseHook
+	path              string
+	cassetteExtension string
+	mode              RecordMode
+	security          SecurityConfig
+	matchers          []Matcher
+	ignoreJSONPaths   []string
+	uriNormalizer     func(string) string
+	maxAge            *time.Duration
+	expiryAction      ExpiryAction
+	ignoreLocalhost   bool
+	ignoreHosts       []string
+	requestHook       RequestHook
+	responseHook      ResponseHook
 }
 
-// WithPath sets the cassette path. A .toml extension selects TOML; other extensions use YAML.
+// WithPath sets the cassette path. A .toml extension selects TOML; other cassette extensions use YAML.
+// Names without .yaml, .yml, or .toml pick up WithCassetteExtension (default yaml).
 func WithPath(path string) Option {
 	return optionFunc(func(config *transportConfig) {
 		config.path = path
+	})
+}
+
+// WithCassetteExtension sets the suffix used when the cassette path has no cassette format.
+// Allowed values are yaml, yml, and toml.
+func WithCassetteExtension(extension string) Option {
+	return optionFunc(func(config *transportConfig) {
+		config.cassetteExtension = extension
 	})
 }
 
@@ -120,10 +130,11 @@ func NewTransport(base http.RoundTripper, options ...Option) *Transport {
 		base = http.DefaultTransport
 	}
 	config := transportConfig{
-		mode:         RecordModeOnce,
-		security:     DefaultSecurityConfig(),
-		matchers:     []Matcher{MatcherMethod, MatcherURI},
-		expiryAction: ExpiryWarn,
+		mode:              RecordModeOnce,
+		cassetteExtension: "yaml",
+		security:          DefaultSecurityConfig(),
+		matchers:          []Matcher{MatcherMethod, MatcherURI},
+		expiryAction:      ExpiryWarn,
 	}
 	for _, option := range options {
 		option.apply(&config)

@@ -20,6 +20,7 @@ class CassetteConfig(TypedDict, total=False):
     filter_replacement: str
     cassette_dir: str
     cassette_library_dir: str
+    cassette_extension: str
     intercept: list[str]
     max_age: str
     on_expiry: str

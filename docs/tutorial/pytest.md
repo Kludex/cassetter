@@ -28,6 +28,8 @@ For a test `test_api_call` in `tests/test_users.py`, that is `tests/cassettes/te
 
 For tests inside a class, the class name is included: `TestUsers.test_api_call.yaml`.
 
+`.yaml` is the default cassette suffix. Set `cassette_extension` in `vcr_config` to `yml` or `toml` to change it, for example `vcr_config["cassette_extension"] = "toml"` writes `test_api_call.toml` instead.
+
 ## Record the cassette
 
 By default the plugin runs in the `none` record mode: replay only, never touch the network. To record cassettes for the first time, pass `--record-mode`:
@@ -101,6 +103,7 @@ The supported keys are the same options accepted by `use_cassette()`:
 | `filter_replacement` | Replacement string for filtered values |
 | `cassette_dir` | Cassette directory, relative to the test file |
 | `cassette_library_dir` | Cassette directory, used as is |
+| `cassette_extension` | Suffix for generated cassette names (`yaml` by default; `yml` or `toml` via `vcr_config`) |
 | `intercept` | Libraries to intercept |
 | `max_age` | Cassette expiry, e.g. `"30d"` |
 | `on_expiry` | What to do with expired cassettes |

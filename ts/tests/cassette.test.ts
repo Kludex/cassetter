@@ -96,6 +96,42 @@ describe("load", () => {
   });
 });
 
+describe("cassette extension", () => {
+  it("appends yaml when the path has no cassette suffix", () => {
+    write("users.yaml");
+    const c = new Cassette(join(dir, "users"), { recordMode: RecordMode.NONE });
+    c.load();
+    expect(c.path).toBe(join(dir, "users.yaml"));
+  });
+
+  it("uses cassetteExtension for an extensionless path", () => {
+    write("users.toml", "version = 1\ninteractions = []\n");
+    const c = new Cassette(join(dir, "users"), {
+      recordMode: RecordMode.NONE,
+      cassetteExtension: "toml",
+    });
+    c.load();
+    expect(c.path).toBe(join(dir, "users.toml"));
+  });
+
+  it("keeps an explicit cassette suffix", () => {
+    const path = write("users.yaml");
+    const c = new Cassette(path, { cassetteExtension: "toml" });
+    expect(c.path).toBe(path);
+  });
+
+  it("appends when the name contains other dots", () => {
+    const c = new Cassette(join(dir, "test_func[gpt-5.4]"));
+    expect(c.path).toBe(join(dir, "test_func[gpt-5.4].yaml"));
+  });
+
+  it("rejects an unknown cassette extension", () => {
+    expect(() => new Cassette(join(dir, "users"), { cassetteExtension: "json" })).toThrow(
+      /cassette_extension/,
+    );
+  });
+});
+
 describe("record modes", () => {
   it("once replays without recording when the cassette exists", () => {
     const c = new Cassette(write("t.yaml"), { recordMode: RecordMode.ONCE });

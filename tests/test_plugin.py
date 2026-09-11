@@ -128,6 +128,43 @@ def test_resolve_cassette_default_config(tmp_path: Path) -> None:
     assert len(interceptor_classes) >= 1
 
 
+def test_resolve_cassette_uses_configured_extension(tmp_path: Path) -> None:
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    RustCassette().save(os.path.join(cassette_dir, "test_func.toml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=CassetteConfig(record_mode="none", cassette_dir="cassettes", cassette_extension="toml"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+    )
+
+    assert os.path.basename(cassette.path) == "test_func.toml"
+
+
+def test_resolve_cassette_cassetter_extension_names_unmarked_files(tmp_path: Path) -> None:
+    test_dir = str(tmp_path)
+    cassette_dir = os.path.join(test_dir, "cassettes", "test_example")
+    os.makedirs(cassette_dir, exist_ok=True)
+    RustCassette().save(os.path.join(cassette_dir, "test_func.yml"))
+
+    cassette, _ = _resolve_cassette(
+        node_name="test_func",
+        marker_args=(),
+        marker_kwargs={},
+        vcr_config=Cassetter(cassette_extension="yml"),
+        cli_record_mode=None,
+        test_fspath=os.path.join(test_dir, "test_example.py"),
+        vcr_cassette_dir=cassette_dir,
+    )
+
+    assert os.path.basename(cassette.path) == "test_func.yml"
+
+
 def test_resolve_cassette_default_cassette_marker_names_the_file(tmp_path: Path) -> None:
     """pytest-recording spells the cassette name this way, so a migrated suite keeps working."""
     test_dir = str(tmp_path)

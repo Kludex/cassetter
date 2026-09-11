@@ -12,6 +12,13 @@ func (t *Transport) load() {
 		t.initErr = errors.New("cassetter: WithPath requires a cassette path")
 		return
 	}
+	extension, err := normalizeCassetteExtension(t.config.cassetteExtension)
+	if err != nil {
+		t.initErr = err
+		return
+	}
+	t.config.cassetteExtension = extension
+	t.config.path = applyCassetteExtension(t.config.path, extension)
 	switch t.config.mode {
 	case RecordModeNone, RecordModeOnce, RecordModeNewEpisodes, RecordModeAll, RecordModeRewrite:
 	default:
