@@ -52,3 +52,8 @@ tower = { version = "0.5", features = ["util"] }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "recorder_persist"
+harness = false
+required-features = ["reqwest"]
