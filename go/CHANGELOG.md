@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added `WithCassetteExtension` so cassette paths without `.yaml`, `.yml`, or `.toml` pick a default format.
+
 ## 0.1.0 - 2026-09-04
 
 This is the first release of the Go SDK.

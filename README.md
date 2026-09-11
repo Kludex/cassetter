@@ -125,7 +125,7 @@ with recorder.use_cassette("openai.yaml", record_mode="all"):
     ...
 ```
 
-It takes every option `use_cassette()` takes, plus `cassette_library_dir` - the directory cassette names are resolved against. The object is frozen and callable, so `recorder("openai.yaml")` works too.
+It takes every option `use_cassette()` takes, plus `cassette_library_dir` - the directory cassette names are resolved against - and `cassette_extension` (`yaml`, `yml`, or `toml`) for names that lack a supported cassette suffix (`.yaml`, `.yml`, or `.toml`). The object is frozen and callable, so `recorder("openai.yaml")` works too.
 
 The `vcr_config` fixture accepts a `Cassetter`, so one object can configure both the pytest suite and direct `use_cassette()` calls:
 
@@ -177,7 +177,7 @@ These add to the built-in lists rather than standing in for them, so naming one 
 
 ## Cassette format
 
-Cassettes can be stored as **YAML** (default) or **TOML**. The format is detected by file extension (`.yaml` / `.yml` for YAML, `.toml` for TOML).
+Cassettes can be stored as **YAML** (default) or **TOML**. The format is detected by file extension (`.yaml` / `.yml` for YAML, `.toml` for TOML). Names that lack a supported cassette suffix (`.yaml`, `.yml`, or `.toml`) pick up `cassette_extension` on [`Cassetter`](#with-a-reusable-configuration) (default `yaml`).
 
 ### YAML (default)
 

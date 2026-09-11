@@ -2,6 +2,26 @@
 
 Cassettes can be stored as **YAML** (the default) or **TOML**. The format is detected from the file extension: `.yaml` and `.yml` for YAML, `.toml` for TOML.
 
+When a cassette name has no extension, Cassetter appends the configured default (Python `cassette_extension`, Rust `cassette_extension()`, Go `WithCassetteExtension`, JS/TS `cassetteExtension`). The default is `yaml`. A name that already ends in `.yaml`, `.yml`, or `.toml` keeps that suffix.
+
+```python
+from cassetter import Cassetter
+
+recorder = Cassetter(cassette_extension="toml")
+```
+
+```rust
+Recorder::builder("tests/cassettes/users").cassette_extension("toml")?
+```
+
+```go
+cassetter.WithCassetteExtension("toml")
+```
+
+```ts
+await useCassette("users", { cassetteExtension: "toml" }, async () => { ... });
+```
+
 ## YAML
 
 The default, and the most readable. JSON bodies are stored as structured YAML:

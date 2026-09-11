@@ -31,6 +31,7 @@ def test_defaults_match_use_cassette() -> None:
     cassette = Cassetter().cassette("test.yaml")
     assert cassette.path == "test.yaml"
     assert cassette.record_mode == RecordMode.ONCE
+    assert Cassetter().cassette_extension == "yaml"
 
 
 def test_cassette_library_dir_is_joined() -> None:
@@ -110,3 +111,44 @@ def test_configuration_is_frozen() -> None:
     recorder = Cassetter(record_mode="none")
     with pytest.raises(AttributeError):
         recorder.record_mode = "all"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("extension", "expected"),
+    [
+        ("yaml", "yaml"),
+        (".yml", "yml"),
+        ("TOML", "toml"),
+    ],
+    ids=["yaml", "dot-yml", "toml-case"],
+)
+def test_cassette_extension_is_normalized(extension: str, expected: str) -> None:
+    assert Cassetter(cassette_extension=extension).cassette_extension == expected
+
+
+def test_cassette_extension_appended_when_name_has_none(tmp_path: Path) -> None:
+    cassette = Cassetter(cassette_library_dir=tmp_path, cassette_extension="toml").cassette("openai")
+    assert cassette.path == str(tmp_path / "openai.toml")
+
+
+def test_cassette_extension_keeps_an_explicit_suffix(tmp_path: Path) -> None:
+    cassette = Cassetter(cassette_library_dir=tmp_path, cassette_extension="toml").cassette("openai.yaml")
+    assert cassette.path == str(tmp_path / "openai.yaml")
+
+
+def test_cassette_extension_appended_when_name_contains_other_dots() -> None:
+    cassette = Cassetter().cassette("test_func[gpt-5.4]")
+    assert cassette.path == "test_func[gpt-5.4].yaml"
+
+
+def test_cassette_extension_rejects_unknown_values() -> None:
+    with pytest.raises(ValueError, match="cassette_extension must be one of"):
+        Cassetter(cassette_extension="json")
+
+
+def test_cassette_extension_override_applies_to_one_call(tmp_path: Path) -> None:
+    recorder = Cassetter(cassette_library_dir=tmp_path)
+    with recorder.use_cassette("openai", cassette_extension="toml") as cassette:
+        assert cassette.path == str(tmp_path / "openai.toml")
+
+    assert recorder.cassette_extension == "yaml"

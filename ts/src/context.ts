@@ -68,6 +68,7 @@ export async function useCassette(
     maxAge: options.maxAge,
     onExpiry: options.onExpiry,
     ignoreLocalhost: options.ignoreLocalhost,
+    cassetteExtension: options.cassetteExtension,
   });
 
   cassette.load();

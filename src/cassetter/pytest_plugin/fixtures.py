@@ -17,7 +17,7 @@ from cassetter._state import (
 )
 from cassetter._types import CassetteConfig
 from cassetter.cassette import Cassette
-from cassetter.config import Cassetter
+from cassetter.config import Cassetter, apply_cassette_extension
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._registry import resolve_interceptors
 from cassetter.pytest_plugin.orphans import loaded_cassettes
@@ -52,7 +52,7 @@ def _split_config(vcr_config: CassetteConfig | Cassetter) -> tuple[Cassetter, st
 
 
 def _sanitized_file_name(node_name: str) -> str:
-    """The cassette file name pytest-recording derives from `node_name`.
+    """The cassette stem pytest-recording derives from `node_name`.
 
     Parametrize ids may contain characters that are forbidden in file names
     (e.g. ':' from model names), so cassettes recorded under vcrpy only resolve
@@ -60,7 +60,7 @@ def _sanitized_file_name(node_name: str) -> str:
     """
     for ch in "<>?%*:|\"'/\\":
         node_name = node_name.replace(ch, "-")
-    return node_name + ".yaml"
+    return node_name
 
 
 def _existing_file_name(cassette_dir: str, name: str, legacy_name: str) -> str:
@@ -90,12 +90,13 @@ def _resolve_cassette(
     """Resolve cassette configuration and create a Cassette instance."""
     config, config_cassette_dir = _split_config(vcr_config)
 
+    extension = config.cassette_extension
     if marker_args:
         cassette_name = marker_args[0]
     elif default_cassette is not None:
         cassette_name = default_cassette
     else:
-        cassette_name = _sanitized_file_name(node_name)
+        cassette_name = apply_cassette_extension(_sanitized_file_name(node_name), extension)
 
     record_mode = config.record_mode or "none"
     if "record_mode" in marker_kwargs:
@@ -120,7 +121,11 @@ def _resolve_cassette(
 
     # Only a name derived from the node can be the sanitized form of a legacy one.
     if not marker_args and default_cassette is None:
-        cassette_name = _existing_file_name(cassette_dir, cassette_name, node_name + ".yaml")
+        cassette_name = _existing_file_name(
+            cassette_dir,
+            cassette_name,
+            apply_cassette_extension(node_name, extension),
+        )
 
     resolved = replace(
         config,

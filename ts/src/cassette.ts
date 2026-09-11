@@ -11,6 +11,7 @@ import { existsSync, rmSync, statSync } from "node:fs";
 
 import { native, processBody, scrubInteraction, scrubGrpcInteraction, scrubWsInteraction } from "./binding.js";
 import type { NativeCassette } from "./binding.js";
+import { applyCassetteExtension, normalizeCassetteExtension } from "./extension.js";
 import { DISCARDING_MODES, RecordMode, parseDuration } from "./recording.js";
 import { NONE_BODY, bodyToBuffer } from "./types.js";
 import type {
@@ -71,6 +72,7 @@ export interface CassetteOptions {
   maxAge?: string;
   onExpiry?: "warn" | "fail" | "rerecord";
   ignoreLocalhost?: boolean;
+  cassetteExtension?: string;
 }
 
 export class Cassette {
@@ -95,7 +97,10 @@ export class Cassette {
 
   /** Configure a cassette. Nothing is read until `load()`. */
   constructor(path: string, options: CassetteOptions = {}) {
-    this._path = path;
+    this._path = applyCassetteExtension(
+      path,
+      normalizeCassetteExtension(options.cassetteExtension ?? "yaml"),
+    );
     this._recordMode = options.recordMode ?? RecordMode.ONCE;
     this._matchConfig = options.matchConfig ?? {};
     this._securityConfig = options.securityConfig ?? {};

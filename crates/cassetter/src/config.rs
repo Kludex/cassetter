@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use cassetter_core::cassette::{apply_cassette_extension, normalize_cassette_extension};
 use cassetter_core::matching::config::MatchConfig;
 pub use cassetter_core::recording::RecordMode;
 use cassetter_core::security::SecurityConfig;
@@ -10,6 +11,7 @@ use crate::{Error, Recorder, Result};
 #[derive(Debug)]
 pub struct RecorderBuilder {
     pub(crate) path: PathBuf,
+    pub(crate) cassette_extension: String,
     pub(crate) mode: RecordMode,
     pub(crate) matching: MatchConfig,
     pub(crate) security: SecurityConfig,
@@ -19,10 +21,17 @@ impl RecorderBuilder {
     pub(crate) fn new(path: PathBuf) -> Self {
         Self {
             path,
+            cassette_extension: "yaml".to_string(),
             mode: RecordMode::Once,
             matching: MatchConfig::default(),
             security: SecurityConfig::default(),
         }
+    }
+
+    /// Suffix used when the cassette path is not already `.yaml`, `.yml`, or `.toml`.
+    pub fn cassette_extension(mut self, extension: impl Into<String>) -> Result<Self> {
+        self.cassette_extension = normalize_cassette_extension(&extension.into())?;
+        Ok(self)
     }
 
     /// Select the record mode.
@@ -91,7 +100,8 @@ impl RecorderBuilder {
     }
 
     /// Load or initialize the cassette.
-    pub fn build(self) -> Result<Recorder> {
+    pub fn build(mut self) -> Result<Recorder> {
+        self.path = apply_cassette_extension(&self.path, &self.cassette_extension);
         Recorder::from_builder(self)
     }
 }
@@ -116,4 +126,61 @@ pub(crate) fn path_text(path: &Path) -> Result<&str> {
     path.to_str().ok_or_else(|| {
         Error::InvalidTransportData(format!("cassette path is not valid UTF-8: {path:?}"))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cassetter_core::cassette::Cassette;
+
+    #[test]
+    fn default_extension_loads_yaml_for_an_extensionless_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let yaml = directory.path().join("users.yaml");
+        Cassette::new()
+            .save(yaml.to_str().unwrap(), None, None)
+            .unwrap();
+        Recorder::builder(directory.path().join("users"))
+            .record_mode(RecordMode::None)
+            .build()
+            .unwrap();
+    }
+
+    #[test]
+    fn cassette_extension_selects_toml() {
+        let directory = tempfile::tempdir().unwrap();
+        let toml = directory.path().join("users.toml");
+        Cassette::new()
+            .save(toml.to_str().unwrap(), None, None)
+            .unwrap();
+        Recorder::builder(directory.path().join("users"))
+            .cassette_extension("toml")
+            .unwrap()
+            .record_mode(RecordMode::None)
+            .build()
+            .unwrap();
+    }
+
+    #[test]
+    fn cassette_extension_keeps_an_explicit_suffix() {
+        let directory = tempfile::tempdir().unwrap();
+        let yaml = directory.path().join("users.yaml");
+        Cassette::new()
+            .save(yaml.to_str().unwrap(), None, None)
+            .unwrap();
+        Recorder::builder(&yaml)
+            .cassette_extension("toml")
+            .unwrap()
+            .record_mode(RecordMode::None)
+            .build()
+            .unwrap();
+    }
+
+    #[test]
+    fn cassette_extension_rejects_unknown_values() {
+        let error = Recorder::builder("users")
+            .cassette_extension("json")
+            .unwrap_err();
+        assert!(error.to_string().contains("cassette_extension"));
+    }
 }

@@ -100,6 +100,7 @@ export interface CassetteConfig extends MatchConfig, SecurityConfig {
   maxAge?: string;
   onExpiry?: "warn" | "fail" | "rerecord";
   ignoreLocalhost?: boolean;
+  cassetteExtension?: string;
 }
 
 // --- Body helpers ---

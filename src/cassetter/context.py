@@ -30,11 +30,12 @@ def use_cassette(
     before_record_request: BeforeRecordRequest | None = None,
     before_record_response: BeforeRecordResponse | None = None,
     uri_normalizer: UriNormalizer | None = None,
+    cassette_extension: str = "yaml",
 ) -> AbstractContextManager[Cassette]:
     """Context manager for recording/replaying HTTP interactions.
 
     Args:
-        path: Path to the cassette YAML file.
+        path: Path to the cassette file. A missing cassette extension uses `cassette_extension`.
         record_mode: Controls recording behavior.
         match_on: Fields to match on (default: ["method", "uri"]).
         ignore_json_paths: JSON paths to ignore during matching.
@@ -51,6 +52,7 @@ def use_cassette(
         before_record_response: Hook to modify or skip responses.
         uri_normalizer: Callable applied to both recorded and incoming URIs
             before comparison, e.g. to erase region or account differences.
+        cassette_extension: Format used when `path` has no `.yaml`, `.yml`, or `.toml` suffix.
 
     Returns:
         A context manager yielding the active cassette.
@@ -71,5 +73,6 @@ def use_cassette(
         before_record_request=before_record_request,
         before_record_response=before_record_response,
         uri_normalizer=uri_normalizer,
+        cassette_extension=cassette_extension,
     )
     return config.use_cassette(path)
