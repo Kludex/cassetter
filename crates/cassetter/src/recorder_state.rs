@@ -34,6 +34,10 @@ pub(crate) struct State {
     pub(crate) pending: BTreeMap<usize, String>,
     pub(crate) errors: Vec<String>,
     pub(crate) save_empty: bool,
+    /// Unpersisted recordings. `finish` writes the cassette once instead of
+    /// rewriting the file after every interaction.
+    #[cfg_attr(not(any(feature = "reqwest", feature = "tonic")), allow(dead_code))]
+    pub(crate) dirty: bool,
     pub(crate) file_mode: Option<u32>,
     pub(crate) finalized: bool,
 }
@@ -75,6 +79,7 @@ impl State {
             pending: BTreeMap::new(),
             errors: Vec::new(),
             save_empty: exists && builder.mode == RecordMode::All,
+            dirty: false,
             file_mode: preserved_mode,
             finalized: false,
         })

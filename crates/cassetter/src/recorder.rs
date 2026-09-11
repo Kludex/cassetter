@@ -43,16 +43,19 @@ impl Recorder {
 
     /// Persist the cassette and report every failed or incomplete recording.
     ///
-    /// Call this after all clients that share the recorder have finished.
+    /// Recorded interactions stay in memory until this call, so a suite of N
+    /// requests pays for one YAML write instead of N growing rewrites. Call
+    /// this after all clients that share the recorder have finished.
     pub async fn finish(&self) -> Result<()> {
-        let save_empty = {
+        let should_save = {
             let mut state = self.lock()?;
-            let save_empty = !state.finalized && state.save_empty;
+            let should_save = !state.finalized && (state.dirty || state.save_empty);
             state.finalized = true;
-            save_empty
+            state.dirty = false;
+            should_save
         };
 
-        if save_empty {
+        if should_save {
             if let Err(error) = self.save() {
                 self.remember_error(error.to_string())?;
             }
@@ -140,8 +143,9 @@ impl Recorder {
             state.cassette.insert_interaction(position, interaction)?;
             state.pending.remove(&order);
             state.save_empty = false;
+            state.dirty = true;
         }
-        self.save().map_err(|error| self.recording_error(error))
+        Ok(())
     }
 
     #[cfg(feature = "tonic")]
@@ -157,8 +161,9 @@ impl Recorder {
                 .insert_grpc_interaction(position, interaction)?;
             state.pending.remove(&order);
             state.save_empty = false;
+            state.dirty = true;
         }
-        self.save().map_err(|error| self.recording_error(error))
+        Ok(())
     }
 
     #[cfg(any(feature = "reqwest", feature = "tonic"))]
@@ -167,13 +172,6 @@ impl Recorder {
         state.pending.remove(&order);
         state.errors.push(error.to_string());
         Ok(())
-    }
-
-    #[cfg(any(feature = "reqwest", feature = "tonic"))]
-    fn recording_error(&self, error: Error) -> Error {
-        let message = error.to_string();
-        let _ = self.remember_error(message.clone());
-        Error::Recording(vec![message])
     }
 
     fn remember_error(&self, error: String) -> Result<()> {

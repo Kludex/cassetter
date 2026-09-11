@@ -76,8 +76,9 @@ Each `Recorder` owns independent playback state. Clone one recorder to share a
 cassette safely across concurrent tasks. Build separate recorders when tests
 must not consume each other's interactions.
 
-Always call `Recorder::finish`. It saves an empty replacement cassette when
-needed and reports persistence failures or calls cancelled while recording.
+Always call `Recorder::finish`. It writes the cassette once (including an empty
+replacement when needed) and reports persistence failures or calls cancelled
+while recording.
 
 ## Current limits
 
