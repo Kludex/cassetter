@@ -30,6 +30,22 @@ All four gRPC call patterns are supported:
 * client streaming
 * bidirectional streaming
 
+## Match request bodies
+
+By default a call matches the first recorded interaction for the same method, whatever the request. Add `"body"` to `match_on` to also compare the serialized request byte for byte:
+
+```python
+with use_cassette("cassette.yaml", intercept=["grpc"], match_on=["method", "body"]):
+    channel = grpc.aio.insecure_channel("localhost:50051")
+    stub = my_service_pb2_grpc.MyServiceStub(channel)
+    response = await stub.Echo(my_service_pb2.EchoRequest(message="hello"))
+```
+
+A call whose request differs from every recording raises `NoMatchError`, so a test cannot pass by replaying the answer to a different question. Streaming requests compare the whole stream.
+
+!!! warning "Bidirectional calls wait for the full request stream"
+    With body matching, a bidirectional call reads every request before it replays a response. A client that only sends after it receives a response stalls.
+
 ## The cassette
 
 gRPC interactions are stored in their own section. Bodies are binary protobuf, stored as hex:
