@@ -93,7 +93,7 @@ def _resolve_cassette(
     options = dict(marker_kwargs)
     marker_cassette_dir = options.pop("cassette_dir", None)
     additional_matchers = options.pop("additional_matchers", None)
-    if unsupported := sorted(options.keys() - _CASSETTER_FIELDS):
+    if unsupported := sorted(options.keys() - {"record_mode", "max_age", "on_expiry", "ignore_hosts", "match_on"}):
         raise TypeError(f"unsupported @pytest.mark.vcr options: {', '.join(unsupported)}")
     config = replace(config, **options)
     if additional_matchers:
