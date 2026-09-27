@@ -8,7 +8,7 @@ import grpc.aio
 import pytest
 from google.protobuf.wrappers_pb2 import StringValue
 
-from cassetter import use_cassette
+from cassetter import NoMatchError, use_cassette
 
 
 @pytest.fixture
@@ -132,3 +132,48 @@ async def test_every_call_kind_records_and_replays(tmp_path: Path, target: str) 
     with use_cassette(path, record_mode="none", intercept=["grpc"]):
         async with grpc.aio.insecure_channel("localhost:1") as channel:
             assert await call_every_kind(channel) == expected
+
+
+@pytest.fixture
+async def recorded(tmp_path: Path, target: str) -> Path:
+    path = tmp_path / "grpc.yaml"
+    with use_cassette(path, record_mode="once", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            await call_every_kind(channel)
+    return path
+
+
+@pytest.mark.anyio
+async def test_body_matching_replays_the_recorded_requests(recorded: Path) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=["grpc"], match_on=["method", "body"]):
+        async with grpc.aio.insecure_channel("localhost:1") as channel:
+            assert await call_every_kind(channel) == [["echo hi"], ["a", "b"], ["a b"], ["echo a", "echo b"]]
+
+
+@pytest.mark.anyio
+async def test_body_matching_rejects_a_different_request(recorded: Path) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=["grpc"], match_on=["method", "body"]):
+        async with grpc.aio.insecure_channel("localhost:1") as channel:
+            stub = EchoStub(channel)
+            with pytest.raises(NoMatchError, match="with this request body"):
+                await stub.Say(StringValue(value="bye"))
+            with pytest.raises(NoMatchError):
+                stub.Stream(StringValue(value="c d"))
+            with pytest.raises(NoMatchError):
+                await stub.Collect(messages("c"))
+            with pytest.raises(NoMatchError):
+                [response async for response in stub.Chat(messages("c"))]
+
+
+@pytest.mark.anyio
+async def test_a_different_request_replays_without_body_matching(recorded: Path) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel("localhost:1") as channel:
+            assert (await EchoStub(channel).Say(StringValue(value="bye"))).value == "echo hi"
+
+
+@pytest.mark.anyio
+async def test_body_matching_records_a_new_bidi_request(recorded: Path, target: str) -> None:
+    with use_cassette(recorded, record_mode="new_episodes", intercept=["grpc"], match_on=["method", "body"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            assert values([response async for response in EchoStub(channel).Chat(messages("c"))]) == ["echo c"]

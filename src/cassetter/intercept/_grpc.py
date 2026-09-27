@@ -10,7 +10,7 @@ import grpc.aio
 
 from cassetter._core import Body, GrpcResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError
+from cassetter.cassette import Cassette, NoMatchError
 
 _STATUS_BY_CODE = {sc.value[0]: sc for sc in grpc.StatusCode}
 
@@ -70,7 +70,7 @@ class VCRUnaryUnaryCallable:
         md = metadata_to_dict(metadata)
 
         try:
-            grpc_resp = cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method, req_body)
             raise_for_status(grpc_resp)
             payload = grpc_resp.body.content
             content = payload if isinstance(payload, bytes) else b""
@@ -145,7 +145,7 @@ class VCRUnaryStreamCallable:
         md = metadata_to_dict(metadata)
 
         try:
-            grpc_resp = cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method, req_body)
             return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
         except NoMatchError:
             if not cassette.can_record:
@@ -241,7 +241,7 @@ class VCRStreamUnaryCallable:
         req_body = Body("binary", encode_chunks([self._request_serializer(request) for request in requests]))
 
         try:
-            grpc_resp = cassette.play_grpc(self._method)
+            grpc_resp = cassette.play_grpc(self._method, req_body)
             raise_for_status(grpc_resp)
             payload = grpc_resp.body.content
             content = payload if isinstance(payload, bytes) else b""
@@ -310,6 +310,9 @@ class VCRStreamStreamCallable:
             )
 
         md = metadata_to_dict(metadata)
+        options = (timeout, metadata, credentials, wait_for_ready, compression)
+        if "body" in cassette.match_config.match_on:
+            return self._play_matching_body(cassette, request_iterator, md, options)
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
@@ -319,7 +322,28 @@ class VCRStreamStreamCallable:
                 raise
 
         assert self._real is not None
-        return self._record_bidi(request_iterator, md, timeout, metadata, credentials, wait_for_ready, compression)
+        return self._record_bidi(request_iterator, md, *options)
+
+    async def _play_matching_body(
+        self,
+        cassette: Cassette,
+        request_iterator: AsyncIterator[Any],
+        md: dict[str, list[str]],
+        options: tuple[float | None, Any, Any, bool | None, Any],
+    ) -> AsyncIterator[Any]:
+        # ponytail: waits for the whole request stream, so a conversation that sends in reply to responses stalls.
+        requests = [request async for request in request_iterator]
+        req_body = Body("binary", encode_chunks([self._request_serializer(request) for request in requests]))
+        try:
+            grpc_resp = cassette.play_grpc(self._method, req_body)
+        except NoMatchError:
+            if not cassette.can_record:
+                raise
+            async for response in self._record_bidi(async_iter(requests), md, *options):
+                yield response
+            return
+        async for response in replay_stream(grpc_resp, self._response_deserializer):
+            yield response
 
     async def _record_bidi(
         self,
