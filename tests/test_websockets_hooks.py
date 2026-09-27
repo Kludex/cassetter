@@ -84,7 +84,7 @@ async def test_received_frames_report_replay_progress(tmp_path: Path) -> None:
         async with websockets.connect("wss://ws.example.com/") as ws:
             assert isinstance(ws, VCRWebSocketReplay)
             assert ws.received_frames == []
-            await ws.recv()
-            await ws.recv()
+            assert await ws.recv() == "a"
             ws.received_frames.clear()
+            assert await ws.recv() == "b"
             assert [frame.offset_ms for frame in ws.received_frames] == [0, 1500]
