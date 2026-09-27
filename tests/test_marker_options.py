@@ -64,6 +64,11 @@ def test_body_without_matcher(vcr):
 @pytest.mark.vcr(decode_compressed_response=True)
 def test_unsupported_option(vcr):
     pass
+
+
+@pytest.mark.vcr(filter_headers=["x-secret"])
+def test_module_only_option(vcr):
+    pass
 """
 
 
@@ -73,5 +78,10 @@ def test_marker_options(pytester: pytest.Pytester) -> None:
 
     result = pytester.runpytest()
 
-    result.assert_outcomes(passed=4, errors=1)
-    result.stdout.fnmatch_lines(["*TypeError: unsupported @pytest.mark.vcr options: decode_compressed_response"])
+    result.assert_outcomes(passed=4, errors=2)
+    result.stdout.fnmatch_lines(
+        [
+            "*TypeError: unsupported @pytest.mark.vcr options: decode_compressed_response",
+            "*TypeError: unsupported @pytest.mark.vcr options: filter_headers",
+        ]
+    )

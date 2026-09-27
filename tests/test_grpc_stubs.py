@@ -177,3 +177,35 @@ async def test_body_matching_records_a_new_bidi_request(recorded: Path, target: 
     with use_cassette(recorded, record_mode="new_episodes", intercept=["grpc"], match_on=["method", "body"]):
         async with grpc.aio.insecure_channel(target) as channel:
             assert values([response async for response in EchoStub(channel).Chat(messages("c"))]) == ["echo c"]
+
+
+async def reused(*values: str) -> AsyncIterator[StringValue]:
+    message = StringValue()
+    for value in values:
+        message.value = value
+        yield message
+
+
+async def call_streams_with_a_reused_message(channel: grpc.aio.Channel) -> list[list[str]]:
+    stub = EchoStub(channel)
+    return [
+        [(await stub.Collect(reused("a", "b"))).value],
+        values([response async for response in stub.Chat(reused("a", "b"))]),
+    ]
+
+
+@pytest.mark.anyio
+async def test_streams_send_each_message_as_it_was_yielded(tmp_path: Path, target: str) -> None:
+    path = tmp_path / "grpc.yaml"
+    expected = [["a b"], ["echo a", "echo b"]]
+
+    with use_cassette(path, record_mode="once", intercept=["grpc"]):
+        channel = grpc.aio.insecure_channel(target)
+        assert await call_streams_with_a_reused_message(channel) == expected
+
+    async with channel:
+        assert await call_streams_with_a_reused_message(channel) == expected
+
+    with use_cassette(path, record_mode="none", intercept=["grpc"], match_on=["method", "body"]):
+        async with grpc.aio.insecure_channel("localhost:1") as channel:
+            assert await call_streams_with_a_reused_message(channel) == expected

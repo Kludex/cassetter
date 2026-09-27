@@ -130,7 +130,7 @@ The marker accepts overrides for a single test:
 async def test_special_case(): ...
 ```
 
-The first positional argument sets the cassette file name. Every key from the `vcr_config` table overrides the module configuration for that test:
+The first positional argument sets the cassette file name. The keyword arguments `record_mode`, `cassette_dir`, `max_age`, `on_expiry`, `ignore_hosts`, and `match_on` override the module configuration for that test:
 
 ```python
 @pytest.mark.vcr(ignore_hosts=["gateway.example"], match_on=["method", "uri", "json_body"])
