@@ -108,6 +108,7 @@ The supported keys are the same options accepted by `use_cassette()`:
 | `ignore_hosts` | Bypass requests to matching hosts |
 | `before_record_request` | Hook to modify or skip requests |
 | `before_record_response` | Hook to modify or skip responses |
+| `uri_normalizer` | Callable applied to both URIs before matching |
 
 The fixture can also return a [`Cassetter`](configuration.md), which is the same set of options as an object, shareable with code that calls `use_cassette()` directly:
 
@@ -129,7 +130,22 @@ The marker accepts overrides for a single test:
 async def test_special_case(): ...
 ```
 
-The first positional argument sets the cassette file name. The keyword arguments `record_mode`, `cassette_dir`, `max_age`, and `on_expiry` override the module configuration.
+The first positional argument sets the cassette file name. Every key from the `vcr_config` table overrides the module configuration for that test:
+
+```python
+@pytest.mark.vcr(ignore_hosts=["gateway.example"], match_on=["method", "uri", "json_body"])
+async def test_gateway(): ...
+```
+
+`additional_matchers` appends to the module's `match_on` instead of replacing it, as it does in VCR.py:
+
+```python
+@pytest.mark.vcr(additional_matchers=["body"])
+async def test_sends_the_recorded_body(): ...
+```
+
+!!! warning "Unknown marker options fail the test"
+    A marker option Cassetter does not support raises `TypeError` instead of being dropped. A dropped `additional_matchers` or `ignore_hosts` would weaken the test without telling you.
 
 pytest-recording's `default_cassette` marker names the cassette too, so suites that already use it keep working:
 

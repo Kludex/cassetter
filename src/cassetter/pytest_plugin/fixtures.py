@@ -4,10 +4,11 @@ import os
 from collections.abc import Iterator, Mapping
 from dataclasses import fields, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
+from cassetter._core import MatchConfig
 from cassetter._state import (
     acquire_patches,
     current_cassette,
@@ -78,7 +79,7 @@ def _existing_file_name(cassette_dir: str, name: str, legacy_name: str) -> str:
 def _resolve_cassette(
     node_name: str,
     marker_args: tuple[str, ...],
-    marker_kwargs: CassetteConfig,
+    marker_kwargs: Mapping[str, Any],
     vcr_config: CassetteConfig | Cassetter,
     cli_record_mode: str | None,
     test_fspath: str,
@@ -89,6 +90,15 @@ def _resolve_cassette(
 ) -> tuple[Cassette, list[type[InterceptorProtocol]]]:
     """Resolve cassette configuration and create a Cassette instance."""
     config, config_cassette_dir = _split_config(vcr_config)
+    options = dict(marker_kwargs)
+    marker_cassette_dir = options.pop("cassette_dir", None)
+    additional_matchers = options.pop("additional_matchers", None)
+    if unsupported := sorted(options.keys() - _CASSETTER_FIELDS):
+        raise TypeError(f"unsupported @pytest.mark.vcr options: {', '.join(unsupported)}")
+    config = replace(config, **options)
+    if additional_matchers:
+        match_on = config.match_on or MatchConfig().match_on
+        config = replace(config, match_on=[*match_on, *additional_matchers])
 
     if marker_args:
         cassette_name = marker_args[0]
@@ -97,18 +107,14 @@ def _resolve_cassette(
     else:
         cassette_name = _sanitized_file_name(node_name)
 
-    record_mode = config.record_mode or "none"
-    if "record_mode" in marker_kwargs:
-        record_mode = marker_kwargs["record_mode"]
-    if cli_record_mode is not None:
-        record_mode = cli_record_mode
+    record_mode = cli_record_mode or config.record_mode or "none"
 
     test_file = Path(test_fspath)
     test_dir = str(test_file.parent)
 
     # marker > cassette_library_dir > vcr_cassette_dir fixture > vcr_config > default
-    if "cassette_dir" in marker_kwargs:
-        cassette_dir = os.path.join(test_dir, marker_kwargs["cassette_dir"], test_file.stem)
+    if marker_cassette_dir is not None:
+        cassette_dir = os.path.join(test_dir, marker_cassette_dir, test_file.stem)
     elif config.cassette_library_dir is not None:
         cassette_dir = os.fspath(config.cassette_library_dir)
     elif vcr_cassette_dir is not None:
@@ -126,8 +132,8 @@ def _resolve_cassette(
         config,
         cassette_library_dir=cassette_dir,
         record_mode=record_mode,
-        max_age=marker_kwargs.get("max_age", config.max_age or ini_max_age),
-        on_expiry=marker_kwargs.get("on_expiry", config.on_expiry or ini_on_expiry or "warn"),
+        max_age=config.max_age or ini_max_age,
+        on_expiry=config.on_expiry or ini_on_expiry or "warn",
     )
     cassette = resolved.cassette(cassette_name)
     cassette.load()
@@ -157,7 +163,7 @@ def cassette(
     cassette, interceptor_classes = _resolve_cassette(
         node_name=node_name,
         marker_args=marker.args,
-        marker_kwargs=cast(CassetteConfig, marker.kwargs),
+        marker_kwargs=marker.kwargs,
         vcr_config=vcr_config,
         cli_record_mode=cli_record_mode,
         test_fspath=str(request.path),
