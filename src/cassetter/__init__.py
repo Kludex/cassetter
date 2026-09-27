@@ -16,6 +16,7 @@ from cassetter._core import (
 from cassetter.cassette import (
     BeforeRecordRequest,
     BeforeRecordResponse,
+    BeforeRecordWsFrame,
     Cassette,
     CassetteExpiredError,
     CassetteExpiredWarning,
@@ -35,6 +36,7 @@ from cassetter.recording import RecordMode
 __all__ = [
     "BeforeRecordRequest",
     "BeforeRecordResponse",
+    "BeforeRecordWsFrame",
     "Body",
     "Cassette",
     "CassetteExpiredError",
