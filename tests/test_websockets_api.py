@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -7,8 +8,11 @@ import pytest
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+from websockets.frames import Close
 
-from cassetter import use_cassette
+from cassetter import Body, WsFrame, use_cassette
+
+CONVERSATION = ([b"hello", "\x00\x01"], 4000, "bye")
 
 
 @pytest.fixture
@@ -39,43 +43,64 @@ async def converse(uri: str) -> tuple[list[str | bytes], int | None, str | None]
         return received, ws.close_code, ws.close_reason
 
 
-@pytest.mark.anyio
-async def test_recv_decode_and_close_state_match_a_live_connection(tmp_path: Path, uri: str) -> None:
-    path = tmp_path / "ws.yaml"
-    expected = ([b"hello", "\x00\x01"], 4000, "bye")
-
+async def record(path: Path, uri: str) -> tuple[list[str | bytes], int | None, str | None]:
     with use_cassette(path, record_mode="once", intercept=["websockets"]):
-        assert await converse(uri) == expected
+        return await converse(uri)
 
-    with use_cassette(path, record_mode="none", intercept=["websockets"]):
-        assert await converse(uri) == expected
+
+@pytest.fixture
+async def recorded(tmp_path: Path, uri: str) -> Path:
+    path = tmp_path / "ws.yaml"
+    # Its own task: on Python 3.11, catching a live connection's close stops coverage tracing the awaiting frame.
+    assert await asyncio.create_task(record(path, uri)) == CONVERSATION
+    return path
 
 
 @pytest.mark.anyio
-async def test_replay_iteration_ends_with_the_recorded_close(tmp_path: Path, uri: str) -> None:
-    path = tmp_path / "ws.yaml"
-    with use_cassette(path, record_mode="once", intercept=["websockets"]):
-        await converse(uri)
+async def test_replay_matches_the_live_connection(recorded: Path, uri: str) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=["websockets"]):
+        assert await converse(uri) == CONVERSATION
 
-    with use_cassette(path, record_mode="none", intercept=["websockets"]):
+
+@pytest.mark.anyio
+async def test_replay_iteration_ends_with_the_recorded_close(recorded: Path, uri: str) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=["websockets"]):
         async with websockets.connect(uri) as ws:
             assert (ws.close_code, ws.close_reason) == (None, None)
             with pytest.raises(ConnectionClosedError):
                 [message async for message in ws]
             assert (ws.close_code, ws.close_reason) == (4000, "bye")
+            with pytest.raises(ConnectionClosedError):
+                await ws.send("late")
 
 
 @pytest.mark.anyio
-async def test_replay_close_ends_the_connection(tmp_path: Path, uri: str) -> None:
+@pytest.mark.parametrize(
+    ("code", "closed"), [(1001, ConnectionClosedOK), (4000, ConnectionClosedError)], ids=["going-away", "error"]
+)
+async def test_replay_close_ends_the_connection(recorded: Path, uri: str, code: int, closed: type[Exception]) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=["websockets"]):
+        async with websockets.connect(uri) as ws:
+            await ws.close(code, "leaving")
+            assert (ws.close_code, ws.close_reason) == (code, "leaving")
+            with pytest.raises(closed):
+                await ws.recv()
+            with pytest.raises(closed):
+                await ws.send("late")
+            await ws.close()
+            assert ws.close_code == code
+
+
+@pytest.mark.anyio
+async def test_frames_running_out_close_the_connection_normally(tmp_path: Path) -> None:
     path = tmp_path / "ws.yaml"
-    with use_cassette(path, record_mode="once", intercept=["websockets"]):
-        await converse(uri)
+    with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+        cassette.record_ws("wss://ws.example.com/", {}, [WsFrame("recv", "text", Body("text", "hi"))])
 
     with use_cassette(path, record_mode="none", intercept=["websockets"]):
-        async with websockets.connect(uri) as ws:
-            await ws.close(1001, "leaving")
-            assert (ws.close_code, ws.close_reason) == (1001, "leaving")
-            with pytest.raises(ConnectionClosedOK):
+        async with websockets.connect("wss://ws.example.com/") as ws:
+            assert await ws.recv() == "hi"
+            with pytest.raises(ConnectionClosedOK) as closed:
                 await ws.recv()
-            await ws.close()
-            assert ws.close_code == 1001
+            assert closed.value.rcvd == Close(1000, "")
+            assert (ws.close_code, ws.close_reason) == (1000, "")
