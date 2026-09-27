@@ -143,12 +143,12 @@ class VCRWebSocketReplay:
             raise self._closed
         if self._cassette is None:
             return
-        position = f"WebSocket send #{self._sent + 1} to {self._uri}"
-        if self._sent >= len(self._sends):
-            raise NoMatchError(f"{position} is not in the recording, which has {len(self._sends)}")
         actual = self._cassette._as_recorded(ws_frame("send", message))
         if actual is None:
             return
+        position = f"WebSocket send #{self._sent + 1} to {self._uri}"
+        if self._sent >= len(self._sends):
+            raise NoMatchError(f"{position} is not in the recording, which has {len(self._sends)}")
         expected = self._sends[self._sent]
         if (actual.frame_type, actual.body) != (expected.frame_type, expected.body):
             raise NoMatchError(

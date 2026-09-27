@@ -70,6 +70,7 @@ async def test_the_hook_normalizes_recorded_and_replayed_sends(tmp_path: Path, e
             assert await ws.recv() == "ping"
             await ws.send("hello id-456")
             assert await ws.recv() == "hello id-123"
+            await ws.send("ping")
 
 
 @pytest.mark.anyio
