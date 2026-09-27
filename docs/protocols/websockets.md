@@ -23,6 +23,33 @@ with use_cassette("cassette.yaml", intercept=["websockets"]):
         data = await ws.recv()
 ```
 
+## Validate what the client sends
+
+Add `"body"` to `match_on` to replay the conversation strictly:
+
+```python
+import websockets
+
+from cassetter import use_cassette
+
+with use_cassette("cassette.yaml", intercept=["websockets"], match_on=["method", "uri", "body"]):
+    async with websockets.connect("wss://ws.example.com/stream") as ws:
+        await ws.send('{"subscribe": "ticker"}')
+        data = await ws.recv()
+```
+
+In strict mode:
+
+* Each `send()` must match the next recorded send. A changed or extra send raises `NoMatchError`.
+* `recv()` waits until every send recorded before its frame has been made. A background reader and a sender in separate tasks both keep going, in the recorded order.
+* Closing the connection with recorded sends still unsent raises `NoMatchError`, unless the connection is closing because of another error.
+* Each connection replays the next unplayed recording for its URI. Reconnecting after the recordings run out raises `NoMatchError` instead of starting the conversation over.
+
+Sends are compared after the same write-time filtering as the recording, so a token scrubbed from a recorded frame still matches the live one.
+
+!!! warning "A missing send blocks `recv()`"
+    A `recv()` waiting on a send that never comes waits forever, the way a live server that is waiting for your message never answers. Run strict replays under a test timeout.
+
 ## Patch a reference an SDK already imported
 
 The `websockets` interceptor replaces `websockets.connect`. An SDK that imported `connect` under its own name keeps the original: `google.genai.live` calls `ws_connect`, which the interceptor never touches. Point that name at `cassetter.websockets.connect`:
@@ -65,7 +92,7 @@ ws_interactions:
         offset_ms: 120
 ```
 
-On replay, `recv()` returns the recorded frames in order, without a real connection. `send()` is a no-op. Both text and binary frames are supported.
+On replay, `recv()` returns the recorded frames in order, without a real connection. By default `send()` is a no-op. Both text and binary frames are supported.
 
 The replayed connection behaves like the `websockets` connection it stands in for:
 

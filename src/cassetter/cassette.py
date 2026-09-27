@@ -553,12 +553,20 @@ class Cassette:
 
         probe = WsInteraction(uri, {}, [], "")
         scrubbed = scrub_ws_interaction(probe, self._security_config)
-        result = self._inner.take_ws_match(scrubbed.uri)
+        with self._record_lock:
+            played = self._inner.ws_played
+            result = self._inner.take_ws_match(scrubbed.uri)
         if result is None:
             raise NoMatchError(f"no matching WebSocket interaction for {uri}")
+        if "body" in self._match_config.match_on and played[result[0]]:
+            raise NoMatchError(f"every recorded WebSocket connection to {uri} was already replayed")
 
         _, interaction = result
         return interaction
+
+    def _as_recorded(self, frame: WsFrame) -> WsFrame:
+        """The frame as it would be written, so a live frame compares equal to its recording."""
+        return scrub_ws_interaction(WsInteraction("", {}, [frame], ""), self._security_config).frames[0]
 
     def record_ws(
         self,
