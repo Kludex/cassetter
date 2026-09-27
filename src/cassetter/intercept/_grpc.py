@@ -375,8 +375,9 @@ class VCRChannel:
         method: str,
         request_serializer: Any = None,
         response_deserializer: Any = None,
+        **kwargs: Any,
     ) -> VCRUnaryUnaryCallable:
-        real_callable = self._real.unary_unary(method, request_serializer, response_deserializer)
+        real_callable = self._real.unary_unary(method, request_serializer, response_deserializer, **kwargs)
         return VCRUnaryUnaryCallable(method, real_callable, request_serializer, response_deserializer)
 
     def unary_stream(
@@ -384,8 +385,9 @@ class VCRChannel:
         method: str,
         request_serializer: Any = None,
         response_deserializer: Any = None,
+        **kwargs: Any,
     ) -> VCRUnaryStreamCallable:
-        real_callable = self._real.unary_stream(method, request_serializer, response_deserializer)
+        real_callable = self._real.unary_stream(method, request_serializer, response_deserializer, **kwargs)
         return VCRUnaryStreamCallable(method, real_callable, request_serializer, response_deserializer)
 
     def stream_unary(
@@ -393,8 +395,9 @@ class VCRChannel:
         method: str,
         request_serializer: Any = None,
         response_deserializer: Any = None,
+        **kwargs: Any,
     ) -> VCRStreamUnaryCallable:
-        real_callable = self._real.stream_unary(method, request_serializer, response_deserializer)
+        real_callable = self._real.stream_unary(method, request_serializer, response_deserializer, **kwargs)
         return VCRStreamUnaryCallable(method, real_callable, request_serializer, response_deserializer)
 
     def stream_stream(
@@ -402,8 +405,9 @@ class VCRChannel:
         method: str,
         request_serializer: Any = None,
         response_deserializer: Any = None,
+        **kwargs: Any,
     ) -> VCRStreamStreamCallable:
-        real_callable = self._real.stream_stream(method, request_serializer, response_deserializer)
+        real_callable = self._real.stream_stream(method, request_serializer, response_deserializer, **kwargs)
         return VCRStreamStreamCallable(method, real_callable, request_serializer, response_deserializer)
 
     def __getattr__(self, name: str) -> Any:
@@ -434,7 +438,7 @@ class GrpcInterceptor:
         original_insecure = self._original_insecure
         original_secure = self._original_secure
 
-        def patched_insecure(target: str, **kwargs: Any) -> VCRChannel:  # pragma: no cover
+        def patched_insecure(target: str, **kwargs: Any) -> VCRChannel:
             real = original_insecure(target, **kwargs)
             return VCRChannel(real)
 
