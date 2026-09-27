@@ -49,6 +49,12 @@ ws_interactions:
 
 On replay, `recv()` returns the recorded frames in order, without a real connection. `send()` is a no-op. Both text and binary frames are supported.
 
+The replayed connection behaves like the `websockets` connection it stands in for:
+
+* `recv(decode=False)` returns a text frame as UTF-8 bytes, and `recv(decode=True)` returns a binary frame as text.
+* Once the recorded close is received, `close_code` and `close_reason` hold its code and reason. They are `None` while the connection is open.
+* After `close()`, `recv()` raises `ConnectionClosedOK`, and `close_code` holds the code you closed with.
+
 ## Security filtering
 
 The same write time filtering as HTTP applies:
