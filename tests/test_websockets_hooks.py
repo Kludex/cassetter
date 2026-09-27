@@ -86,4 +86,5 @@ async def test_received_frames_report_replay_progress(tmp_path: Path) -> None:
             assert ws.received_frames == []
             await ws.recv()
             await ws.recv()
+            ws.received_frames.clear()
             assert [frame.offset_ms for frame in ws.received_frames] == [0, 1500]
