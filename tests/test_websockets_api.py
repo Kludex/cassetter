@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 import websockets
-from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from websockets.frames import Close
 
 from cassetter import Body, WsFrame, use_cassette
-
-CONVERSATION = ([b"hello", "\x00\x01"], 4000, "bye")
 
 
 @pytest.fixture
@@ -20,18 +16,7 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-async def greet(ws: ServerConnection) -> None:
-    await ws.recv()
-    await ws.send("hello")
-    await ws.send(b"\x00\x01")
-    await ws.close(4000, "bye")
-
-
-@pytest.fixture
-async def uri() -> AsyncIterator[str]:
-    async with serve(greet, "localhost", 0) as server:
-        port = server.sockets[0].getsockname()[1]
-        yield f"ws://localhost:{port}/"
+CONVERSATION = ([b"hello", "\x00\x01"], 4000, "bye")
 
 
 async def converse(uri: str) -> tuple[list[str | bytes], int | None, str | None]:
@@ -49,23 +34,23 @@ async def record(path: Path, uri: str) -> tuple[list[str | bytes], int | None, s
 
 
 @pytest.fixture
-async def recorded(tmp_path: Path, uri: str) -> Path:
+async def recorded(tmp_path: Path, ws_uri: str) -> Path:
     path = tmp_path / "ws.yaml"
     # Its own task: on Python 3.11, catching a live connection's close stops coverage tracing the awaiting frame.
-    assert await asyncio.create_task(record(path, uri)) == CONVERSATION
+    assert await asyncio.create_task(record(path, ws_uri)) == CONVERSATION
     return path
 
 
 @pytest.mark.anyio
-async def test_replay_matches_the_live_connection(recorded: Path, uri: str) -> None:
+async def test_replay_matches_the_live_connection(recorded: Path, ws_uri: str) -> None:
     with use_cassette(recorded, record_mode="none", intercept=["websockets"]):
-        assert await converse(uri) == CONVERSATION
+        assert await converse(ws_uri) == CONVERSATION
 
 
 @pytest.mark.anyio
-async def test_replay_iteration_ends_with_the_recorded_close(recorded: Path, uri: str) -> None:
+async def test_replay_iteration_ends_with_the_recorded_close(recorded: Path, ws_uri: str) -> None:
     with use_cassette(recorded, record_mode="none", intercept=["websockets"]):
-        async with websockets.connect(uri) as ws:
+        async with websockets.connect(ws_uri) as ws:
             assert (ws.close_code, ws.close_reason) == (None, None)
             with pytest.raises(ConnectionClosedError):
                 [message async for message in ws]
@@ -78,9 +63,11 @@ async def test_replay_iteration_ends_with_the_recorded_close(recorded: Path, uri
 @pytest.mark.parametrize(
     ("code", "closed"), [(1001, ConnectionClosedOK), (4000, ConnectionClosedError)], ids=["going-away", "error"]
 )
-async def test_replay_close_ends_the_connection(recorded: Path, uri: str, code: int, closed: type[Exception]) -> None:
+async def test_replay_close_ends_the_connection(
+    recorded: Path, ws_uri: str, code: int, closed: type[Exception]
+) -> None:
     with use_cassette(recorded, record_mode="none", intercept=["websockets"]):
-        async with websockets.connect(uri) as ws:
+        async with websockets.connect(ws_uri) as ws:
             await ws.close(code, "leaving")
             assert (ws.close_code, ws.close_reason) == (code, "leaving")
             with pytest.raises(closed):
