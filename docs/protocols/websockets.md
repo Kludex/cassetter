@@ -23,6 +23,24 @@ with use_cassette("cassette.yaml", intercept=["websockets"]):
         data = await ws.recv()
 ```
 
+## Patch a reference an SDK already imported
+
+The `websockets` interceptor replaces `websockets.connect`. An SDK that imported `connect` under its own name keeps the original: `google.genai.live` calls `ws_connect`, which the interceptor never touches. Point that name at `cassetter.websockets.connect`:
+
+```python
+import google.genai.live
+import pytest
+
+import cassetter.websockets
+
+
+@pytest.fixture(autouse=True)
+def record_gemini_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(google.genai.live, "ws_connect", cassetter.websockets.connect)
+```
+
+`cassetter.websockets.connect` accepts the same arguments as `websockets.connect`. Inside a cassette it records or replays, whether or not `"websockets"` is in `intercept`. Outside a cassette, and for bypassed hosts, it opens a live connection.
+
 ## The cassette
 
 Each frame is recorded with its direction, type, and timing offset:

@@ -189,8 +189,8 @@ class _PatchedConnect:
     async def _resolve(self) -> Any:
         cassette = get_current_cassette()
         if cassette is None or cassette.should_bypass(self._uri):
-            self._bypassed = await self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
-            return self._bypassed  # pragma: no cover
+            self._bypassed = await self._original_connect(self._uri, **self._kwargs)
+            return self._bypassed
 
         try:
             interaction = cassette.play_ws(self._uri)
@@ -210,7 +210,7 @@ class _PatchedConnect:
         # Flush recorded frames / close the connection regardless of call style.
         if self._ws is not None:
             await self._ws.__aexit__(None, None, None)
-        elif self._bypassed is not None:  # pragma: no cover - bypass needs a live server
+        elif self._bypassed is not None:
             await self._bypassed.close()
 
     def __await__(self) -> Generator[Any, None, Any]:
@@ -236,6 +236,17 @@ class _PatchedConnect:
             await self._cleanup()
 
 
+_live_connect = websockets.asyncio.client.connect
+
+
+def connect(uri: str, **kwargs: Any) -> _PatchedConnect:
+    """Drop-in for `websockets.connect` that records into, or replays from, the active cassette.
+
+    Without an active cassette, or for a bypassed host, it opens a live connection.
+    """
+    return _PatchedConnect(_live_connect, uri, kwargs)
+
+
 class WebSocketInterceptor:
     """Patches websockets.connect to intercept WebSocket connections."""
 
@@ -244,13 +255,8 @@ class WebSocketInterceptor:
 
     def install(self) -> None:
         self._original_connect = websockets.asyncio.client.connect
-        original_connect = self._original_connect
-
-        def patched_connect(uri: str, **kwargs: Any) -> _PatchedConnect:
-            return _PatchedConnect(original_connect, uri, kwargs)
-
-        websockets.asyncio.client.connect = patched_connect  # type: ignore[assignment,misc]
-        websockets.connect = patched_connect  # type: ignore[assignment,misc]
+        websockets.asyncio.client.connect = connect  # type: ignore[assignment,misc]
+        websockets.connect = connect  # type: ignore[assignment,misc]
 
     def uninstall(self) -> None:
         if self._original_connect is not None:
