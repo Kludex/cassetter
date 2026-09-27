@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import struct
 import time
 from collections.abc import AsyncIterator, Generator
@@ -197,9 +196,12 @@ class VCRWebSocketReplay:
         return self
 
     async def __aexit__(self, exc_type: type[BaseException] | None, *args: object) -> None:
-        # Unsent frames are reported only when nothing else went wrong, so they never mask the real error.
-        with contextlib.suppress(NoMatchError) if exc_type is not None else contextlib.nullcontext():
+        try:
             await self.close()
+        except NoMatchError:
+            # Unsent frames are reported only when nothing else went wrong, so they never mask the real error.
+            if exc_type is None:
+                raise
 
     def __aiter__(self) -> VCRWebSocketReplay:
         return self
@@ -289,17 +291,6 @@ def connect(uri: str, **kwargs: Any) -> _PatchedConnect:
     return _PatchedConnect(_live_connect, uri, kwargs)
 
 
-_live_connect = websockets.asyncio.client.connect
-
-
-def connect(uri: str, **kwargs: Any) -> _PatchedConnect:
-    """Drop-in for `websockets.connect` that records into, or replays from, the active cassette.
-
-    Without an active cassette, or for a bypassed host, it opens a live connection.
-    """
-    return _PatchedConnect(_live_connect, uri, kwargs)
-
-
 class WebSocketInterceptor:
     """Patches websockets.connect to intercept WebSocket connections."""
 
@@ -308,8 +299,13 @@ class WebSocketInterceptor:
 
     def install(self) -> None:
         self._original_connect = websockets.asyncio.client.connect
-        websockets.asyncio.client.connect = connect  # type: ignore[assignment,misc]
-        websockets.connect = connect  # type: ignore[assignment,misc]
+        original_connect = self._original_connect
+
+        def patched_connect(uri: str, **kwargs: Any) -> _PatchedConnect:
+            return _PatchedConnect(original_connect, uri, kwargs)
+
+        websockets.asyncio.client.connect = patched_connect  # type: ignore[assignment,misc]
+        websockets.connect = patched_connect  # type: ignore[assignment,misc]
 
     def uninstall(self) -> None:
         if self._original_connect is not None:
