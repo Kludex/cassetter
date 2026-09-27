@@ -62,6 +62,19 @@ The fixture is also available under the name `vcr`, for compatibility with pytes
 
 The cassette exposes vcrpy's introspection surface, so wire-contract assertions port over unchanged: `cassette.requests` returns the recorded requests with `.method`, `.uri`, `.headers`, `.body`, `.path`, `.host`, and `.query` attributes, and `cassette.play_count`, `cassette.play_counts`, and `cassette.all_played` report replay progress.
 
+`play_count`, `play_counts`, and `played_indices` count HTTP interactions only, as in vcrpy. `all_played` covers every protocol. For gRPC and WebSocket interactions, use `grpc_played_indices` and `ws_played_indices`:
+
+```python
+@pytest.mark.vcr
+async def test_uses_every_recording(cassette: Cassette):
+    ...
+    assert all(cassette.ws_played_indices)
+    assert cassette.all_played
+```
+
+!!! note "A WebSocket interaction counts as played once its connection opens"
+    `ws_played_indices` does not say whether every recorded frame was received.
+
 ```python
 @pytest.mark.vcr
 async def test_sends_tool_definitions(cassette: Cassette):
