@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import websockets
+import websockets.asyncio.client
 
 import cassetter.websockets
 from cassetter import use_cassette
@@ -43,3 +45,22 @@ async def test_connects_live_without_a_cassette(ws_uri: str, monkeypatch: pytest
     monkeypatch.setattr(sdk, "ws_connect", cassetter.websockets.connect)
 
     assert await converse(ws_uri) == ["hello", b"\x00\x01"]
+
+
+@pytest.mark.anyio
+async def test_the_interceptor_dials_through_the_connector_it_replaced(
+    tmp_path: Path, ws_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    live = websockets.asyncio.client.connect
+    dialed: list[str] = []
+
+    def instrumented(uri: str, **kwargs: Any) -> Any:
+        dialed.append(uri)
+        return live(uri, **kwargs)
+
+    monkeypatch.setattr(websockets.asyncio.client, "connect", instrumented)
+    with use_cassette(tmp_path / "ws.yaml", record_mode="once", intercept=["websockets"]):
+        async with websockets.connect(ws_uri) as ws:
+            await ws.send("hi")
+            assert await ws.recv() == "hello"
+    assert dialed == [ws_uri]

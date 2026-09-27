@@ -289,6 +289,17 @@ def connect(uri: str, **kwargs: Any) -> _PatchedConnect:
     return _PatchedConnect(_live_connect, uri, kwargs)
 
 
+_live_connect = websockets.asyncio.client.connect
+
+
+def connect(uri: str, **kwargs: Any) -> _PatchedConnect:
+    """Drop-in for `websockets.connect` that records into, or replays from, the active cassette.
+
+    Without an active cassette, or for a bypassed host, it opens a live connection.
+    """
+    return _PatchedConnect(_live_connect, uri, kwargs)
+
+
 class WebSocketInterceptor:
     """Patches websockets.connect to intercept WebSocket connections."""
 
