@@ -30,7 +30,7 @@ httpx = ["httpx>=0.24"]
 aiohttp = ["aiohttp>=3.9"]
 requests = ["requests>=2.28"]
 grpc = ["grpcio>=1.60"]
-websockets = ["websockets>=12.0"]
+websockets = ["websockets>=13.0"]
 pyreqwest = ["pyreqwest-impersonate>=0.5,<0.5.5"]
 httpx2 = [
     "httpx2>=2.0",
@@ -69,7 +69,7 @@ dev = [
     "pytest-cov>=7.0.0",
     "types-requests>=2.32.4.20260107",
     "grpcio>=1.60",
-    "websockets>=12.0",
+    "websockets>=13.0",
     "pyreqwest-impersonate>=0.5,<0.5.5",
     "vcrpy>=8.1.1",
     "pytest-codspeed>=3.2",
