@@ -39,7 +39,6 @@ from cassetter.intercept._grpc import (
     build_json_debug,
     decode_chunks,
     encode_chunks,
-    iter_bytes,
     metadata_to_dict,
     raise_for_status,
     replay_stream,
@@ -1582,12 +1581,6 @@ async def test_grpcasync_iter() -> None:
 
     results = [item async for item in async_iter([b"\x01", b"\x02"])]
     assert results == [b"\x01", b"\x02"]
-
-
-def test_grpciter_bytes() -> None:
-
-    result = iter_bytes([b"\x01"], lambda b: b)
-    assert result is not None
 
 
 @pytest.mark.anyio

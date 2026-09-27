@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
 
 import grpc
@@ -50,16 +50,51 @@ async def say(request: StringValue, context: object) -> StringValue:
     return StringValue(value=f"echo {request.value}")
 
 
+async def stream(request: StringValue, context: object) -> AsyncIterator[StringValue]:
+    for word in request.value.split():
+        yield StringValue(value=word)
+
+
+async def collect(requests: AsyncIterator[StringValue], context: object) -> StringValue:
+    return StringValue(value=" ".join([request.value async for request in requests]))
+
+
+async def chat(requests: AsyncIterator[StringValue], context: object) -> AsyncIterator[StringValue]:
+    async for request in requests:
+        yield StringValue(value=f"echo {request.value}")
+
+
+async def messages(*values: str) -> AsyncIterator[StringValue]:
+    for value in values:
+        yield StringValue(value=value)
+
+
+def values(responses: Iterable[StringValue]) -> list[str]:
+    return [response.value for response in responses]
+
+
+async def call_every_kind(channel: grpc.aio.Channel) -> list[list[str]]:
+    stub = EchoStub(channel)
+    return [
+        [(await stub.Say(StringValue(value="hi"))).value],
+        values([response async for response in stub.Stream(StringValue(value="a b"))]),
+        [(await stub.Collect(messages("a", "b"))).value],
+        values([response async for response in stub.Chat(messages("a", "b"))]),
+    ]
+
+
+SERIALIZERS = {"request_deserializer": StringValue.FromString, "response_serializer": StringValue.SerializeToString}
+
+
 @pytest.fixture
 async def target() -> AsyncIterator[str]:
     handler = grpc.method_handlers_generic_handler(
         "pkg.Echo",
         {
-            "Say": grpc.unary_unary_rpc_method_handler(
-                say,
-                request_deserializer=StringValue.FromString,
-                response_serializer=StringValue.SerializeToString,
-            )
+            "Say": grpc.unary_unary_rpc_method_handler(say, **SERIALIZERS),
+            "Stream": grpc.unary_stream_rpc_method_handler(stream, **SERIALIZERS),
+            "Collect": grpc.stream_unary_rpc_method_handler(collect, **SERIALIZERS),
+            "Chat": grpc.stream_stream_rpc_method_handler(chat, **SERIALIZERS),
         },
     )
     server = grpc.aio.server()
@@ -83,3 +118,49 @@ async def test_generated_stub_records_and_replays(tmp_path: Path, target: str) -
         async with grpc.aio.insecure_channel("localhost:1") as channel:
             response = await EchoStub(channel).Say(StringValue(value="hi"))
     assert response.value == "echo hi"
+
+
+@pytest.mark.anyio
+async def test_every_call_kind_records_and_replays(tmp_path: Path, target: str) -> None:
+    path = tmp_path / "grpc.yaml"
+    expected = [["echo hi"], ["a", "b"], ["a b"], ["echo a", "echo b"]]
+
+    with use_cassette(path, record_mode="once", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            assert await call_every_kind(channel) == expected
+
+    with use_cassette(path, record_mode="none", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel("localhost:1") as channel:
+            assert await call_every_kind(channel) == expected
+
+
+async def reused(*values: str) -> AsyncIterator[StringValue]:
+    message = StringValue()
+    for value in values:
+        message.value = value
+        yield message
+
+
+async def call_streams_with_a_reused_message(channel: grpc.aio.Channel) -> list[list[str]]:
+    stub = EchoStub(channel)
+    return [
+        [(await stub.Collect(reused("a", "b"))).value],
+        values([response async for response in stub.Chat(reused("a", "b"))]),
+    ]
+
+
+@pytest.mark.anyio
+async def test_streams_send_each_message_as_it_was_yielded(tmp_path: Path, target: str) -> None:
+    path = tmp_path / "grpc.yaml"
+    expected = [["a b"], ["echo a", "echo b"]]
+
+    with use_cassette(path, record_mode="once", intercept=["grpc"]):
+        channel = grpc.aio.insecure_channel(target)
+        assert await call_streams_with_a_reused_message(channel) == expected
+
+    async with channel:
+        assert await call_streams_with_a_reused_message(channel) == expected
+
+    with use_cassette(path, record_mode="none", intercept=["grpc"], match_on=["method", "body"]):
+        async with grpc.aio.insecure_channel("localhost:1") as channel:
+            assert await call_streams_with_a_reused_message(channel) == expected
