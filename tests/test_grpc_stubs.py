@@ -209,3 +209,10 @@ async def test_streams_send_each_message_as_it_was_yielded(tmp_path: Path, targe
     with use_cassette(path, record_mode="none", intercept=["grpc"], match_on=["method", "body"]):
         async with grpc.aio.insecure_channel("localhost:1") as channel:
             assert await call_streams_with_a_reused_message(channel) == expected
+
+
+@pytest.mark.anyio
+async def test_body_matching_needs_the_request_body(recorded: Path) -> None:
+    with use_cassette(recorded, record_mode="none", intercept=[], match_on=["method", "body"]) as cassette:
+        with pytest.raises(ValueError, match="needs the request_body"):
+            cassette.play_grpc("/pkg.Echo/Say")

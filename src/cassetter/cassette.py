@@ -489,12 +489,14 @@ class Cassette:
 
         Args:
             method: Full RPC method name, e.g. `/pkg.Service/Method`.
-            request_body: Serialized request. Compared byte for byte when `match_on` includes `"body"`.
+            request_body: Serialized request. Required, and compared byte for byte, when `match_on` includes `"body"`.
         """
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        if request_body is not None and "body" in self._match_config.match_on:
+        if "body" in self._match_config.match_on:
+            if request_body is None:
+                raise ValueError("match_on includes 'body', so play_grpc() needs the request_body to compare")
             result = self._inner.take_grpc_request_match(GrpcRequest(method, {}, request_body))
             if result is None:
                 raise NoMatchError(f"no matching gRPC interaction for {method} with this request body")
