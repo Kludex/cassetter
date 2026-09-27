@@ -141,3 +141,15 @@ async def test_sends_compare_after_write_time_filtering(tmp_path: Path) -> None:
     ):
         async with websockets.connect(URI) as ws:
             await ws.send(login)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("message", [b"\x00\x01", bytearray(b"\x00\x01"), memoryview(b"\x00\x01")], ids=type)
+async def test_bytes_like_sends_compare_as_binary(tmp_path: Path, message: bytes | bytearray | memoryview) -> None:
+    path = tmp_path / "ws.yaml"
+    with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+        cassette.record_ws(URI, {}, [WsFrame("send", "binary", Body("binary", b"\x00\x01"))])
+
+    with use_cassette(path, record_mode="none", intercept=["websockets"], match_on=STRICT):
+        async with websockets.connect(URI) as ws:
+            await ws.send(message)

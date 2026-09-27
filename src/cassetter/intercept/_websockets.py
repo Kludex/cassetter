@@ -4,7 +4,7 @@ import asyncio
 import struct
 import time
 from collections.abc import AsyncIterator, Generator
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import websockets
 import websockets.asyncio.client
@@ -14,6 +14,9 @@ from websockets.frames import Close, CloseCode
 from cassetter._core import Body, WsFrame, WsInteraction
 from cassetter._state import get_current_cassette
 from cassetter.cassette import Cassette, NoMatchError
+
+if TYPE_CHECKING:
+    from typing_extensions import Buffer
 
 
 class VCRWebSocket:
@@ -37,7 +40,7 @@ class VCRWebSocket:
         self._flushed = False
         self._start_time = time.monotonic()
 
-    async def send(self, message: str | bytes) -> None:
+    async def send(self, message: str | Buffer) -> None:
         self._frames.append(ws_frame("send", message, int((time.monotonic() - self._start_time) * 1000)))
         await self._real.send(message)
 
@@ -134,7 +137,7 @@ class VCRWebSocketReplay:
         self.close_code: int | None = None
         self.close_reason: str | None = None
 
-    async def send(self, message: str | bytes) -> None:
+    async def send(self, message: str | Buffer) -> None:
         if self._closed is not None:
             raise self._closed
         if self._cassette is None:
@@ -326,10 +329,10 @@ def extract_ws_headers(kwargs: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
-def ws_frame(direction: Literal["send", "recv"], data: str | bytes, offset_ms: int = 0) -> WsFrame:
-    if isinstance(data, bytes):
-        return WsFrame(direction, "binary", Body("binary", data), offset_ms)
-    return WsFrame(direction, "text", Body("text", data), offset_ms)
+def ws_frame(direction: Literal["send", "recv"], data: str | Buffer, offset_ms: int = 0) -> WsFrame:
+    if isinstance(data, str):
+        return WsFrame(direction, "text", Body("text", data), offset_ms)
+    return WsFrame(direction, "binary", Body("binary", bytes(data)), offset_ms)
 
 
 def frame_to_data(frame: WsFrame) -> str | bytes:
