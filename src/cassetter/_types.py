@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict
 
-from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, UriNormalizer
+from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, BeforeRecordWsFrame, UriNormalizer
 
 if TYPE_CHECKING:
     from cassetter._core import Matcher
@@ -28,3 +28,4 @@ class CassetteConfig(TypedDict, total=False):
     before_record_request: BeforeRecordRequest
     before_record_response: BeforeRecordResponse
     uri_normalizer: UriNormalizer
+    before_record_ws_frame: BeforeRecordWsFrame

@@ -50,6 +50,50 @@ Sends are compared after the same write-time filtering as the recording, so a to
 !!! warning "A missing send blocks `recv()`"
     A `recv()` waiting on a send that never comes waits forever, the way a live server that is waiting for your message never answers. Run strict replays under a test timeout.
 
+## Transform frames before they are written
+
+`before_record_ws_frame` receives each frame before it is written, and returns the frame to store. Raise `SkipRecording` to leave a frame out. In strict mode the same hook runs over each live send before the comparison. A normalized recording then still matches traffic that carries fresh random values. The live connection always sends and receives the original frames.
+
+```python
+import re
+
+from cassetter import Body, SkipRecording, WsFrame, use_cassette
+
+
+def normalize(frame: WsFrame) -> WsFrame:
+    content = frame.body.content
+    if frame.direction != "send" or not isinstance(content, str):
+        return frame
+    if content == "ping":
+        raise SkipRecording
+    stable = re.sub(r'"client_id": "[0-9a-f]+"', '"client_id": "<id>"', content)
+    return WsFrame("send", "text", Body("text", stable), frame.offset_ms)
+
+
+with use_cassette(
+    "cassette.yaml",
+    intercept=["websockets"],
+    match_on=["method", "uri", "body"],
+    before_record_ws_frame=normalize,
+):
+    ...
+```
+
+Use it to replace random client IDs, truncate large audio payloads, or remove values the built-in filters do not know about. The built-in filters still run after the hook.
+
+## Follow replay progress
+
+A replayed connection lists the frames `recv()` has returned in `received_frames`. Each frame carries its recorded `offset_ms`. Code that measures time on the wire can read those offsets as a deterministic clock instead of the real one:
+
+```python
+from cassetter.websockets import VCRWebSocketReplay
+
+if isinstance(ws, VCRWebSocketReplay):
+    recorded_at_ms = ws.received_frames[-1].offset_ms
+```
+
+A background reader may call `recv()` before the rest of your code handles a frame. Track which of `received_frames` you have handled yourself, so the clock moves when a frame is handled rather than when it is read.
+
 ## Patch a reference an SDK already imported
 
 The `websockets` interceptor replaces `websockets.connect`. An SDK that imported `connect` under its own name keeps the original: `google.genai.live` calls `ws_connect`, which the interceptor never touches. Point that name at `cassetter.websockets.connect`:

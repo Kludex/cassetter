@@ -130,7 +130,7 @@ class VCRWebSocketReplay:
             ),
             None,
         )
-        self._recv_index = 0
+        self._received = 0
         self._sent = 0
         self._progress = asyncio.Condition()
         self._closed: ConnectionClosed | None = None
@@ -142,11 +142,13 @@ class VCRWebSocketReplay:
             raise self._closed
         if self._cassette is None:
             return
+        actual = self._cassette._as_recorded(ws_frame("send", message))
+        if actual is None:
+            return
         position = f"WebSocket send #{self._sent + 1} to {self._uri}"
         if self._sent >= len(self._sends):
             raise NoMatchError(f"{position} is not in the recording, which has {len(self._sends)}")
         expected = self._sends[self._sent]
-        actual = self._cassette._as_recorded(ws_frame("send", message))
         if (actual.frame_type, actual.body) != (expected.frame_type, expected.body):
             raise NoMatchError(
                 f"{position} does not match the recording\n"
@@ -162,7 +164,7 @@ class VCRWebSocketReplay:
                 await self._progress.wait_for(self._may_receive)
             if self._closed is not None:
                 raise self._closed
-            if self._recv_index >= len(self._recv_frames):
+            if self._received >= len(self._recv_frames):
                 if self._close is None:
                     # Recorded frames are exhausted; end the stream as a normal closure, the way a real
                     # connection does, so `await ws.recv()` callers see ConnectionClosed.
@@ -172,12 +174,17 @@ class VCRWebSocketReplay:
                 if len(data) < 2:
                     raise ValueError("recorded WebSocket close body is shorter than its status code")
                 raise self._end(Close(struct.unpack(">H", data[:2])[0], data[2:].decode()), None)
-            frame = self._recv_frames[self._recv_index]
-            self._recv_index += 1
+            frame = self._recv_frames[self._received]
+            self._received += 1
             return decoded(frame_to_data(frame), decode)
 
+    @property
+    def received_frames(self) -> list[WsFrame]:
+        """Recorded frames `recv()` has returned, in order. Their `offset_ms` can drive a deterministic clock."""
+        return self._recv_frames[: self._received]
+
     def _may_receive(self) -> bool:
-        return self._closed is not None or self._sent >= self._sends_before[self._recv_index]
+        return self._closed is not None or self._sent >= self._sends_before[self._received]
 
     async def close(self, code: int = 1000, reason: str = "") -> None:
         async with self._progress:

@@ -122,6 +122,7 @@ The supported keys are the same options accepted by `use_cassette()`:
 | `before_record_request` | Hook to modify or skip requests |
 | `before_record_response` | Hook to modify or skip responses |
 | `uri_normalizer` | Callable applied to both URIs before matching |
+| `before_record_ws_frame` | Hook to modify or skip WebSocket frames |
 
 The fixture can also return a [`Cassetter`](configuration.md), which is the same set of options as an object, shareable with code that calls `use_cassette()` directly:
 

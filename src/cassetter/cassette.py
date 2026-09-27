@@ -60,7 +60,7 @@ class NoMatchError(Exception):
 
 
 class SkipRecording(Exception):
-    """Raised from a before_record_request or before_record_response hook to skip recording."""
+    """Raised from a before_record_request, before_record_response, or before_record_ws_frame hook to skip recording."""
 
 
 @dataclass(slots=True)
@@ -84,6 +84,7 @@ class RawResponse:
 
 BeforeRecordRequest = Callable[[RawRequest], RawRequest]
 BeforeRecordResponse = Callable[[RawResponse], RawResponse]
+BeforeRecordWsFrame = Callable[[WsFrame], WsFrame]
 UriNormalizer = Callable[[str], str]
 
 
@@ -117,6 +118,7 @@ class Cassette:
         before_record_request: BeforeRecordRequest | None = None,
         before_record_response: BeforeRecordResponse | None = None,
         uri_normalizer: UriNormalizer | None = None,
+        before_record_ws_frame: BeforeRecordWsFrame | None = None,
     ) -> None:
         self._path = os.fspath(path)
         self._record_mode = record_mode
@@ -130,6 +132,7 @@ class Cassette:
         self._ignore_hosts = ignore_hosts or []
         self._before_record_request = before_record_request
         self._before_record_response = before_record_response
+        self._before_record_ws_frame = before_record_ws_frame
         self._uri_normalizer = uri_normalizer
         # Mirror of the inner cassette holding copies with normalized URIs, so
         # matching stays on the Rust path. None when no normalizer.
@@ -564,9 +567,26 @@ class Cassette:
         _, interaction = result
         return interaction
 
-    def _as_recorded(self, frame: WsFrame) -> WsFrame:
-        """The frame as it would be written, so a live frame compares equal to its recording."""
-        return scrub_ws_interaction(WsInteraction("", {}, [frame], ""), self._security_config).frames[0]
+    def _as_recorded(self, frame: WsFrame) -> WsFrame | None:
+        """The frame as it would be written, so a live frame compares equal to its recording.
+
+        Returns None when the `before_record_ws_frame` hook skips it.
+        """
+        frames = self._recorded_frames([frame])
+        if not frames:
+            return None
+        return scrub_ws_interaction(WsInteraction("", {}, frames, ""), self._security_config).frames[0]
+
+    def _recorded_frames(self, frames: list[WsFrame]) -> list[WsFrame]:
+        if self._before_record_ws_frame is None:
+            return frames
+        kept: list[WsFrame] = []
+        for frame in frames:
+            try:
+                kept.append(self._before_record_ws_frame(frame))
+            except SkipRecording:
+                pass
+        return kept
 
     def record_ws(
         self,
@@ -576,7 +596,7 @@ class Cassette:
     ) -> None:
         """Record a WebSocket interaction."""
         recorded_at = datetime.now(timezone.utc).isoformat()
-        interaction = WsInteraction(uri, headers, frames, recorded_at)
+        interaction = WsInteraction(uri, headers, self._recorded_frames(frames), recorded_at)
 
         # Apply security filtering
         interaction = scrub_ws_interaction(interaction, self._security_config)
