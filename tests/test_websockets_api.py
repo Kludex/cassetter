@@ -33,7 +33,7 @@ async def uri() -> AsyncIterator[str]:
 async def converse(uri: str) -> tuple[list[str | bytes], int | None, str | None]:
     async with websockets.connect(uri) as ws:
         await ws.send("hi")
-        received = [await ws.recv(decode=False), await ws.recv(decode=True)]
+        received: list[str | bytes] = [await ws.recv(decode=False), await ws.recv(decode=True)]
         with pytest.raises(ConnectionClosedError):
             await ws.recv()
         return received, ws.close_code, ws.close_reason
@@ -59,7 +59,7 @@ async def test_replay_iteration_ends_with_the_recorded_close(tmp_path: Path, uri
 
     with use_cassette(path, record_mode="none", intercept=["websockets"]):
         async with websockets.connect(uri) as ws:
-            assert ws.close_code is None
+            assert (ws.close_code, ws.close_reason) == (None, None)
             with pytest.raises(ConnectionClosedError):
                 [message async for message in ws]
             assert (ws.close_code, ws.close_reason) == (4000, "bye")
