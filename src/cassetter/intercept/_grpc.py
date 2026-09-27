@@ -225,10 +225,10 @@ class VCRStreamUnaryCallable:
         compression: Any = None,
     ) -> Any:
         cassette = get_current_cassette()
-        if cassette is None:  # pragma: no cover - needs a live gRPC channel
+        if cassette is None:
             assert self._real is not None
             return await self._real(
-                request_iterator,
+                serialize(request_iterator, self._request_serializer),
                 timeout=timeout,
                 metadata=metadata,
                 credentials=credentials,
@@ -237,8 +237,8 @@ class VCRStreamUnaryCallable:
             )
 
         md = metadata_to_dict(metadata)
-        requests = [request async for request in request_iterator]
-        req_body = Body("binary", encode_chunks([self._request_serializer(request) for request in requests]))
+        req_chunks = [chunk async for chunk in serialize(request_iterator, self._request_serializer)]
+        req_body = Body("binary", encode_chunks(req_chunks))
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
@@ -252,7 +252,7 @@ class VCRStreamUnaryCallable:
 
         assert self._real is not None
         response = await self._real(
-            async_iter(requests),
+            async_iter(req_chunks),
             timeout=timeout,
             metadata=metadata,
             credentials=credentials,
@@ -298,10 +298,10 @@ class VCRStreamStreamCallable:
         compression: Any = None,
     ) -> AsyncIterator[Any]:
         cassette = get_current_cassette()
-        if cassette is None:  # pragma: no cover - needs a live gRPC channel
+        if cassette is None:
             assert self._real is not None
             return self._real(  # type: ignore[no-any-return]
-                request_iterator,
+                serialize(request_iterator, self._request_serializer),
                 timeout=timeout,
                 metadata=metadata,
                 credentials=credentials,
@@ -332,12 +332,12 @@ class VCRStreamStreamCallable:
         compression: Any,
     ) -> AsyncIterator[Any]:
         cassette = get_current_cassette()
-        requests = [request async for request in request_iterator]
-        req_body = Body("binary", encode_chunks([self._request_serializer(request) for request in requests]))
+        req_chunks = [chunk async for chunk in serialize(request_iterator, self._request_serializer)]
+        req_body = Body("binary", encode_chunks(req_chunks))
 
         assert self._real is not None
         call = self._real(
-            async_iter(requests),
+            async_iter(req_chunks),
             timeout=timeout,
             metadata=metadata,
             credentials=credentials,
@@ -392,7 +392,8 @@ class VCRChannel:
         response_deserializer: Any = None,
         **kwargs: Any,
     ) -> VCRStreamUnaryCallable:
-        real_callable = self._real.stream_unary(method, request_serializer, response_deserializer, **kwargs)
+        # Requests reach the real call already serialized, so a message mutated after it was sent keeps its value.
+        real_callable = self._real.stream_unary(method, None, response_deserializer, **kwargs)
         return VCRStreamUnaryCallable(method, real_callable, request_serializer, response_deserializer)
 
     def stream_stream(
@@ -402,7 +403,8 @@ class VCRChannel:
         response_deserializer: Any = None,
         **kwargs: Any,
     ) -> VCRStreamStreamCallable:
-        real_callable = self._real.stream_stream(method, request_serializer, response_deserializer, **kwargs)
+        # Requests reach the real call already serialized, so a message mutated after it was sent keeps its value.
+        real_callable = self._real.stream_stream(method, None, response_deserializer, **kwargs)
         return VCRStreamStreamCallable(method, real_callable, request_serializer, response_deserializer)
 
     def __getattr__(self, name: str) -> Any:
@@ -511,9 +513,14 @@ async def replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIter
         yield deserializer(data)
 
 
-async def async_iter(items: list[Any]) -> AsyncIterator[Any]:
-    for item in items:
-        yield item
+async def serialize(requests: AsyncIterator[Any], serializer: Any) -> AsyncIterator[bytes]:
+    async for request in requests:
+        yield serializer(request)
+
+
+async def async_iter(chunks: list[bytes]) -> AsyncIterator[bytes]:
+    for chunk in chunks:
+        yield chunk
 
 
 def build_json_debug(request: Any, response: Any) -> dict[str, Any] | None:
