@@ -933,6 +933,16 @@ impl Cassette {
             .map(|(idx, i)| (idx, GrpcInteraction(i)))
     }
 
+    /// Find a gRPC interaction with the same method and request body, and mark it played.
+    fn take_grpc_request_match(
+        &mut self,
+        request: &GrpcRequest,
+    ) -> Option<(usize, GrpcInteraction)> {
+        self.0
+            .take_grpc_request_match(&request.0)
+            .map(|(idx, i)| (idx, GrpcInteraction(i)))
+    }
+
     // --- WebSocket ---
 
     /// The recorded WebSocket interactions.

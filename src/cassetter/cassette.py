@@ -155,6 +155,10 @@ class Cassette:
         return self._record_mode
 
     @property
+    def match_config(self) -> MatchConfig:
+        return self._match_config
+
+    @property
     def ignore_localhost(self) -> bool:
         return self._ignore_localhost
 
@@ -480,12 +484,24 @@ class Cassette:
 
     # --- gRPC ---
 
-    def play_grpc(self, method: str) -> GrpcResponse:
-        """Find a matching gRPC response for the given method, or raise NoMatchError."""
+    def play_grpc(self, method: str, request_body: Body | None = None) -> GrpcResponse:
+        """Find a matching gRPC response, or raise NoMatchError.
+
+        Args:
+            method: Full RPC method name, e.g. `/pkg.Service/Method`.
+            request_body: Serialized request. Required, and compared byte for byte, when `match_on` includes `"body"`.
+        """
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
-        result = self._inner.take_grpc_match(method)
+        if "body" in self._match_config.match_on:
+            if request_body is None:
+                raise ValueError("match_on includes 'body', so play_grpc() needs the request_body to compare")
+            result = self._inner.take_grpc_request_match(GrpcRequest(method, {}, request_body))
+            if result is None:
+                raise NoMatchError(f"no matching gRPC interaction for {method} with this request body")
+        else:
+            result = self._inner.take_grpc_match(method)
         if result is None:
             raise NoMatchError(f"no matching gRPC interaction for {method}")
 
