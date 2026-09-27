@@ -255,8 +255,13 @@ class WebSocketInterceptor:
 
     def install(self) -> None:
         self._original_connect = websockets.asyncio.client.connect
-        websockets.asyncio.client.connect = connect  # type: ignore[assignment,misc]
-        websockets.connect = connect  # type: ignore[assignment,misc]
+        original_connect = self._original_connect
+
+        def patched_connect(uri: str, **kwargs: Any) -> _PatchedConnect:
+            return _PatchedConnect(original_connect, uri, kwargs)
+
+        websockets.asyncio.client.connect = patched_connect  # type: ignore[assignment,misc]
+        websockets.connect = patched_connect  # type: ignore[assignment,misc]
 
     def uninstall(self) -> None:
         if self._original_connect is not None:

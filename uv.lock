@@ -332,7 +332,7 @@ requires-dist = [
     { name = "httpx2", marker = "extra == 'httpx2'", specifier = ">=2.0" },
     { name = "pyreqwest-impersonate", marker = "extra == 'pyreqwest'", specifier = ">=0.5,<0.5.5" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.28" },
-    { name = "websockets", marker = "extra == 'websockets'", specifier = ">=13.0" },
+    { name = "websockets", marker = "extra == 'websockets'", specifier = ">=14.0" },
 ]
 provides-extras = ["aiohttp", "grpc", "httpx", "httpx2", "pyreqwest", "requests", "websockets"]
 
@@ -359,7 +359,7 @@ dev = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20260724" },
     { name = "types-requests", specifier = ">=2.32.4.20260107" },
     { name = "vcrpy", specifier = ">=8.1.1" },
-    { name = "websockets", specifier = ">=13.0" },
+    { name = "websockets", specifier = ">=14.0" },
 ]
 docs = [{ name = "zensical", specifier = ">=0.0.46" }]
 
