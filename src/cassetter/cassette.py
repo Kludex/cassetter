@@ -209,9 +209,18 @@ class Cassette:
         return Counter(self._play_counter)
 
     @property
+    def grpc_played_indices(self) -> list[bool]:
+        return [] if self._inner is None else self._inner.grpc_played
+
+    @property
+    def ws_played_indices(self) -> list[bool]:
+        """Which WebSocket interactions a connection has replayed, by index."""
+        return [] if self._inner is None else self._inner.ws_played
+
+    @property
     def all_played(self) -> bool:
-        """Whether every recorded interaction has been replayed."""
-        return all(self.played_indices)
+        """Whether every recorded interaction has been replayed, across every protocol."""
+        return all(self.played_indices) and all(self.grpc_played_indices) and all(self.ws_played_indices)
 
     def __len__(self) -> int:
         """How many interactions the cassette holds, across every protocol."""
