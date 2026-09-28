@@ -88,6 +88,13 @@ def test_extract_headers_dict() -> None:
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
+def test_extract_headers_decodes_bytes() -> None:
+    """botocore signs requests with bytes header names and values."""
+    headers = {b"Content-Type": b"application/json", "X-Amz-Date": b"20260101T000000Z"}
+    result = extract_headers(headers)
+    assert result == {"content-type": ["application/json"], "x-amz-date": ["20260101T000000Z"]}
+
+
 def test_requests_interceptor_no_match(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
