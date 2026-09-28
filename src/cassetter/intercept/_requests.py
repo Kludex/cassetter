@@ -8,7 +8,7 @@ import requests
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
 from cassetter.cassette import NoMatchError, body_to_bytes
-from cassetter.intercept._shared import apply_before_record_request
+from cassetter.intercept._shared import apply_before_record_request, extract_headers as _extract_headers
 
 
 class RequestsInterceptor:
@@ -77,12 +77,7 @@ class RequestsInterceptor:
 
 
 def extract_headers(headers: Any) -> dict[str, list[str]]:
-    result: dict[str, list[str]] = {}
-    if headers is None:
-        return result
-    for key, value in headers.items():
-        result.setdefault(str(key).lower(), []).append(str(value))
-    return result
+    return _extract_headers(None if headers is None else headers.items())
 
 
 def extract_headers_skip_encoding(headers: Any) -> dict[str, list[str]]:

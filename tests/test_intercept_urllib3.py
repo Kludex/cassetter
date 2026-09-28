@@ -188,6 +188,13 @@ def test_extract_headers_dict() -> None:
     assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
 
 
+def test_extract_headers_decodes_bytes() -> None:
+    """botocore signs requests with bytes header names and values."""
+    headers = {b"Content-Type": b"application/json", "X-Amz-Date": b"20260101T000000Z"}
+    result = extract_headers(headers)
+    assert result == {"content-type": ["application/json"], "x-amz-date": ["20260101T000000Z"]}
+
+
 def test_build_urllib3_response_json_body() -> None:
     response = build_urllib3_response(
         HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
