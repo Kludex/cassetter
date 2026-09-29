@@ -509,7 +509,8 @@ with use_cassette("cassette.yaml", max_age="30d", on_expiry="rerecord"):
 
 Also configurable via pytest:
 
-```ini
+```toml
+# pyproject.toml
 [tool.pytest.ini_options]
 vcr_max_age = "30d"
 vcr_on_expiry = "warn"
@@ -526,7 +527,8 @@ async def test_fresh_data(): ...
 
 A test that stops sending a recorded request still passes on replay. Fail it instead:
 
-```ini
+```toml
+# pyproject.toml
 [tool.pytest.ini_options]
 vcr_on_unplayed = "fail"  # or "warn"; the default is "ignore"
 ```

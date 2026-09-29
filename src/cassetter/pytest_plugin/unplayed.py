@@ -11,6 +11,7 @@ from cassetter.cassette import Cassette
 ON_UNPLAYED_ACTIONS = ("ignore", "warn", "fail")
 
 _REPORTS = pytest.StashKey[dict[str, pytest.TestReport]]()
+_PENDING = pytest.StashKey[tuple[Cassette, str]]()
 
 
 class UnplayedInteractionsWarning(UserWarning):
@@ -55,20 +56,32 @@ def unplayed_interactions(cassette: Cassette) -> dict[str, list[int]]:
     }
 
 
-def check_unplayed(item: pytest.Item, cassette: Cassette, action: str) -> None:
+def schedule_check(item: pytest.Item, cassette: Cassette, action: str) -> None:
+    """Check `cassette` once the test's teardown report exists, if `action` asks for a check."""
+    if action != "ignore" and not cassette.can_record:
+        item.stash[_PENDING] = (cassette, action)
+
+
+def check_after_teardown(item: pytest.Item, report: pytest.TestReport) -> None:
     """Warn or fail when a passing replay-only test left recorded interactions unplayed.
 
-    A test that failed or was skipped already reports why, and a cassette that
-    can record is still being written, so neither is checked.
+    This waits for the teardown report because another fixture can still fail
+    after the cassette's own teardown. Only a test whose call ran and every phase
+    passed is checked: a failing test already reports why, and `--setup-only`
+    never runs the call. A failure turns the teardown report into an error.
     """
-    if action == "ignore" or cassette.can_record:
+    if (pending := item.stash.get(_PENDING, None)) is None:
         return
-    if any(report.failed or report.skipped for report in item.stash.get(_REPORTS, {}).values()):
+    cassette, action = pending
+    reports = item.stash.get(_REPORTS, {})
+    if "call" not in reports or not all(phase.passed for phase in reports.values()):
         return
     if not (unplayed := unplayed_interactions(cassette)):
         return
     details = "; ".join(f"{protocol} {indexes}" for protocol, indexes in unplayed.items())
     message = f"cassette {cassette.path} left interactions unplayed: {details}"
     if action == "fail":
-        pytest.fail(message, pytrace=False)
-    warnings.warn(message, UnplayedInteractionsWarning, stacklevel=1)
+        report.outcome = "failed"
+        report.longrepr = message
+    else:
+        warnings.warn(message, UnplayedInteractionsWarning, stacklevel=1)

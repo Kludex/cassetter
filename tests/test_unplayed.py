@@ -99,6 +99,39 @@ def test_recording_cassettes_are_not_checked(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=3, failed=1)
 
 
+BROKEN_TEARDOWN = """
+import httpx
+import pytest
+
+@pytest.fixture
+def breaks_on_teardown():
+    yield
+    raise RuntimeError("another fixture's teardown failed")
+
+@pytest.mark.vcr
+def test_plays_one(breaks_on_teardown):
+    httpx.get("https://api.example.com/one")
+"""
+
+
+def test_a_teardown_failure_is_reported_alone(pytester: pytest.Pytester) -> None:
+    """Another fixture failing after the cassette's own teardown still means the test didn't pass."""
+    pytester.makeconftest(CONFTEST.replace("ON_UNPLAYED", repr("fail")))
+    pytester.makepyfile(test_unplayed=BROKEN_TEARDOWN)
+    result = pytester.runpytest("-p", "no:cacheprovider")
+
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*another fixture's teardown failed*"])
+    assert "left interactions unplayed" not in result.stdout.str()
+
+
+def test_setup_only_runs_are_not_checked(pytester: pytest.Pytester) -> None:
+    result = _run(pytester, "fail", "--setup-only")
+
+    assert result.ret == 0
+    assert "left interactions unplayed" not in result.stdout.str()
+
+
 def test_invalid_action_is_rejected() -> None:
     with pytest.raises(ValueError, match="invalid on_unplayed: 'loud'"):
         resolve_on_unplayed({}, {"on_unplayed": "loud"}, None)

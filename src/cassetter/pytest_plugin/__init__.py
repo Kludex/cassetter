@@ -61,7 +61,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None, Any, None]:
     outcome = yield
-    unplayed.store_report(item, outcome.get_result())
+    report = outcome.get_result()
+    unplayed.store_report(item, report)
+    if report.when == "teardown":
+        unplayed.check_after_teardown(item, report)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
