@@ -83,6 +83,19 @@ async def test_sends_tool_definitions(cassette: Cassette):
     assert request_body["tools"][0]["name"] == "get_weather"
 ```
 
+`cassette.requests` is what the cassette recorded, so it keeps passing after the code stops sending a field: the default matcher ignores the body. `cassette.sent_requests` is what the code sent during this test, replayed or live, with the same attributes. Assert on it to catch that drift:
+
+```python
+@pytest.mark.vcr
+async def test_sends_tool_definitions(cassette: Cassette):
+    ...
+    request_body = json.loads(cassette.sent_requests[0].body)
+    assert request_body["tools"][0]["name"] == "get_weather"
+```
+
+!!! warning "`sent_requests` holds credentials"
+    Requests are captured before `before_record_request` and scrubbing, so their headers and bodies still hold API keys. They stay in memory and are never written to the cassette. Requests to bypassed hosts are not captured, and only HTTP requests are.
+
 ## Configure with `vcr_config`
 
 Override the `vcr_config` fixture to set options for a whole module:

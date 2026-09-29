@@ -58,6 +58,17 @@ def recorded_request(interaction: HttpInteraction) -> RecordedRequest:
     )
 
 
+def sent_request(method: str, uri: str, headers: dict[str, list[str]], body: bytes | None) -> RecordedRequest:
+    """A request as the code under test sent it, with the body as text when it decodes as UTF-8."""
+    wire: str | bytes | None = body or None
+    if isinstance(wire, bytes):
+        try:
+            wire = wire.decode()
+        except UnicodeDecodeError:
+            pass
+    return RecordedRequest(method=method, uri=uri, headers=headers, body=wire)
+
+
 def _wire_body(body: Body) -> str | bytes | None:
     if body.body_type == "json":
         return json.dumps(body.content)

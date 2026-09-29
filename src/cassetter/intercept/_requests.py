@@ -37,7 +37,7 @@ class RequestsInterceptor:
             raw_body = request.body
             body = raw_body if isinstance(raw_body, bytes) else (raw_body.encode() if raw_body else None)
 
-            raw = apply_before_record_request(cassette.before_record_request, method, uri, headers, body)
+            raw = apply_before_record_request(cassette, method, uri, headers, body)
             if raw is None:
                 return original_send(session, request, **kwargs)
             method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body

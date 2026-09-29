@@ -32,7 +32,7 @@ from cassetter._core import (
     scrub_ws_interaction,
 )
 from cassetter.intercept._base import is_localhost
-from cassetter.introspection import RecordedRequest, recorded_request
+from cassetter.introspection import RecordedRequest, recorded_request, sent_request
 from cassetter.recording import RecordMode
 
 _DISCARDING_MODES = (RecordMode.ALL, RecordMode.REWRITE)
@@ -141,6 +141,7 @@ class Cassette:
         self._dirty = False
         self._once_replay_only = False
         self._play_counter: Counter[int] = Counter()
+        self._sent_requests: list[RecordedRequest] = []
         # Position of each interaction in the order its request was issued,
         # which is stable across runs where completion order is not.
         self._record_orders: list[int] = []
@@ -196,6 +197,22 @@ class Cassette:
         return [recorded_request(i) for i in self.interactions]
 
     @property
+    def sent_requests(self) -> list[RecordedRequest]:
+        """The HTTP requests the code under test sent through this cassette, in order.
+
+        Unlike `requests`, which is what the cassette recorded, this is what the
+        code sends now, whether it was replayed or went live. Each request is
+        captured before `before_record_request` and scrubbing, so it still holds
+        credentials. It is kept in memory only and never written to the cassette.
+        Requests to bypassed hosts are not included.
+        """
+        return list(self._sent_requests)
+
+    def note_sent_request(self, method: str, uri: str, headers: dict[str, list[str]], body: bytes | None) -> None:
+        """Add a request the code under test sent to `sent_requests`."""
+        self._sent_requests.append(sent_request(method, uri, headers, body))
+
+    @property
     def played_indices(self) -> list[bool]:
         if self._inner is None:
             return []
@@ -244,6 +261,7 @@ class Cassette:
     def load(self) -> None:
         """Load the cassette from disk, or create a new one based on record mode."""
         exists = os.path.exists(self._path)
+        self._sent_requests = []
 
         # `rewrite` drops the file before recording, so a run that captures
         # nothing leaves no stale cassette behind. The writer copies the mode
