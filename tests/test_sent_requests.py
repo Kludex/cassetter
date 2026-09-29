@@ -74,6 +74,23 @@ def test_captured_before_hooks_and_scrubbing(tmp_path: Path) -> None:
     assert "authorization" not in recorded.headers
 
 
+def test_hook_editing_headers_in_place_leaves_the_capture_alone(tmp_path: Path) -> None:
+    path = os.path.join(str(tmp_path), "in-place.yaml")
+
+    def drop_auth(request: RawRequest) -> RawRequest:
+        request.headers.pop("x-token")
+        request.headers["accept"].append("added-by-hook")
+        return request
+
+    with use_cassette(path, record_mode="all", intercept=["httpx"], before_record_request=drop_auth) as cassette:
+        with httpx.Client(transport=httpx.MockTransport(_echo)) as client:
+            client.post(URI, json={}, headers={"x-token": "t0ken", "accept": "application/json"})
+
+    [sent] = cassette.sent_requests
+    assert sent.headers["x-token"] == ["t0ken"]
+    assert sent.headers["accept"] == ["application/json"]
+
+
 def test_bypassed_requests_are_not_captured(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "bypass.yaml")
 

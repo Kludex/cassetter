@@ -66,7 +66,10 @@ def sent_request(method: str, uri: str, headers: dict[str, list[str]], body: byt
             wire = wire.decode()
         except UnicodeDecodeError:
             pass
-    return RecordedRequest(method=method, uri=uri, headers=headers, body=wire)
+    # Copy the headers: a `before_record_request` hook may edit the request it is handed in place.
+    return RecordedRequest(
+        method=method, uri=uri, headers={name: list(values) for name, values in headers.items()}, body=wire
+    )
 
 
 def _wire_body(body: Body) -> str | bytes | None:
