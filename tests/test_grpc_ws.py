@@ -413,6 +413,9 @@ def test_record_and_play_grpc(tmp_path: Path) -> None:
         request_body=Body("binary", b"\x0a\x0b"),
         response_body=Body("binary", b"\x12\x03"),
     )
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
     assert len(cassette.grpc_interactions) == 1
 
     resp = cassette.play_grpc("/pkg.Svc/Method")
@@ -537,6 +540,9 @@ def test_play_ws_interaction(tmp_path: Path) -> None:
         WsFrame("recv", "text", Body("text", "world"), 50),
     ]
     cassette.record_ws("wss://ws.example.com", {}, frames)
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     interaction = cassette.play_ws("wss://ws.example.com")
     assert interaction.uri == "wss://ws.example.com"
@@ -723,6 +729,9 @@ async def test_unary_unary_replay(tmp_path: Path) -> None:
         request_body=Body("binary", b"\x01"),
         response_body=Body("binary", b"\x02\x03"),
     )
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     callable_ = VCRUnaryUnaryCallable(
         "/pkg.Svc/Echo",
@@ -773,6 +782,9 @@ async def test_unary_stream_replay(tmp_path: Path) -> None:
         request_body=Body("binary", b"\x00"),
         response_body=Body("binary", encode_chunks(chunks)),
     )
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     callable_ = VCRUnaryStreamCallable(
         "/pkg.Svc/Stream",
@@ -820,6 +832,9 @@ async def test_stream_unary_replay(tmp_path: Path) -> None:
         request_body=Body("binary", b"\x00"),
         response_body=Body("binary", b"\xff"),
     )
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     async def request_iter() -> AsyncIterator[bytes]:
         yield b"\x01"
@@ -872,6 +887,9 @@ async def test_stream_stream_replay(tmp_path: Path) -> None:
         request_body=Body("binary", b"\x00"),
         response_body=Body("binary", encode_chunks(resp_chunks)),
     )
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     async def request_iter() -> AsyncIterator[bytes]:
         yield b"\x01"  # pragma: no cover
@@ -1288,6 +1306,9 @@ async def test_patched_connect_replay(tmp_path: Path) -> None:
 
     frames = [WsFrame("recv", "text", Body("text", "hello"), 0)]
     cassette.record_ws("wss://ws.example.com/path", {}, frames)
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     interceptor = WebSocketInterceptor()
     interceptor.install()
@@ -1627,6 +1648,9 @@ async def test_patched_connect_await_form(tmp_path: Path) -> None:
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
     cassette.record_ws("wss://ws.example.com/p", {}, [WsFrame("recv", "text", Body("text", "hi"), 0)])
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     interceptor = WebSocketInterceptor()
     interceptor.install()
@@ -1647,6 +1671,9 @@ async def test_patched_connect_async_for_form(tmp_path: Path) -> None:
     cassette = Cassette(path, record_mode=RecordMode.ALL)
     cassette.load()
     cassette.record_ws("wss://ws.example.com/p", {}, [WsFrame("recv", "text", Body("text", "yo"), 0)])
+    cassette.save()
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
 
     interceptor = WebSocketInterceptor()
     interceptor.install()

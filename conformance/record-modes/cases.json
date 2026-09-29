@@ -60,19 +60,37 @@
     ]
   },
   {
-    "name": "new episodes replays matches and records misses",
+    "name": "once records a repeated request again while the cassette is new",
+    "mode": "once",
+    "existing": false,
+    "requests": [
+      "https://example.com/turn",
+      "https://example.com/turn"
+    ],
+    "expectedOutcomes": ["live", "live"],
+    "expectedBaseCalls": 2,
+    "expectedFile": [
+      {"uri": "https://example.com/turn", "status": 299},
+      {"uri": "https://example.com/turn", "status": 299}
+    ]
+  },
+  {
+    "name": "new episodes replays unplayed matches and records everything else",
     "mode": "new_episodes",
     "existing": true,
     "requests": [
       "https://example.com/recorded",
+      "https://example.com/recorded",
       "https://example.com/new",
       "https://example.com/new"
     ],
-    "expectedOutcomes": ["replay", "live", "replay"],
-    "expectedBaseCalls": 1,
+    "expectedOutcomes": ["replay", "live", "live", "live"],
+    "expectedBaseCalls": 3,
     "expectedFile": [
       {"uri": "https://example.com/new", "status": 299},
-      {"uri": "https://example.com/recorded", "status": 201}
+      {"uri": "https://example.com/new", "status": 299},
+      {"uri": "https://example.com/recorded", "status": 201},
+      {"uri": "https://example.com/recorded", "status": 299}
     ]
   },
   {
@@ -112,6 +130,21 @@
     "expectedOutcomes": [],
     "expectedBaseCalls": 0,
     "expectedFile": null
+  },
+  {
+    "name": "rewrite records a repeated request again",
+    "mode": "rewrite",
+    "existing": true,
+    "requests": [
+      "https://example.com/recorded",
+      "https://example.com/recorded"
+    ],
+    "expectedOutcomes": ["live", "live"],
+    "expectedBaseCalls": 2,
+    "expectedFile": [
+      {"uri": "https://example.com/recorded", "status": 299},
+      {"uri": "https://example.com/recorded", "status": 299}
+    ]
   },
   {
     "name": "rewrite records from an empty cassette",

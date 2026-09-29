@@ -49,8 +49,10 @@ func main() {
 }
 ```
 
-The transport matches by HTTP method and URI. It prefers an unused interaction,
-then reuses the first matching interaction after every match has played. It is
+The transport matches by HTTP method and URI. It prefers an unused interaction.
+A replay-only transport then reuses the first matching interaction after every
+match has played, while a transport that can record sends the request to the
+server, since a repeated request is a new turn to record. It is
 safe to share between goroutines. Response bodies remain streaming. A recording
 is written when the body reaches EOF or is closed.
 
@@ -61,7 +63,7 @@ It only replays when the cassette already exists.
 |---|---|
 | `RecordModeNone` | Replay only. Return `ErrNoMatch` for a miss. |
 | `RecordModeOnce` | Record a new cassette or replay an existing one. |
-| `RecordModeNewEpisodes` | Replay existing interactions and record misses. |
+| `RecordModeNewEpisodes` | Replay unplayed interactions and record everything else. |
 | `RecordModeAll` | Record every request and replace existing interactions. |
 | `RecordModeRewrite` | Remove the cassette first, then record every request. |
 

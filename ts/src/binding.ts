@@ -26,6 +26,8 @@ export interface MatchHit<T> {
 export interface NativeCassette {
   readonly version: number;
   readonly length: number;
+  /** While set, only unplayed interactions replay and added ones count as played. */
+  recording: boolean;
 
   save(path: string, order?: number[], mode?: number): void;
   toYaml(order?: number[]): string;

@@ -27,7 +27,8 @@ func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 
 	index := len(t.cassette.Interactions)
 	t.cassette.Interactions = candidateInteractions
-	t.played = append(t.played, false)
+	// The request that produced a recording has played it, so a repeat goes live.
+	t.played = append(t.played, true)
 	t.orders = candidateOrders
 	if t.usesMethodURIIndex() {
 		request := t.matchingRequest(interaction.Request)

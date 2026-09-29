@@ -245,8 +245,11 @@ def test_cassette_record_and_play(tmp_path: Path) -> None:
         response_headers={"content-type": ["application/json"]},
         response_body=b'{"users": []}',
     )
+    cassette.save()
 
     # Play back
+    cassette = Cassette(path, record_mode=RecordMode.NONE)
+    cassette.load()
     response = cassette.play(
         "GET",
         "https://api.example.com/users",
@@ -1160,11 +1163,8 @@ def test_request_content_length_is_left_alone_so_the_same_request_still_matches(
     """`body_to_bytes` reformats JSON, so retagging a request would desync the `headers` matcher."""
     wire = b'{"a":1}'
     headers = {"content-type": ["application/json"], "content-length": [str(len(wire))]}
-    cassette = Cassette(
-        tmp_path / "match.yaml",
-        record_mode=RecordMode.ALL,
-        match_config=MatchConfig(match_on=["method", "uri", "headers"]),
-    )
+    match_config = MatchConfig(match_on=["method", "uri", "headers"])
+    cassette = Cassette(tmp_path / "match.yaml", record_mode=RecordMode.ALL, match_config=match_config)
     cassette.load()
     cassette.record(
         method="POST",
@@ -1177,6 +1177,9 @@ def test_request_content_length_is_left_alone_so_the_same_request_still_matches(
     )
 
     assert cassette.interactions[0].request.headers["content-length"] == [str(len(wire))]
+    cassette.save()
+    cassette = Cassette(tmp_path / "match.yaml", record_mode=RecordMode.NONE, match_config=match_config)
+    cassette.load()
     assert cassette.play("POST", "https://api.example.com/x", headers, wire).status == 200
 
 
@@ -1243,13 +1246,13 @@ def test_uri_normalizer_still_rejects_distinct_uris(tmp_path: Path) -> None:
 
 
 def test_uri_normalizer_applies_to_recorded_interactions(tmp_path: Path) -> None:
-    """An interaction recorded in this session is matchable through the normalizer."""
+    """A recording replays through the normalizer, but not in the session that recorded it."""
     path = os.path.join(str(tmp_path), "recorded.yaml")
-    cassette = Cassette(
-        path,
-        record_mode=RecordMode.ALL,
-        uri_normalizer=lambda uri: re.sub(r"account-\d+", "account-X", uri),
-    )
+
+    def normalizer(uri: str) -> str:
+        return re.sub(r"account-\d+", "account-X", uri)
+
+    cassette = Cassette(path, record_mode=RecordMode.ALL, uri_normalizer=normalizer)
     cassette.load()
     cassette.record(
         method="GET",
@@ -1260,7 +1263,12 @@ def test_uri_normalizer_applies_to_recorded_interactions(tmp_path: Path) -> None
         response_headers={},
         response_body=b"items",
     )
+    with pytest.raises(NoMatchError):
+        cassette.play("GET", "https://api.example.com/account-99999/items", {}, None)
+    cassette.save()
 
+    cassette = Cassette(path, record_mode=RecordMode.NONE, uri_normalizer=normalizer)
+    cassette.load()
     response = cassette.play("GET", "https://api.example.com/account-99999/items", {}, None)
     assert response.body.content == "items"
 

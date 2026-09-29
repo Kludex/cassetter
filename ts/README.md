@@ -58,9 +58,11 @@ await useCassette("cassette.yaml", async (cassette) => {
 | --- | --- |
 | `none` | Replay only. Throws `NoMatchError` if nothing matches. |
 | `once` | Record if the cassette doesn't exist, otherwise replay. (default) |
-| `new_episodes` | Replay what exists, record what doesn't. |
+| `new_episodes` | Replay unplayed interactions, record everything else. |
 | `all` | Record everything, overwriting the cassette. |
 | `rewrite` | Delete the cassette, then record everything. |
+
+A session that can record only replays interactions it hasn't played yet, and never replays one it just recorded. A repeated request, like the next turn of a conversation posting to the same URL, reaches the server instead of getting an earlier response back.
 
 ```ts
 await useCassette("cassette.yaml", { recordMode: "none" }, async () => { ... });

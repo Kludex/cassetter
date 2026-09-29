@@ -261,6 +261,7 @@ class Cassette:
             self._record_orders = []
             self._next_record_order = 0
             self._rebuild_match_inner()
+            self._sync_recording()
             if self._record_mode in _DISCARDING_MODES:
                 self._dirty = True
             return
@@ -275,6 +276,7 @@ class Cassette:
         self._next_record_order = len(self._record_orders)
         self._check_expiry()
         self._rebuild_match_inner()
+        self._sync_recording()
 
     def reserve_record_order(self) -> int:
         """Claim this interaction's position before its request is issued.
@@ -287,6 +289,18 @@ class Cassette:
             order = self._next_record_order
             self._next_record_order += 1
             return order
+
+    def _sync_recording(self) -> None:
+        """Tell the Rust cassettes whether this session can record.
+
+        While it can, a request is only answered by an unplayed interaction and
+        a new recording counts as played, so a repeated request - every turn of a
+        conversation posts to the same URL - goes live instead of getting an
+        earlier response back.
+        """
+        for inner in (self._inner, self._match_inner):
+            if inner is not None:
+                inner.recording = self.can_record
 
     def _rebuild_match_inner(self) -> None:
         if self._uri_normalizer is None or self._inner is None:
@@ -480,6 +494,7 @@ class Cassette:
         if self._inner is None:
             self._inner = _RustCassette()
             self._rebuild_match_inner()
+            self._sync_recording()
 
         if order is None:
             order = self.reserve_record_order()
@@ -542,6 +557,7 @@ class Cassette:
 
         if self._inner is None:
             self._inner = _RustCassette()
+            self._sync_recording()
 
         self._inner.add_grpc_interaction(interaction)
         self._dirty = True
@@ -603,6 +619,7 @@ class Cassette:
 
         if self._inner is None:
             self._inner = _RustCassette()
+            self._sync_recording()
 
         self._inner.add_ws_interaction(interaction)
         self._dirty = True

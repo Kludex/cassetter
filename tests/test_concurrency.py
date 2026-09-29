@@ -566,3 +566,85 @@ def test_concurrent_records_keep_interactions_paired_with_their_position(tmp_pat
 
     recorded = [i.request.uri.rsplit("/", 1)[-1] for i in cassette.interactions]
     assert recorded == [str(order) for order in cassette._record_orders]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("uri_normalizer", [None, lambda uri: uri.replace("/v2/", "/v1/")], ids=["plain", "normalized"])
+async def test_concurrent_conversations_record_every_turn_live_then_replay_each_once(
+    tmp_path: Path, uri_normalizer: Any
+) -> None:
+    """Concurrent conversations post every turn to one URI, one turn after another.
+
+    Replaying a recording from the same session would answer a later turn with an
+    earlier turn's response, so the handler count proves every turn went live, and
+    the replay proves each recording is played exactly once.
+    """
+    path = os.path.join(str(tmp_path), "turns.yaml")
+    uri = "https://api.example.com/v2/chat"
+    conversations, turns = 10, 10
+    live: list[int] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        turn = json.loads(request.content)["n"]
+        live.append(turn)
+        await anyio.sleep(0)
+        return httpx.Response(200, json={"n": turn})
+
+    async def converse(mode: str) -> list[list[int]]:
+        with use_cassette(path, record_mode=mode, intercept=["httpx"], uri_normalizer=uri_normalizer):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+
+                def conversation(c: int) -> Any:
+                    async def run() -> list[int]:
+                        return [(await client.post(uri, json={"n": c * turns + t})).json()["n"] for t in range(turns)]
+
+                    return run
+
+                return await _gather(*[conversation(c) for c in range(conversations)])
+
+    recorded = await converse("all")
+    everything = list(range(conversations * turns))
+    assert recorded == [[c * turns + t for t in range(turns)] for c in range(conversations)]
+    assert sorted(live) == everything
+
+    live.clear()
+    replayed = await converse("none")
+    assert live == []
+    assert sorted(n for conversation in replayed for n in conversation) == everything
+
+
+def test_threaded_new_episodes_replays_each_recording_once_and_records_the_rest(tmp_path: Path) -> None:
+    """Threads racing for unplayed recordings: each is replayed once, and the rest go live."""
+    path = os.path.join(str(tmp_path), "episodes.yaml")
+    uri = "https://api.example.com/chat"
+    count = 100
+    live: list[int] = []
+    lock = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        turn = json.loads(request.content)["n"]
+        with lock:
+            live.append(turn)
+        return httpx.Response(200, json={"n": turn})
+
+    def send_all(mode: str, turns: range) -> list[int]:
+        with use_cassette(path, record_mode=mode, intercept=["httpx"]):
+            with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+                context = contextvars.copy_context()
+
+                def send(n: int) -> int:
+                    return context.copy().run(lambda: client.post(uri, json={"n": n}).json()["n"])  # type: ignore[no-any-return]
+
+                with ThreadPoolExecutor(16) as pool:
+                    return list(pool.map(send, turns))
+
+    send_all("all", range(count))
+    live.clear()
+
+    responses = send_all("new_episodes", range(count, 3 * count))
+
+    # 2 * count requests against count recordings: each recording replays once, the rest go live.
+    assert len(live) == count
+    recorded = [n for n in responses if n < count]
+    assert sorted(recorded) == list(range(count))
+    assert sorted(live) == sorted(n for n in responses if n >= count)

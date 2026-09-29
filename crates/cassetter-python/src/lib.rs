@@ -832,6 +832,19 @@ impl Cassette {
         self.0.version = v;
     }
 
+    /// Whether this session can record, so only unplayed interactions are replayed
+    /// and added interactions count as played.
+    #[getter]
+    fn recording(&self) -> bool {
+        self.0.recording()
+    }
+
+    /// Set whether this session can record.
+    #[setter]
+    fn set_recording(&mut self, recording: bool) {
+        self.0.set_recording(recording);
+    }
+
     // --- HTTP ---
 
     /// The recorded HTTP interactions.
@@ -858,7 +871,7 @@ impl Cassette {
         self.0.played_indices.clone()
     }
 
-    /// Append an HTTP interaction, unplayed.
+    /// Append an HTTP interaction, played while recording and unplayed otherwise.
     fn add_interaction(&mut self, interaction: HttpInteraction) {
         self.0.add_interaction(interaction.0);
     }
@@ -916,7 +929,7 @@ impl Cassette {
         self.0.grpc_played.clone()
     }
 
-    /// Append a gRPC interaction, unplayed.
+    /// Append a gRPC interaction, played while recording and unplayed otherwise.
     fn add_grpc_interaction(&mut self, interaction: GrpcInteraction) {
         self.0.add_grpc_interaction(interaction.0);
     }
@@ -969,7 +982,7 @@ impl Cassette {
         self.0.ws_played.clone()
     }
 
-    /// Append a WebSocket interaction, unplayed.
+    /// Append a WebSocket interaction, played while recording and unplayed otherwise.
     fn add_ws_interaction(&mut self, interaction: WsInteraction) {
         self.0.add_ws_interaction(interaction.0);
     }

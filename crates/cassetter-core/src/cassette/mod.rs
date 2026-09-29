@@ -25,6 +25,8 @@ pub struct Cassette {
     pub ws_played: Vec<bool>,
     /// Cached method+URI index, invalidated whenever `interactions` changes.
     index: Option<index::CassetteIndex>,
+    /// Whether this session can record. See [`Cassette::set_recording`].
+    recording: bool,
 }
 
 impl Cassette {
@@ -36,6 +38,23 @@ impl Cassette {
         }
     }
 
+    /// Whether this session can record, so only unplayed interactions are replayed.
+    pub fn recording(&self) -> bool {
+        self.recording
+    }
+
+    /// Set whether this session can record.
+    ///
+    /// While recording, a request is only answered by an unplayed interaction,
+    /// and one added during the session counts as played by the request that
+    /// produced it. A repeated request then reaches the server instead of
+    /// getting an earlier response back, which a multi-turn conversation to one
+    /// endpoint needs. Replay-only sessions keep falling back to played
+    /// interactions, so repeated requests replay.
+    pub fn set_recording(&mut self, recording: bool) {
+        self.recording = recording;
+    }
+
     // --- HTTP ---
 
     /// Replace the HTTP interactions, resetting played state.
@@ -45,14 +64,14 @@ impl Cassette {
         self.index = None;
     }
 
-    /// Append an HTTP interaction, unplayed.
+    /// Append an HTTP interaction, played while recording and unplayed otherwise.
     pub fn add_interaction(&mut self, interaction: HttpInteraction) {
         self.interactions.push(interaction);
-        self.played_indices.push(false);
+        self.played_indices.push(self.recording);
         self.index = None;
     }
 
-    /// Insert an HTTP interaction at an output position, unplayed.
+    /// Insert an HTTP interaction at an output position, played while recording and unplayed otherwise.
     pub fn insert_interaction(&mut self, index: usize, interaction: HttpInteraction) -> Result<()> {
         if index > self.interactions.len() {
             return Err(CassetteError::IndexOutOfRange(
@@ -60,7 +79,7 @@ impl Cassette {
             ));
         }
         self.interactions.insert(index, interaction);
-        self.played_indices.insert(index, false);
+        self.played_indices.insert(index, self.recording);
         self.index = None;
         Ok(())
     }
@@ -95,7 +114,7 @@ impl Cassette {
         if config.uses_method_uri_index() && self.index.is_none() {
             self.index = Some(index::CassetteIndex::build(&self.interactions));
         }
-        let idx = crate::matching::find_match_index(
+        let idx = crate::matching::find_match_index_in(
             request,
             &self.interactions,
             &self.played_indices,
@@ -104,6 +123,7 @@ impl Cassette {
                 .uses_method_uri_index()
                 .then_some(self.index.as_ref())
                 .flatten(),
+            !self.recording,
         )?;
         if let Some(played) = self.played_indices.get_mut(idx) {
             *played = true;
@@ -119,13 +139,13 @@ impl Cassette {
         self.grpc_interactions = interactions;
     }
 
-    /// Append a gRPC interaction, unplayed.
+    /// Append a gRPC interaction, played while recording and unplayed otherwise.
     pub fn add_grpc_interaction(&mut self, interaction: GrpcInteraction) {
         self.grpc_interactions.push(interaction);
-        self.grpc_played.push(false);
+        self.grpc_played.push(self.recording);
     }
 
-    /// Insert a gRPC interaction at an output position, unplayed.
+    /// Insert a gRPC interaction at an output position, played while recording and unplayed otherwise.
     pub fn insert_grpc_interaction(
         &mut self,
         index: usize,
@@ -137,7 +157,7 @@ impl Cassette {
             ));
         }
         self.grpc_interactions.insert(index, interaction);
-        self.grpc_played.insert(index, false);
+        self.grpc_played.insert(index, self.recording);
         Ok(())
     }
 
@@ -154,10 +174,11 @@ impl Cassette {
 
     /// Find a matching gRPC interaction and mark it played, in one step.
     pub fn take_grpc_match(&mut self, method: &str) -> Option<(usize, GrpcInteraction)> {
-        let idx = crate::matching::find_grpc_match_index(
+        let idx = crate::matching::find_grpc_match_index_in(
             method,
             &self.grpc_interactions,
             &self.grpc_played,
+            !self.recording,
         )?;
         if let Some(played) = self.grpc_played.get_mut(idx) {
             *played = true;
@@ -170,10 +191,11 @@ impl Cassette {
         &mut self,
         request: &GrpcRequest,
     ) -> Option<(usize, GrpcInteraction)> {
-        let idx = crate::matching::find_grpc_request_match_index(
+        let idx = crate::matching::find_grpc_request_match_index_in(
             request,
             &self.grpc_interactions,
             &self.grpc_played,
+            !self.recording,
         )?;
         if let Some(played) = self.grpc_played.get_mut(idx) {
             *played = true;
@@ -189,10 +211,10 @@ impl Cassette {
         self.ws_interactions = interactions;
     }
 
-    /// Append a WebSocket interaction, unplayed.
+    /// Append a WebSocket interaction, played while recording and unplayed otherwise.
     pub fn add_ws_interaction(&mut self, interaction: WsInteraction) {
         self.ws_interactions.push(interaction);
-        self.ws_played.push(false);
+        self.ws_played.push(self.recording);
     }
 
     /// Mark a WebSocket interaction played.
@@ -208,8 +230,12 @@ impl Cassette {
 
     /// Find a matching WebSocket interaction and mark it played, in one step.
     pub fn take_ws_match(&mut self, uri: &str) -> Option<(usize, WsInteraction)> {
-        let idx =
-            crate::matching::find_ws_match_index(uri, &self.ws_interactions, &self.ws_played)?;
+        let idx = crate::matching::find_ws_match_index_in(
+            uri,
+            &self.ws_interactions,
+            &self.ws_played,
+            !self.recording,
+        )?;
         if let Some(played) = self.ws_played.get_mut(idx) {
             *played = true;
         }

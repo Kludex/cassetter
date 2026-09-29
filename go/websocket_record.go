@@ -37,7 +37,8 @@ func (t *Transport) recordWebSocket(interaction WebSocketInteraction, order uint
 	}
 	t.saveEmpty = false
 	t.cassette.WebSocketInteractions = candidateInteractions
-	t.webSocketPlayed = append(t.webSocketPlayed, false)
+	// The connection that produced a recording has played it, so a repeat goes live.
+	t.webSocketPlayed = append(t.webSocketPlayed, true)
 	t.webSocketOrders = candidateOrders
 	return nil
 }

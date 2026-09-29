@@ -68,9 +68,11 @@ places during replay. Non-OK gRPC statuses are recorded and replayed.
 |---|---|
 | `RecordMode::None` | Replay only. A missing or mismatched request fails. |
 | `RecordMode::Once` | Record if the cassette does not exist, otherwise replay only. |
-| `RecordMode::NewEpisodes` | Replay matches and record misses. |
+| `RecordMode::NewEpisodes` | Replay unplayed matches and record everything else. |
 | `RecordMode::All` | Record every request and replace existing interactions. |
 | `RecordMode::Rewrite` | Remove the cassette first and record every request. |
+
+A session that can record only replays interactions it hasn't played yet, and never replays one it just recorded. A repeated request, like the next turn of a conversation posting to the same URL, reaches the server instead of getting an earlier response back.
 
 Each `Recorder` owns independent playback state. Clone one recorder to share a
 cassette safely across concurrent tasks. Build separate recorders when tests

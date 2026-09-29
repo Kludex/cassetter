@@ -127,7 +127,8 @@ func (t *Transport) takeMatch(request HTTPRequest) (HTTPInteraction, bool, error
 			t.played[candidate] = true
 			return t.cassette.Interactions[candidate], true, nil
 		}
-		if fallback < 0 {
+		// While recording, a request that matches only played interactions goes live.
+		if fallback < 0 && !t.canRecord {
 			fallback = candidate
 		}
 	}

@@ -18,7 +18,8 @@ func (t *Transport) takeWebSocketMatch(uri string) (WebSocketInteraction, bool, 
 			t.webSocketPlayed[index] = true
 			return interaction, true, nil
 		}
-		if fallback < 0 {
+		// While recording, a request that matches only played interactions goes live.
+		if fallback < 0 && !t.canRecord {
 			fallback = index
 		}
 	}

@@ -17,7 +17,8 @@ func (t *Transport) takeGRPCMatch(method string) (GRPCInteraction, bool, error) 
 			t.grpcPlayed[index] = true
 			return interaction, true, nil
 		}
-		if fallback < 0 {
+		// While recording, a request that matches only played interactions goes live.
+		if fallback < 0 && !t.canRecord {
 			fallback = index
 		}
 	}
