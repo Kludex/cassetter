@@ -84,6 +84,13 @@ config = SecurityConfig()
 config.filter_headers = ["only-this"]
 ```
 
+A header entry may use `*` to match any run of characters, and an entry starting with `!` keeps the headers it matches even when another entry, including a built-in one, would remove them. Drop every vendor header except the ones a test asserts on:
+
+```python
+with use_cassette("cassette.yaml", filter_headers=["x-*", "anthropic-*", "!x-amzn-bedrock-*"]):
+    ...
+```
+
 Body scrub patterns are matched case insensitively against JSON keys, at any depth. A pattern matches if the key contains it, so `token` matches `access_token` and `refresh_token` too.
 
 ## YAML safety

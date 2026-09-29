@@ -5,10 +5,24 @@
   },
   {
     "name": "custom filters extend defaults",
-    "filterHeaders": ["x-custom-secret"],
-    "filterQueryParameters": ["custom_token"],
-    "bodyScrubPatterns": ["private"],
+    "filterHeaders": [
+      "x-custom-secret"
+    ],
+    "filterQueryParameters": [
+      "custom_token"
+    ],
+    "bodyScrubPatterns": [
+      "private"
+    ],
     "replacement": "***",
     "expected": "custom.json"
+  },
+  {
+    "name": "header patterns and exceptions",
+    "filterHeaders": [
+      "x-*",
+      "!x-keep"
+    ],
+    "expected": "header-patterns.json"
   }
 ]

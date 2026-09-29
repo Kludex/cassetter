@@ -1,9 +1,49 @@
 use std::collections::HashMap;
 
 /// Remove filtered headers from a headers map (case-insensitive).
+///
+/// An entry may use `*` to match any run of characters, so `x-*` names every
+/// `x-` header. An entry starting with `!` keeps the headers it matches even
+/// when another entry, including a default, would remove them.
 pub fn filter_headers(headers: &mut HashMap<String, Vec<String>>, filtered: &[String]) {
-    let filtered_lower: Vec<String> = filtered.iter().map(|h| h.to_lowercase()).collect();
-    headers.retain(|key, _| !filtered_lower.contains(&key.to_lowercase()));
+    // Plain names are the common case, and every interaction runs through here.
+    if !filtered
+        .iter()
+        .any(|entry| entry.contains('*') || entry.starts_with('!'))
+    {
+        headers.retain(|key, _| !filtered.iter().any(|name| name.eq_ignore_ascii_case(key)));
+        return;
+    }
+    let (kept, removed): (Vec<String>, Vec<String>) = filtered
+        .iter()
+        .map(|entry| entry.to_lowercase())
+        .partition(|entry| entry.starts_with('!'));
+    headers.retain(|key, _| {
+        let name = key.to_lowercase();
+        let matches = |pattern: &str| glob_match(pattern, &name);
+        !removed.iter().any(|pattern| matches(pattern))
+            || kept.iter().any(|pattern| matches(&pattern[1..]))
+    });
+}
+
+/// Whether `name` matches `pattern`, where `*` matches any run of characters.
+fn glob_match(pattern: &str, name: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let first = parts.next().unwrap_or_default();
+    let Some(mut rest) = name.strip_prefix(first) else {
+        return false;
+    };
+    let parts: Vec<&str> = parts.collect();
+    let Some((last, middle)) = parts.split_last() else {
+        return rest.is_empty();
+    };
+    for part in middle {
+        match rest.find(part) {
+            Some(index) => rest = &rest[index + part.len()..],
+            None => return false,
+        }
+    }
+    rest.len() >= last.len() && rest.ends_with(last)
 }
 
 /// Replace filtered query parameter values in a URI.
@@ -127,6 +167,46 @@ mod tests {
 
         assert_eq!(headers.len(), 1);
         assert!(headers.contains_key("Content-Type"));
+    }
+
+    #[test]
+    fn test_filter_headers_patterns_and_exceptions() {
+        let mut headers: HashMap<String, Vec<String>> = [
+            "Authorization",
+            "X-Request-Id",
+            "X-Amzn-Bedrock-Input-Token-Count",
+            "Anthropic-Organization-Id",
+            "Content-Type",
+        ]
+        .into_iter()
+        .map(|name| (name.to_string(), vec!["v".to_string()]))
+        .collect();
+
+        filter_headers(
+            &mut headers,
+            &[
+                "authorization".to_string(),
+                "x-*".to_string(),
+                "anthropic-*-id".to_string(),
+                "!X-Amzn-Bedrock-*".to_string(),
+            ],
+        );
+
+        let mut kept: Vec<&str> = headers.keys().map(String::as_str).collect();
+        kept.sort_unstable();
+        assert_eq!(kept, ["Content-Type", "X-Amzn-Bedrock-Input-Token-Count"]);
+    }
+
+    #[test]
+    fn test_glob_match() {
+        assert!(glob_match("x-*", "x-"));
+        assert!(glob_match("*", "anything"));
+        assert!(glob_match("a*b*c", "abxbc"));
+        assert!(glob_match("exact", "exact"));
+        assert!(!glob_match("exact", "exactly"));
+        assert!(!glob_match("a*bc", "abc-b"));
+        assert!(!glob_match("ab*ba", "aba"));
+        assert!(!glob_match("x-*", "y-x-"));
     }
 
     #[test]
