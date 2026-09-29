@@ -141,9 +141,11 @@ def vcr_config() -> Cassetter:
 |------|----------|
 | `none` | Replay only. Raises if no match found. |
 | `once` | Record if cassette doesn't exist. Replay if it does. |
-| `new_episodes` | Replay existing interactions. Record new ones. |
+| `new_episodes` | Replay unplayed interactions. Record everything else. |
 | `all` | Record everything, overwriting the cassette. |
 | `rewrite` | Delete the cassette, then record everything. |
+
+A session that can record only replays interactions it hasn't played yet, and never replays one it just recorded. A repeated request, like the next turn of a conversation posting to the same URL, reaches the server instead of getting an earlier response back.
 
 Set via CLI: `pytest --record-mode=none`
 

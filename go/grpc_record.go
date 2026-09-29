@@ -37,7 +37,8 @@ func (t *Transport) recordGRPC(interaction GRPCInteraction, order uint64) (err e
 	}
 	t.saveEmpty = false
 	t.cassette.GRPCInteractions = candidateInteractions
-	t.grpcPlayed = append(t.grpcPlayed, false)
+	// The call that produced a recording has played it, so a repeat goes live.
+	t.grpcPlayed = append(t.grpcPlayed, true)
 	t.grpcOrders = candidateOrders
 	return nil
 }

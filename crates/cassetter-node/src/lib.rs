@@ -136,6 +136,19 @@ impl JsCassette {
         )
     }
 
+    /// Whether this session can record, so only unplayed interactions are
+    /// replayed and added interactions count as played.
+    #[napi(getter)]
+    pub fn recording(&self) -> bool {
+        self.inner.recording()
+    }
+
+    /// Set whether this session can record.
+    #[napi(setter)]
+    pub fn set_recording(&mut self, recording: bool) {
+        self.inner.set_recording(recording);
+    }
+
     /// Which HTTP interactions have been played, by index.
     #[napi(getter)]
     pub fn played_indices(&self) -> Vec<bool> {
@@ -148,7 +161,7 @@ impl JsCassette {
         self.inner.unplayed_count() as u32
     }
 
-    /// Append an HTTP interaction, unplayed.
+    /// Append an HTTP interaction, played while recording and unplayed otherwise.
     #[napi]
     pub fn add_interaction(&mut self, interaction: Value) {
         self.inner
@@ -200,7 +213,7 @@ impl JsCassette {
         self.inner.grpc_played.clone()
     }
 
-    /// Append a gRPC interaction, unplayed.
+    /// Append a gRPC interaction, played while recording and unplayed otherwise.
     #[napi]
     pub fn add_grpc_interaction(&mut self, interaction: Value) {
         self.inner
@@ -245,7 +258,7 @@ impl JsCassette {
         self.inner.ws_played.clone()
     }
 
-    /// Append a WebSocket interaction, unplayed.
+    /// Append a WebSocket interaction, played while recording and unplayed otherwise.
     #[napi]
     pub fn add_ws_interaction(&mut self, interaction: Value) {
         self.inner

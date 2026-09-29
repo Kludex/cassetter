@@ -181,6 +181,7 @@ export class Cassette {
       // Loading again onto the same object must not inherit the last load's
       // replay-only state: with no file there, `once` may record afresh.
       this._onceReplayOnly = false;
+      this._syncRecording();
       if (discarding) {
         this._dirty = true;
       }
@@ -198,6 +199,7 @@ export class Cassette {
     this._recordOrders = this._inner.interactions.map((_, i) => i);
     this._nextRecordOrder = this._recordOrders.length;
     this._checkExpiry();
+    this._syncRecording();
   }
 
   /**
@@ -409,8 +411,23 @@ export class Cassette {
 
   /** The native cassette, created on first use if `load()` never ran. */
   private _ensureInner(): NativeCassette {
-    this._inner ??= new native.Cassette();
+    if (!this._inner) {
+      this._inner = new native.Cassette();
+      this._syncRecording();
+    }
     return this._inner;
+  }
+
+  /**
+   * Tell the native cassette whether this session can record. While it can, a
+   * request is only answered by an unplayed interaction and a new recording
+   * counts as played, so a repeated request - every turn of a conversation posts
+   * to the same URL - goes live instead of getting an earlier response back.
+   */
+  private _syncRecording(): void {
+    if (this._inner) {
+      this._inner.recording = this.canRecord;
+    }
   }
 
   /** Apply `onExpiry` when the newest recording predates `maxAge`. */

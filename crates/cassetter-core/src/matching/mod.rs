@@ -19,38 +19,51 @@ pub fn find_match_index(
     config: &MatchConfig,
     index: Option<&CassetteIndex>,
 ) -> Option<usize> {
-    match index {
-        Some(index) => scan(
-            index.lookup(&request.method, &request.uri).iter().copied(),
-            request,
-            interactions,
-            played,
-            config,
-        ),
-        None => scan(0..interactions.len(), request, interactions, played, config),
-    }
+    find_match_index_in(request, interactions, played, config, index, true)
 }
 
-/// Walk candidates, returning the first unplayed match or falling back to a played one.
-fn scan<I: Iterator<Item = usize>>(
-    candidates: I,
+/// Like [`find_match_index`], falling back to played interactions only when `allow_played` is set.
+pub fn find_match_index_in(
     request: &HttpRequest,
     interactions: &[HttpInteraction],
     played: &[bool],
     config: &MatchConfig,
+    index: Option<&CassetteIndex>,
+    allow_played: bool,
+) -> Option<usize> {
+    let is_match = |idx: usize| {
+        interactions
+            .get(idx)
+            .is_some_and(|interaction| matches_all(request, &interaction.request, config))
+    };
+    match index {
+        Some(index) => pick(
+            index.lookup(&request.method, &request.uri).iter().copied(),
+            played,
+            allow_played,
+            is_match,
+        ),
+        None => pick(0..interactions.len(), played, allow_played, is_match),
+    }
+}
+
+/// Walk candidates, returning the first unplayed match or, when `allow_played` is set, the first
+/// played one.
+fn pick<I: Iterator<Item = usize>>(
+    candidates: I,
+    played: &[bool],
+    allow_played: bool,
+    mut is_match: impl FnMut(usize) -> bool,
 ) -> Option<usize> {
     let mut fallback = None;
     for idx in candidates {
-        let Some(interaction) = interactions.get(idx) else {
-            continue;
-        };
-        if !matches_all(request, &interaction.request, config) {
+        if !is_match(idx) {
             continue;
         }
         if !played.get(idx).copied().unwrap_or(false) {
             return Some(idx);
         }
-        if fallback.is_none() {
+        if allow_played && fallback.is_none() {
             fallback = Some(idx);
         }
     }
@@ -95,19 +108,19 @@ pub fn find_grpc_match_index(
     interactions: &[GrpcInteraction],
     played: &[bool],
 ) -> Option<usize> {
-    let mut fallback = None;
-    for (idx, interaction) in interactions.iter().enumerate() {
-        if interaction.request.method != method {
-            continue;
-        }
-        if !played.get(idx).copied().unwrap_or(false) {
-            return Some(idx);
-        }
-        if fallback.is_none() {
-            fallback = Some(idx);
-        }
-    }
-    fallback
+    find_grpc_match_index_in(method, interactions, played, true)
+}
+
+/// Like [`find_grpc_match_index`], falling back to played interactions only when `allow_played` is set.
+pub fn find_grpc_match_index_in(
+    method: &str,
+    interactions: &[GrpcInteraction],
+    played: &[bool],
+    allow_played: bool,
+) -> Option<usize> {
+    pick(0..interactions.len(), played, allow_played, |idx| {
+        interactions[idx].request.method == method
+    })
 }
 
 /// Index of a gRPC interaction matching the method and serialized request body.
@@ -117,20 +130,21 @@ pub fn find_grpc_request_match_index(
     interactions: &[GrpcInteraction],
     played: &[bool],
 ) -> Option<usize> {
-    let mut fallback = None;
-    for (idx, interaction) in interactions.iter().enumerate() {
-        if interaction.request.method != request.method || interaction.request.body != request.body
-        {
-            continue;
-        }
-        if !played.get(idx).copied().unwrap_or(false) {
-            return Some(idx);
-        }
-        if fallback.is_none() {
-            fallback = Some(idx);
-        }
-    }
-    fallback
+    find_grpc_request_match_index_in(request, interactions, played, true)
+}
+
+/// Like [`find_grpc_request_match_index`], falling back to played interactions only when
+/// `allow_played` is set.
+pub fn find_grpc_request_match_index_in(
+    request: &GrpcRequest,
+    interactions: &[GrpcInteraction],
+    played: &[bool],
+    allow_played: bool,
+) -> Option<usize> {
+    pick(0..interactions.len(), played, allow_played, |idx| {
+        let recorded = &interactions[idx].request;
+        recorded.method == request.method && recorded.body == request.body
+    })
 }
 
 /// Find a matching WebSocket interaction by URI.
@@ -150,19 +164,19 @@ pub fn find_ws_match_index(
     interactions: &[WsInteraction],
     played: &[bool],
 ) -> Option<usize> {
-    let mut fallback = None;
-    for (idx, interaction) in interactions.iter().enumerate() {
-        if interaction.uri != uri {
-            continue;
-        }
-        if !played.get(idx).copied().unwrap_or(false) {
-            return Some(idx);
-        }
-        if fallback.is_none() {
-            fallback = Some(idx);
-        }
-    }
-    fallback
+    find_ws_match_index_in(uri, interactions, played, true)
+}
+
+/// Like [`find_ws_match_index`], falling back to played interactions only when `allow_played` is set.
+pub fn find_ws_match_index_in(
+    uri: &str,
+    interactions: &[WsInteraction],
+    played: &[bool],
+    allow_played: bool,
+) -> Option<usize> {
+    pick(0..interactions.len(), played, allow_played, |idx| {
+        interactions[idx].uri == uri
+    })
 }
 
 /// Whether a request satisfies every matcher the config names.
@@ -278,6 +292,99 @@ mod tests {
         assert_eq!(
             find_grpc_request_match_index(&different, &[interaction], &[false]),
             None
+        );
+    }
+
+    #[test]
+    fn replay_only_sessions_fall_back_to_played_interactions() {
+        let mut cassette = crate::cassette::Cassette::new();
+        cassette.set_interactions(vec![interaction("POST", "/turn")]);
+        let config = MatchConfig::default();
+
+        assert_eq!(
+            cassette
+                .take_match(&request("POST", "/turn"), &config)
+                .map(|m| m.0),
+            Some(0)
+        );
+        assert_eq!(
+            cassette
+                .take_match(&request("POST", "/turn"), &config)
+                .map(|m| m.0),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn recording_sessions_replay_only_unplayed_interactions() {
+        let mut cassette = crate::cassette::Cassette::new();
+        cassette.set_interactions(vec![interaction("POST", "/turn")]);
+        cassette.set_recording(true);
+        let config = MatchConfig::default();
+
+        assert_eq!(
+            cassette
+                .take_match(&request("POST", "/turn"), &config)
+                .map(|m| m.0),
+            Some(0)
+        );
+        assert!(cassette
+            .take_match(&request("POST", "/turn"), &config)
+            .is_none());
+    }
+
+    #[test]
+    fn recording_sessions_count_added_interactions_as_played() {
+        use crate::protocol::grpc::{GrpcRequest, GrpcResponse};
+
+        let mut cassette = crate::cassette::Cassette::new();
+        cassette.set_recording(true);
+        let config = MatchConfig::default();
+
+        cassette.add_interaction(interaction("POST", "/turn"));
+        cassette
+            .insert_interaction(0, interaction("POST", "/turn"))
+            .unwrap();
+        assert_eq!(cassette.played_indices, vec![true, true]);
+        assert!(cassette
+            .take_match(&request("POST", "/turn"), &config)
+            .is_none());
+
+        let grpc = GrpcInteraction::new(
+            GrpcRequest::new("/pkg.Svc/Call".to_string(), None, None),
+            GrpcResponse::new(0, None, None, None),
+            String::new(),
+            None,
+        );
+        cassette.add_grpc_interaction(grpc.clone());
+        cassette.insert_grpc_interaction(0, grpc.clone()).unwrap();
+        assert_eq!(cassette.grpc_played, vec![true, true]);
+        assert!(cassette.take_grpc_match("/pkg.Svc/Call").is_none());
+        assert!(cassette.take_grpc_request_match(&grpc.request).is_none());
+
+        cassette.add_ws_interaction(WsInteraction::new(
+            "wss://example.com".to_string(),
+            None,
+            None,
+            None,
+        ));
+        assert_eq!(cassette.ws_played, vec![true]);
+        assert!(cassette.take_ws_match("wss://example.com").is_none());
+
+        cassette.set_recording(false);
+        assert_eq!(
+            cassette
+                .take_match(&request("POST", "/turn"), &config)
+                .map(|m| m.0),
+            Some(0)
+        );
+        assert_eq!(
+            cassette.take_grpc_match("/pkg.Svc/Call").map(|m| m.0),
+            Some(0)
+        );
+        assert_eq!(
+            cassette.take_ws_match("wss://example.com").map(|m| m.0),
+            Some(0)
         );
     }
 }

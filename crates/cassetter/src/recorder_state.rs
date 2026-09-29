@@ -52,12 +52,13 @@ impl State {
         }
 
         let load_existing = exists && !builder.mode.replaces();
-        let cassette = if load_existing {
+        let mut cassette = if load_existing {
             Cassette::load(path_text(&builder.path)?)?
         } else {
             Cassette::new()
         };
         let can_record = builder.mode.can_record(exists);
+        cassette.set_recording(can_record);
         let http_count = cassette.interactions.len();
         let grpc_count = cassette.grpc_interactions.len();
         let next_order = http_count + grpc_count + cassette.ws_interactions.len();

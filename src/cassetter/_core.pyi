@@ -214,6 +214,7 @@ class Cassette:
     interactions: list[HttpInteraction]
     grpc_interactions: list[GrpcInteraction]
     ws_interactions: list[WsInteraction]
+    recording: bool
 
     @property
     def played_indices(self) -> list[bool]: ...
