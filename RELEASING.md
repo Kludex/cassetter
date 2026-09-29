@@ -1,7 +1,7 @@
 # Release cassetter
 
-A coordinated release publishes Python, TypeScript, Rust, and Go from one root
-`vX.Y.Z` tag. Every package uses the same version.
+A coordinated release publishes Python, TypeScript, Rust, and Go from one GitHub
+release and its root `vX.Y.Z` tag. Every package uses the same version.
 
 ## Configure trusted publishing
 
@@ -34,38 +34,31 @@ builds every artifact, installs the npm package, packages both Rust crates, and
 validates the Go module. It does not publish or create a tag. A tag run publishes
 `cassetter-core` before the dependent `cassetter` Rust SDK.
 
-## Create the release tag
+## Publish the GitHub release
 
 ```console
-git switch main
-git pull --ff-only
-git status --short
-git tag -a v0.11.0 -m "Release v0.11.0"
-git push origin v0.11.0
+gh release create v0.11.0 \
+  --target main \
+  --title "v0.11.0 - <release theme>" \
+  --notes-file release-notes.md
 ```
 
-Use a stable canonical SemVer tag. The tag starts the `Release` workflow. The
-workflow derives every package version from the tag and rejects prerelease,
-build-metadata, and non-canonical versions.
+Publishing the release creates the `v0.11.0` tag on `main`, and the new tag
+starts the `Release` workflow. Don't push the tag yourself. One GitHub release describes
+the changes shared by all four ecosystems.
+
+Use a stable canonical SemVer tag. The workflow derives every package version
+from the tag and rejects prerelease, build-metadata, and non-canonical versions.
 
 The build jobs do not receive publishing credentials. Separate jobs publish
 the verified artifacts through protected environments. The workflow also
 creates `go/v0.11.0` at the same commit without moving an existing Go tag.
 
-Do not create the GitHub release until the final `check coordinated release`
-job passes.
-
-## Publish the GitHub release
+Wait for the final `check coordinated release` job to pass:
 
 ```console
-gh release create v0.11.0 \
-  --verify-tag \
-  --title "v0.11.0 - <release theme>" \
-  --notes-file release-notes.md
+gh run watch "$(gh run list --workflow Release --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
 ```
-
-Use the existing root tag. One GitHub release describes the changes shared by
-all four ecosystems.
 
 ## Verify every registry
 
@@ -85,5 +78,5 @@ Confirm that each registry reports the same version. Confirm that
 Inspect every registry and both Git tags before retrying. Rerun failed jobs only
 when successful publish jobs already created immutable package versions.
 
-Do not move or replace a pushed tag. Correct source or artifact failures on
+Do not move or replace a release tag. Correct source or artifact failures on
 `main`, then publish a new patch version.
