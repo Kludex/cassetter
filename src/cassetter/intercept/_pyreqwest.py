@@ -111,7 +111,7 @@ def intercept(
         json_payload=kwargs.get("json"),
     )
 
-    raw = apply_before_record_request(cassette.before_record_request, method, url, norm_headers, body)
+    raw = apply_before_record_request(cassette, method, url, norm_headers, body)
     if raw is None:
         return original(client, *original_args, **kwargs)
     method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body

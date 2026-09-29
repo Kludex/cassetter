@@ -44,9 +44,7 @@ class Urllib3Interceptor:
             norm_headers = extract_headers(headers)
             norm_body = body.encode() if isinstance(body, str) else body
 
-            raw = apply_before_record_request(
-                cassette.before_record_request, norm_method, full_url, norm_headers, norm_body
-            )
+            raw = apply_before_record_request(cassette, norm_method, full_url, norm_headers, norm_body)
             if raw is None:
                 return original_urlopen(pool, method, url, body=body, headers=headers, **kwargs)  # type: ignore[return-value]
             norm_method, full_url, norm_headers, norm_body = raw.method, raw.uri, raw.headers, raw.body

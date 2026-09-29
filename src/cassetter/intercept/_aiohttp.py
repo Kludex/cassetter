@@ -47,7 +47,7 @@ class AiohttpInterceptor:
 
             norm_method = method.upper()
 
-            raw = apply_before_record_request(cassette.before_record_request, norm_method, uri, headers, body)
+            raw = apply_before_record_request(cassette, norm_method, uri, headers, body)
             if raw is None:
                 return await original_request(session, method, str_or_url, **kwargs)
             norm_method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body

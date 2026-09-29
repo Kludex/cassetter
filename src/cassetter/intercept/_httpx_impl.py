@@ -30,7 +30,7 @@ async def async_intercept(mod: Any, request: Any, passthrough: AsyncPassthrough)
     except mod.RequestNotRead:
         body = await request.aread()
 
-    raw = apply_before_record_request(cassette.before_record_request, method, uri, headers, body)
+    raw = apply_before_record_request(cassette, method, uri, headers, body)
     if raw is None:
         return await passthrough(request)
     method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
@@ -80,7 +80,7 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
     except mod.RequestNotRead:
         body = request.read()
 
-    raw = apply_before_record_request(cassette.before_record_request, method, uri, headers, body)
+    raw = apply_before_record_request(cassette, method, uri, headers, body)
     if raw is None:
         return passthrough(request)
     method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body

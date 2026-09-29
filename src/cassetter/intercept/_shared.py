@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from cassetter.cassette import BeforeRecordRequest, RawRequest, SkipRecording
+from cassetter.cassette import Cassette, RawRequest, SkipRecording
 
 
 def extract_headers(items: Iterable[tuple[str | bytes, str | bytes]] | None) -> dict[str, list[str]]:
@@ -22,18 +22,20 @@ def extract_headers(items: Iterable[tuple[str | bytes, str | bytes]] | None) -> 
 
 
 def apply_before_record_request(
-    hook: BeforeRecordRequest | None,
+    cassette: Cassette,
     method: str,
     uri: str,
     headers: dict[str, list[str]],
     body: bytes | None,
 ) -> RawRequest | None:
-    """Run the before_record_request hook.
+    """Note the request as sent, then run the cassette's before_record_request hook.
 
     Returns the (possibly modified) request, or None if the hook raised
     `SkipRecording` and the caller should pass the request through live.
     """
+    cassette.note_sent_request(method, uri, headers, body)
     request = RawRequest(method, uri, headers, body)
+    hook = cassette.before_record_request
     if hook is None:
         return request
     try:
