@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+from typing import Any
+
 import pytest
 
+from cassetter.pytest_plugin import unplayed
 from cassetter.pytest_plugin.fixtures import (
     cassette as cassette,
     vcr as vcr,
@@ -17,9 +21,11 @@ from cassetter.pytest_plugin.orphans import (
     node_down,
     session_finish,
 )
+from cassetter.pytest_plugin.unplayed import UnplayedInteractionsWarning as UnplayedInteractionsWarning
 
 __all__ = [
     "OrphanedCassetteWarning",
+    "UnplayedInteractionsWarning",
     "cassette",
     "check_orphans",
     "configure",
@@ -49,6 +55,16 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     add_options(parser)
+    unplayed.add_options(parser)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None, Any, None]:
+    outcome = yield
+    report = outcome.get_result()
+    unplayed.store_report(item, report)
+    if report.when == "teardown":
+        unplayed.check_after_teardown(item, report)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

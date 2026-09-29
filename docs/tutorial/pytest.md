@@ -114,7 +114,7 @@ def vcr_config():
     }
 ```
 
-The supported keys are the same options accepted by `use_cassette()`:
+The supported keys are the options accepted by `use_cassette()`, plus the plugin's `on_unplayed` check:
 
 | Key | Description |
 |-----|-------------|
@@ -130,6 +130,7 @@ The supported keys are the same options accepted by `use_cassette()`:
 | `intercept` | Libraries to intercept |
 | `max_age` | Cassette expiry, e.g. `"30d"` |
 | `on_expiry` | What to do with expired cassettes |
+| `on_unplayed` | What to do when a passing test leaves recordings unplayed, see [Catch unplayed interactions](#catch-unplayed-interactions) |
 | `ignore_localhost` | Bypass requests to localhost |
 | `ignore_hosts` | Bypass requests to matching hosts |
 | `before_record_request` | Hook to modify or skip requests |
@@ -157,7 +158,7 @@ The marker accepts overrides for a single test:
 async def test_special_case(): ...
 ```
 
-The first positional argument sets the cassette file name. The keyword arguments `record_mode`, `cassette_dir`, `max_age`, `on_expiry`, `ignore_hosts`, and `match_on` override the module configuration for that test:
+The first positional argument sets the cassette file name. The keyword arguments `record_mode`, `cassette_dir`, `max_age`, `on_expiry`, `on_unplayed`, `ignore_hosts`, and `match_on` override the module configuration for that test:
 
 ```python
 @pytest.mark.vcr(ignore_hosts=["gateway.example"], match_on=["method", "uri", "json_body"])
@@ -195,6 +196,26 @@ Override the `vcr_cassette_dir` fixture:
 def vcr_cassette_dir():
     return "tests/my_cassettes"
 ```
+
+## Catch unplayed interactions
+
+Replay passes as long as each request finds a match. A test that stops sending one of its recorded requests still passes, and the cassette quietly keeps an interaction nothing uses. Set `on_unplayed` to catch it:
+
+```python
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"on_unplayed": "fail"}
+```
+
+| Value | Behavior |
+|-------|----------|
+| `ignore` | Don't check (default) |
+| `warn` | Emit `UnplayedInteractionsWarning` |
+| `fail` | Fail the test at teardown |
+
+The report lists the unplayed interactions by protocol, e.g. `HTTP [1]; gRPC [0]`. Only passing tests on cassettes that can't record are checked: a failing test already says what went wrong, and a cassette that can record is still being written.
+
+Set it for the whole suite with the `vcr_on_unplayed` ini option, and opt a single test out with `@pytest.mark.vcr(on_unplayed="ignore")`. The marker wins over `vcr_config`, which wins over the ini option.
 
 ## Find orphaned cassettes
 

@@ -509,7 +509,8 @@ with use_cassette("cassette.yaml", max_age="30d", on_expiry="rerecord"):
 
 Also configurable via pytest:
 
-```ini
+```toml
+# pyproject.toml
 [tool.pytest.ini_options]
 vcr_max_age = "30d"
 vcr_on_expiry = "warn"
@@ -521,6 +522,18 @@ Or per-test:
 @pytest.mark.vcr(max_age="7d", on_expiry="fail")
 async def test_fresh_data(): ...
 ```
+
+## Unplayed interactions
+
+A test that stops sending a recorded request still passes on replay. Fail it instead:
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+vcr_on_unplayed = "fail"  # or "warn"; the default is "ignore"
+```
+
+Passing tests on replay-only cassettes then fail at teardown with the unplayed interactions by protocol. Set it per module with `on_unplayed` in `vcr_config`, or per test with `@pytest.mark.vcr(on_unplayed=...)`.
 
 ## Orphan detection
 

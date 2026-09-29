@@ -22,6 +22,7 @@ from cassetter.config import Cassetter
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._registry import resolve_interceptors
 from cassetter.pytest_plugin.orphans import loaded_cassettes
+from cassetter.pytest_plugin.unplayed import resolve_on_unplayed, schedule_check
 
 _CASSETTER_FIELDS = {field.name for field in fields(Cassetter)}
 
@@ -93,6 +94,7 @@ def _resolve_cassette(
     options = dict(marker_kwargs)
     marker_cassette_dir = options.pop("cassette_dir", None)
     additional_matchers = options.pop("additional_matchers", None)
+    options.pop("on_unplayed", None)  # a check the fixture runs, not cassette configuration
     if unsupported := sorted(options.keys() - {"record_mode", "max_age", "on_expiry", "ignore_hosts", "match_on"}):
         raise TypeError(f"unsupported @pytest.mark.vcr options: {', '.join(unsupported)}")
     config = replace(config, **options)
@@ -173,6 +175,12 @@ def cassette(
         default_cassette=default_cassette,
     )
 
+    on_unplayed = resolve_on_unplayed(
+        marker.kwargs,
+        None if isinstance(vcr_config, Cassetter) else vcr_config,
+        request.config.getini("vcr_on_unplayed") or None,
+    )
+
     # Track loaded cassette paths for orphan detection
     loaded_cassettes(request.config).add(os.path.abspath(cassette.path))
 
@@ -188,6 +196,7 @@ def cassette(
         current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()
+    schedule_check(request.node, cassette, on_unplayed)
 
 
 @pytest.fixture
