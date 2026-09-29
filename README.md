@@ -522,6 +522,17 @@ Or per-test:
 async def test_fresh_data(): ...
 ```
 
+## Unplayed interactions
+
+A test that stops sending a recorded request still passes on replay. Fail it instead:
+
+```ini
+[tool.pytest.ini_options]
+vcr_on_unplayed = "fail"  # or "warn"; the default is "ignore"
+```
+
+Passing tests on replay-only cassettes then fail at teardown with the unplayed interactions by protocol. Set it per module with `on_unplayed` in `vcr_config`, or per test with `@pytest.mark.vcr(on_unplayed=...)`.
+
 ## Orphan detection
 
 Find cassette files that no test uses:

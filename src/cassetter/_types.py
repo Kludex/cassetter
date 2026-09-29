@@ -23,6 +23,7 @@ class CassetteConfig(TypedDict, total=False):
     intercept: list[str]
     max_age: str
     on_expiry: str
+    on_unplayed: str
     ignore_localhost: bool
     ignore_hosts: list[str]
     before_record_request: BeforeRecordRequest
