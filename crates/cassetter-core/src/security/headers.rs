@@ -6,6 +6,14 @@ use std::collections::HashMap;
 /// `x-` header. An entry starting with `!` keeps the headers it matches even
 /// when another entry, including a default, would remove them.
 pub fn filter_headers(headers: &mut HashMap<String, Vec<String>>, filtered: &[String]) {
+    // Plain names are the common case, and every interaction runs through here.
+    if !filtered
+        .iter()
+        .any(|entry| entry.contains('*') || entry.starts_with('!'))
+    {
+        headers.retain(|key, _| !filtered.iter().any(|name| name.eq_ignore_ascii_case(key)));
+        return;
+    }
     let (kept, removed): (Vec<String>, Vec<String>) = filtered
         .iter()
         .map(|entry| entry.to_lowercase())
