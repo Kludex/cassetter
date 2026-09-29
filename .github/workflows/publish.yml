@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  # Publishing a GitHub release creates its `vX.Y.Z` tag and starts this workflow.
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -16,6 +17,8 @@ permissions:
 jobs:
   version:
     name: validate release version
+    # Go-only releases are tagged `go/vX.Y.Z` and publish nothing here.
+    if: ${{ github.event_name != 'release' || startsWith(github.ref_name, 'v') }}
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -26,7 +29,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           TAG: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "release" ]; then
             version=${TAG#v}
           else
             version=$INPUT_VERSION
@@ -436,7 +439,7 @@ jobs:
   tag-go:
     name: tag Go module
     needs: [version, validate-go, publish-pypi, publish-npm, publish-rust-sdk]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.publish-pypi.result == 'success' && needs.publish-npm.result == 'success' && needs.publish-rust-sdk.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'release' && needs.validate-go.result == 'success' && needs.publish-pypi.result == 'success' && needs.publish-npm.result == 'success' && needs.publish-rust-sdk.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -495,7 +498,7 @@ jobs:
   publish-pypi:
     name: publish to PyPI
     needs: [version, validate-go, build-wheels, build-sdist]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.build-wheels.result == 'success' && needs.build-sdist.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'release' && needs.validate-go.result == 'success' && needs.build-wheels.result == 'success' && needs.build-sdist.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -519,7 +522,7 @@ jobs:
   publish-npm:
     name: publish to npm
     needs: [version, validate-go, package-npm]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.package-npm.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'release' && needs.validate-go.result == 'success' && needs.package-npm.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: npm
@@ -543,7 +546,7 @@ jobs:
   publish-crates-io:
     name: publish to crates.io
     needs: [version, validate-go, package-rust]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.validate-go.result == 'success' && needs.package-rust.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'release' && needs.validate-go.result == 'success' && needs.package-rust.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: crates-io
@@ -580,7 +583,7 @@ jobs:
   publish-rust-sdk:
     name: publish Rust SDK to crates.io
     needs: [version, package-rust, publish-crates-io]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.package-rust.result == 'success' && needs.publish-crates-io.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'release' && needs.package-rust.result == 'success' && needs.publish-crates-io.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: crates-io
@@ -633,7 +636,7 @@ jobs:
   release-check:
     name: check coordinated release
     needs: [tag-go, publish-pypi, publish-npm, publish-crates-io, publish-rust-sdk]
-    if: ${{ always() && github.event_name == 'push' }}
+    if: ${{ always() && github.event_name == 'release' && startsWith(github.ref_name, 'v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
