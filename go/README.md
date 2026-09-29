@@ -311,7 +311,10 @@ transport := cassetter.NewTransport(
 )
 ```
 
-Each option adds to the safe defaults.
+Each option adds to the safe defaults. A header name may use `*` to match any
+run of characters, and one starting with `!` keeps the headers it matches:
+`WithFilterHeaders("x-*", "!x-amzn-bedrock-*")` drops every `x-` header except
+Bedrock's.
 
 ## Inspect, diff, scrub, and convert
 

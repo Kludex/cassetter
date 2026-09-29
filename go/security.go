@@ -37,15 +37,55 @@ func DefaultSecurityConfig() SecurityConfig {
 	}
 }
 
+// filterHeaders removes filtered headers, ignoring case. An entry may use `*` to match any run of
+// characters, and an entry starting with `!` keeps the headers it matches even when another entry, including
+// a default, would remove them.
 func filterHeaders(headers http.Header, filtered []string) {
-	for name := range headers {
-		for _, candidate := range filtered {
-			if strings.EqualFold(name, candidate) {
-				delete(headers, name)
-				break
-			}
+	var kept, removed []string
+	for _, entry := range filtered {
+		entry = strings.ToLower(entry)
+		if pattern, ok := strings.CutPrefix(entry, "!"); ok {
+			kept = append(kept, pattern)
+		} else {
+			removed = append(removed, entry)
 		}
 	}
+	for name := range headers {
+		lower := strings.ToLower(name)
+		if matchesAny(removed, lower) && !matchesAny(kept, lower) {
+			delete(headers, name)
+		}
+	}
+}
+
+func matchesAny(patterns []string, name string) bool {
+	for _, pattern := range patterns {
+		if globMatch(pattern, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// globMatch reports whether name matches pattern, where `*` matches any run of characters.
+func globMatch(pattern, name string) bool {
+	parts := strings.Split(pattern, "*")
+	rest, ok := strings.CutPrefix(name, parts[0])
+	if !ok {
+		return false
+	}
+	if len(parts) == 1 {
+		return rest == ""
+	}
+	for _, part := range parts[1 : len(parts)-1] {
+		index := strings.Index(rest, part)
+		if index < 0 {
+			return false
+		}
+		rest = rest[index+len(part):]
+	}
+	last := parts[len(parts)-1]
+	return len(rest) >= len(last) && strings.HasSuffix(rest, last)
 }
 
 func scrubURI(uri string, filtered []string, replacement string) string {

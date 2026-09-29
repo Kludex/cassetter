@@ -93,6 +93,9 @@ await useCassette("cassette.yaml", {
 These **add to** the built-in lists rather than standing in for them, so naming
 one more header to scrub never starts recording the ones above. Read the
 built-ins with `defaultFilterHeaders()` and friends if you need them directly.
+A header entry may use `*` to match any run of characters, and one starting
+with `!` keeps the headers it matches: `["x-*", "!x-amzn-bedrock-*"]` drops
+every `x-` header except Bedrock's.
 
 Filtering applies to every protocol: HTTP headers, query params, and bodies;
 gRPC metadata and the `jsonDebug` payload; WebSocket handshake headers and
