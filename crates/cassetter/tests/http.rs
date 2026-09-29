@@ -223,6 +223,32 @@ async fn concurrent_recorders_keep_cassettes_isolated() {
 }
 
 #[tokio::test]
+async fn cassette_is_written_only_on_finish() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("deferred.yaml");
+    let (url, server) = one_response_server("body").await;
+    let recorder = Recorder::builder(&path)
+        .record_mode(RecordMode::All)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+    assert_eq!(
+        client
+            .execute(Request::new(Method::GET, url))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+        "body"
+    );
+    assert!(!path.exists());
+    recorder.finish().await.unwrap();
+    server.await.unwrap();
+    assert!(std::fs::read_to_string(path).unwrap().contains("body"));
+}
+
+#[tokio::test]
 async fn finalization_reports_a_save_error() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("cassette.yaml");
@@ -233,12 +259,11 @@ async fn finalization_reports_a_save_error() {
         .build()
         .unwrap();
     let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
-
-    let error = client
+    let response = client
         .execute(Request::new(Method::GET, url))
         .await
-        .unwrap_err();
-    assert!(matches!(error, Error::Recording(_)));
+        .unwrap();
+    assert_eq!(response.text().await.unwrap(), "response");
     let error = recorder.finish().await.unwrap_err();
     assert!(matches!(error, Error::Recording(_)));
     let error = recorder.finish().await.unwrap_err();
