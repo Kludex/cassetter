@@ -31,7 +31,7 @@ gh run watch "${run_url##*/}" --exit-status
 
 Use the intended release version. A manual run executes the complete CI suite,
 builds every artifact, installs the npm package, packages both Rust crates, and
-validates the Go module. It does not publish or create a tag. A release run publishes
+validates the Go module. It does not publish or create a tag. A tag run publishes
 `cassetter-core` before the dependent `cassetter` Rust SDK.
 
 ## Publish the GitHub release
@@ -43,8 +43,8 @@ gh release create v0.11.0 \
   --notes-file release-notes.md
 ```
 
-Publishing the release creates the `v0.11.0` tag on `main` and starts the
-`Release` workflow. Don't push the tag yourself. One GitHub release describes
+Publishing the release creates the `v0.11.0` tag on `main`, and the new tag
+starts the `Release` workflow. Don't push the tag yourself. One GitHub release describes
 the changes shared by all four ecosystems.
 
 Use a stable canonical SemVer tag. The workflow derives every package version
