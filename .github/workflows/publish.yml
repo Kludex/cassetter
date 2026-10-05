@@ -255,7 +255,7 @@ jobs:
           version: 0.15.2
           use-cache: false
       - if: matrix.cross == 'zig'
-        uses: taiki-e/install-action@5bf6ce016fd2e72eefc647cbca1e4213f65955b8 # v2
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2
         with:
           tool: cargo-zigbuild
       - run: npm ci
