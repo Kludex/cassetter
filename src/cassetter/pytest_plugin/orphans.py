@@ -70,13 +70,23 @@ def is_xdist_worker(config: pytest.Config) -> bool:
     return hasattr(config, "workerinput")
 
 
-def node_down(node: WorkerNode) -> None:
+def node_down(node: WorkerNode, error: object = None) -> None:
     """Merge a finished xdist worker's loaded cassettes into the controller's set.
 
     Each worker only sees the tests in its own shard, so without this the
     controller reports every cassette the other workers used as an orphan.
+
+    A worker that crashed (``error`` is set, e.g. "Not properly terminated"
+    after a segfault or ``os._exit``) never sent its ``workeroutput``; there
+    is nothing to merge, and raising here would turn one dead worker into an
+    INTERNALERROR that aborts the whole session and hides every result.
     """
-    loaded = node.workeroutput.get("vcr_loaded_cassettes")
+    if error is not None:
+        return
+    workeroutput = getattr(node, "workeroutput", None)
+    if workeroutput is None:
+        return
+    loaded = workeroutput.get("vcr_loaded_cassettes")
     if loaded is None:
         return
     loaded_cassettes(node.config).update(loaded)
