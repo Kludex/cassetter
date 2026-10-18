@@ -1,6 +1,16 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  createServer,
+  get as httpGet,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+  type RequestOptions,
+  type Server,
+} from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -381,6 +391,133 @@ describe("overlapping scopes", () => {
 
     expect(globalThis.fetch).toBe(original);
     expect(upstream).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
+});
+
+describe("node:http", () => {
+  let server: Server;
+  let origin: string;
+  let hits: number;
+
+  beforeEach(async () => {
+    hits = 0;
+    server = createServer(async (req, res) => {
+      hits += 1;
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "content-encoding": "gzip",
+        "x-hit": String(hits),
+      });
+      res.end(
+        gzipSync(
+          JSON.stringify({ method: req.method, url: req.url, body: Buffer.concat(chunks).toString() }),
+        ),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => {
+    server.close();
+  });
+
+  function send(
+    url: string,
+    options: RequestOptions = {},
+    body?: string,
+  ): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = httpRequest(url, options, async (res) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of res) chunks.push(chunk as Buffer);
+        const raw = Buffer.concat(chunks);
+        const decoded = res.headers["content-encoding"] === "gzip" ? gunzipSync(raw) : raw;
+        resolve({ status: res.statusCode!, headers: res.headers, body: decoded.toString() });
+      });
+      req.on("error", reject);
+      req.end(body);
+    });
+  }
+
+  it("records on first run and replays on the second", async () => {
+    const path = join(dir, "http.yaml");
+    const expected = { method: "POST", url: "/echo?q=1", body: '{"hello":"world"}' };
+
+    const cassette = await useCassette(path, async () => {
+      const res = await send(
+        `${origin}/echo?q=1`,
+        { method: "POST", headers: { "content-type": "application/json" } },
+        JSON.stringify({ hello: "world" }),
+      );
+      expect(res.status).toBe(200);
+      expect(JSON.parse(res.body)).toEqual(expected);
+    });
+
+    expect(hits).toBe(1);
+    const rec = cassette.interactions[0];
+    expect(rec.request.uri).toBe(`${origin}/echo?q=1`);
+    expect(rec.request.body.content).toEqual({ hello: "world" });
+    expect(rec.response.body.content).toEqual(expected);
+
+    await useCassette(path, { recordMode: "none" }, async () => {
+      const res = await send(
+        `${origin}/echo?q=1`,
+        { method: "POST", headers: { "content-type": "application/json" } },
+        JSON.stringify({ hello: "world" }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers["x-hit"]).toBe("1");
+      expect(JSON.parse(res.body)).toEqual(expected);
+    });
+
+    expect(hits).toBe(1);
+  });
+
+  it("intercepts http.get with an options object", async () => {
+    const { hostname, port } = new URL(origin);
+    const cassette = await useCassette(join(dir, "get.yaml"), async () => {
+      const status = await new Promise<number>((resolve, reject) => {
+        httpGet({ hostname, port, path: "/thing" }, (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode!));
+        }).on("error", reject);
+      });
+      expect(status).toBe(200);
+    });
+
+    expect(cassette.interactions[0].request.uri).toBe(`${origin}/thing`);
+  });
+
+  it("emits NoMatchError on the request in none mode", async () => {
+    await expect(
+      useCassette(join(dir, "none.yaml"), { recordMode: "none" }, () => send(`${origin}/nope`)),
+    ).rejects.toThrow(NoMatchError);
+    expect(hits).toBe(0);
+  });
+
+  it("bypasses the cassette for localhost when configured", async () => {
+    const cassette = await useCassette(
+      join(dir, "local.yaml"),
+      { recordMode: "none", ignoreLocalhost: true },
+      () => send(`${origin}/health`),
+    );
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
+
+  it("stops intercepting after the scope ends", async () => {
+    const before = httpRequest;
+    const cassette = await useCassette(join(dir, "after.yaml"), async () => {
+      expect(httpRequest).not.toBe(before);
+    });
+    expect(httpRequest).toBe(before);
+
+    await send(`${origin}/after`);
+    expect(hits).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
   });
 });
