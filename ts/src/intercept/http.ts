@@ -9,11 +9,11 @@
 import http from "node:http";
 import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
-import { Readable, Writable } from "node:stream";
+import { Readable, Transform, Writable, pipeline } from "node:stream";
 
 import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap } from "../types.js";
-import { isLocalhost, type Interceptor } from "./base.js";
+import { isLocalhost, liveRequests, type Interceptor } from "./base.js";
 
 type RequestFn = (...args: unknown[]) => http.ClientRequest;
 type Module = Record<"request" | "get", RequestFn>;
@@ -53,7 +53,7 @@ export class HttpInterceptor implements Interceptor {
         if (!requestPatch.active) return activeRequest(requestPatch.previous)(...args);
         const live = activeRequest(requestPatch.previous);
         const { url, options, callback } = parseArgs(defaultProtocol, args);
-        if (cassette.ignoreLocalhost && isLocalhost(url)) return live(...args);
+        if (liveRequests.getStore() || (cassette.ignoreLocalhost && isLocalhost(url))) return live(...args);
         return new CassetteRequest(cassette, live, args, url, options, callback) as unknown as http.ClientRequest;
       };
       const get: RequestFn = (...args) => {
@@ -92,6 +92,8 @@ class CassetteRequest extends Writable {
   readonly path: string;
   private readonly _headers: Record<string, string | string[]> = {};
   private readonly _chunks: Buffer[] = [];
+  private _timeout: number | null = null;
+  private _inflight: http.ClientRequest | null = null;
 
   constructor(
     private readonly _cassette: Cassette,
@@ -104,8 +106,17 @@ class CassetteRequest extends Writable {
     super({ autoDestroy: false });
     this.method = (options.method ?? "GET").toUpperCase();
     this.path = options.path ?? "/";
-    for (const [key, value] of Object.entries(options.headers ?? {})) {
-      if (value !== undefined) this.setHeader(key, value);
+    const headers = options.headers ?? {};
+    const entries: [string, unknown][] = [];
+    if (Array.isArray(headers)) {
+      for (let i = 0; i < headers.length; i += 2) entries.push([headers[i], headers[i + 1]]);
+    } else {
+      entries.push(...Object.entries(headers));
+    }
+    for (const [key, value] of entries) {
+      if (value === undefined) continue;
+      const previous = this.getHeader(key);
+      this.setHeader(key, previous === undefined ? (value as string) : [previous, value as string].flat().map(String));
     }
     if (callback) this.once("response", callback);
   }
@@ -131,7 +142,10 @@ class CassetteRequest extends Writable {
     delete this._headers[name.toLowerCase()];
   }
 
-  setTimeout(): this {
+  setTimeout(ms: number, callback?: () => void): this {
+    this._timeout = ms;
+    this._inflight?.setTimeout(ms);
+    if (callback) this.once("timeout", callback);
     return this;
   }
 
@@ -150,6 +164,11 @@ class CassetteRequest extends Writable {
     done();
   }
 
+  override _destroy(error: Error | null, done: (error?: Error | null) => void): void {
+    this._inflight?.destroy(error ?? undefined);
+    done(error);
+  }
+
   override _final(done: () => void): void {
     done();
     this._respond().catch((error: Error) => this.destroy(error));
@@ -165,7 +184,12 @@ class CassetteRequest extends Writable {
 
     try {
       const recorded = cassette.play(this.method, this._url, headers, body);
-      return this._emitResponse(recorded.status, recorded.headers, bodyToBuffer(recorded.body));
+      const replayed = bodyToBuffer(recorded.body);
+      return this._emitResponse(
+        recorded.status,
+        recorded.headers,
+        Readable.from(replayed.length ? [replayed] : [], { objectMode: false }),
+      );
     } catch (e) {
       if (!(e instanceof NoMatchError) || !cassette.canRecord) throw e;
     }
@@ -177,27 +201,31 @@ class CassetteRequest extends Writable {
     for (let i = 0; i < real.rawHeaders.length; i += 2) {
       (responseHeaders[real.rawHeaders[i].toLowerCase()] ??= []).push(real.rawHeaders[i + 1]);
     }
-    const responseBody = Buffer.concat(await real.toArray());
-
-    cassette.record(
-      this.method,
-      this._url,
-      headers,
-      body,
-      real.statusCode ?? 200,
-      responseHeaders,
-      responseBody,
-      order,
-    );
-    this._emitResponse(real.statusCode ?? 200, responseHeaders, responseBody);
+    const status = real.statusCode ?? 200;
+    const chunks: Buffer[] = [];
+    const tap = new Transform({
+      transform(chunk: Buffer, _encoding, next) {
+        chunks.push(chunk);
+        next(null, chunk);
+      },
+      flush: (next) => {
+        this._inflight = null;
+        cassette.record(this.method, this._url, headers, body, status, responseHeaders, Buffer.concat(chunks), order);
+        next();
+      },
+    });
+    pipeline(real, tap, () => {});
+    this._emitResponse(status, responseHeaders, tap);
   }
 
   private _sendLive(body: Buffer): Promise<http.IncomingMessage> {
     const [first, second] = this._args;
-    const req =
+    const req = (this._inflight =
       typeof first === "string" || first instanceof URL
         ? this._live(first, { ...(typeof second === "object" ? second : {}), headers: this._headers })
-        : this._live({ ...(first as http.RequestOptions), headers: this._headers });
+        : this._live({ ...(first as http.RequestOptions), headers: this._headers }));
+    if (this._timeout !== null) req.setTimeout(this._timeout);
+    req.on("timeout", () => this.emit("timeout"));
     return new Promise((resolve, reject) => {
       req.once("response", resolve);
       req.once("error", reject);
@@ -205,7 +233,7 @@ class CassetteRequest extends Writable {
     });
   }
 
-  private _emitResponse(status: number, headers: HeaderMap, body: Buffer): void {
+  private _emitResponse(status: number, headers: HeaderMap, body: Readable): void {
     const rawHeaders: string[] = [];
     const joined: http.IncomingHttpHeaders = {};
     for (const [key, values] of Object.entries(headers)) {
@@ -213,7 +241,7 @@ class CassetteRequest extends Writable {
       joined[key.toLowerCase()] = key.toLowerCase() === "set-cookie" ? values : values.join(", ");
     }
 
-    const response = Object.assign(Readable.from(body.length ? [body] : [], { objectMode: false }), {
+    const response = Object.assign(body, {
       statusCode: status,
       statusMessage: http.STATUS_CODES[status] ?? "",
       httpVersion: "1.1",

@@ -4,11 +4,13 @@ import {
   get as httpGet,
   request as httpRequest,
   type IncomingHttpHeaders,
+  type IncomingMessage,
   type RequestOptions,
   type Server,
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
+import { once } from "node:events";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 
@@ -399,11 +401,19 @@ describe("node:http", () => {
   let server: Server;
   let origin: string;
   let hits: number;
+  let release: () => void;
 
   beforeEach(async () => {
     hits = 0;
     server = createServer(async (req, res) => {
       hits += 1;
+      if (req.url === "/stall") return;
+      if (req.url === "/stream") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.write("first ");
+        release = () => res.end("last");
+        return;
+      }
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
       res.writeHead(200, {
@@ -519,5 +529,54 @@ describe("node:http", () => {
     await send(`${origin}/after`);
     expect(hits).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
+  });
+
+  it("hands the live response over before its body ends", async () => {
+    const cassette = await useCassette(join(dir, "stream.yaml"), async () => {
+      const res = await new Promise<IncomingMessage>((resolve, reject) =>
+        httpGet(`${origin}/stream`, resolve).on("error", reject),
+      );
+      const [first] = (await once(res, "data")) as [Buffer];
+      expect(first.toString()).toBe("first ");
+      release();
+      let rest = "";
+      for await (const chunk of res) rest += chunk;
+      expect(rest).toBe("last");
+    });
+
+    expect(cassette.interactions[0].response.body.content).toBe("first last");
+  });
+
+  it("applies setTimeout to the live request", async () => {
+    await useCassette(join(dir, "timeout.yaml"), async () => {
+      const req = httpGet(`${origin}/stall`);
+      req.on("error", () => {});
+      await new Promise<void>((resolve) => req.setTimeout(50, resolve));
+      req.destroy();
+    });
+    expect(hits).toBe(1);
+  });
+
+  it("reads headers given as a flat array", async () => {
+    const cassette = await useCassette(join(dir, "raw.yaml"), () =>
+      send(`${origin}/raw`, { headers: ["X-Tag", "a", "X-Tag", "b", "Accept", "text/plain"] }),
+    );
+    const { headers } = cassette.interactions[0].request;
+    expect(headers["x-tag"]).toEqual(["a", "b"]);
+    expect(headers.accept).toEqual(["text/plain"]);
+  });
+
+  it("records a fetch built on node:http once", async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const res = await send(String(input instanceof Request ? input.url : input));
+      return new Response(res.body, { status: res.status });
+    }) as typeof globalThis.fetch;
+
+    const cassette = await useCassette(join(dir, "polyfill.yaml"), async () => {
+      await fetch(`${origin}/polyfill`);
+    });
+
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(1);
   });
 });
