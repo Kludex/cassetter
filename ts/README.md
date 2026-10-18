@@ -156,7 +156,7 @@ Two interceptors are installed by default:
 
 | Name | Patches | Covers |
 | --- | --- | --- |
-| `fetch` | the global `fetch` | `fetch`, `undici`, and libraries built on them |
+| `fetch` | the global `fetch` | `fetch` and libraries built on it |
 | `http` | `request` and `get` on `node:http` and `node:https` | `node-fetch`, `axios`, `gaxios` and the Google Cloud clients |
 
 Pass `intercept` to install only some of them:
@@ -165,7 +165,9 @@ Pass `intercept` to install only some of them:
 await useCassette("cassette.yaml", { intercept: ["fetch"] }, async () => { ... });
 ```
 
-`ignoreLocalhost: true` lets localhost traffic through untouched.
+`ignoreLocalhost: true` lets localhost traffic through untouched. `CONNECT`,
+upgrade, and `Expect: 100-continue` requests always go live, since they trade data
+before or instead of a response.
 
 > [!NOTE]
 > The `http` interceptor swaps the functions on the module. Code that saved

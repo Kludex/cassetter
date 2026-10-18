@@ -579,4 +579,41 @@ describe("node:http", () => {
     expect(hits).toBe(1);
     expect(cassette.interactions).toHaveLength(1);
   });
+
+  it("records a nested scope's request only in the inner cassette", async () => {
+    const outer = await useCassette(join(dir, "outer.yaml"), { recordMode: "none" }, async () => {
+      const inner = await useCassette(join(dir, "inner.yaml"), () => send(`${origin}/nested`));
+      expect(inner.interactions).toHaveLength(1);
+    });
+    expect(outer.interactions).toHaveLength(0);
+    expect(hits).toBe(1);
+  });
+
+  it("aborts a replayed request through its signal", async () => {
+    const path = join(dir, "signal.yaml");
+    await useCassette(path, () => send(`${origin}/signal`));
+
+    await useCassette(path, { recordMode: "none" }, async () => {
+      const controller = new AbortController();
+      const result = send(`${origin}/signal`, { signal: controller.signal });
+      controller.abort();
+      await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    });
+  });
+
+  it("sends Expect: 100-continue requests live", async () => {
+    const cassette = await useCassette(join(dir, "expect.yaml"), { recordMode: "none" }, async () => {
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = httpRequest(`${origin}/expect`, { method: "POST", headers: { expect: "100-continue" } }, (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        });
+        req.on("error", reject);
+        req.on("continue", () => req.end("late body"));
+      });
+      expect(status).toBe(200);
+    });
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
 });

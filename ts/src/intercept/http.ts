@@ -9,7 +9,7 @@
 import http from "node:http";
 import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
-import { Readable, Transform, Writable, pipeline } from "node:stream";
+import { Readable, Transform, Writable, addAbortSignal, pipeline } from "node:stream";
 
 import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap } from "../types.js";
@@ -53,7 +53,9 @@ export class HttpInterceptor implements Interceptor {
         if (!requestPatch.active) return activeRequest(requestPatch.previous)(...args);
         const live = activeRequest(requestPatch.previous);
         const { url, options, callback } = parseArgs(defaultProtocol, args);
-        if (liveRequests.getStore() || (cassette.ignoreLocalhost && isLocalhost(url))) return live(...args);
+        if (liveRequests.getStore() || (cassette.ignoreLocalhost && isLocalhost(url)) || isTunnel(options)) {
+          return live(...args);
+        }
         return new CassetteRequest(cassette, live, args, url, options, callback) as unknown as http.ClientRequest;
       };
       const get: RequestFn = (...args) => {
@@ -119,6 +121,7 @@ class CassetteRequest extends Writable {
       this.setHeader(key, previous === undefined ? (value as string) : [previous, value as string].flat().map(String));
     }
     if (callback) this.once("response", callback);
+    if (options.signal) addAbortSignal(options.signal, this);
   }
 
   setHeader(name: string, value: number | string | readonly string[]): this {
@@ -220,10 +223,11 @@ class CassetteRequest extends Writable {
 
   private _sendLive(body: Buffer): Promise<http.IncomingMessage> {
     const [first, second] = this._args;
-    const req = (this._inflight =
+    const req = (this._inflight = liveRequests.run(true, () =>
       typeof first === "string" || first instanceof URL
         ? this._live(first, { ...(typeof second === "object" ? second : {}), headers: this._headers })
-        : this._live({ ...(first as http.RequestOptions), headers: this._headers }));
+        : this._live({ ...(first as http.RequestOptions), headers: this._headers }),
+    ));
     if (this._timeout !== null) req.setTimeout(this._timeout);
     req.on("timeout", () => this.emit("timeout"));
     return new Promise((resolve, reject) => {
@@ -282,4 +286,11 @@ function parseArgs(
     options: { ...options, path },
     callback,
   };
+}
+
+/** `CONNECT`, upgrades, and `Expect: 100-continue` trade data before or instead of a response, so they go live. */
+function isTunnel(options: http.RequestOptions): boolean {
+  const headers = options.headers ?? {};
+  const names = Array.isArray(headers) ? headers.filter((_, i) => i % 2 === 0) : Object.keys(headers);
+  return options.method?.toUpperCase() === "CONNECT" || names.some((name) => /^(upgrade|expect)$/i.test(name));
 }
