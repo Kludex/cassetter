@@ -61,6 +61,7 @@ export type {
 } from "./types.js";
 
 export { FetchInterceptor } from "./intercept/fetch.js";
+export { HttpInterceptor } from "./intercept/http.js";
 export { isLocalhost } from "./intercept/base.js";
 export type { Interceptor } from "./intercept/base.js";
 

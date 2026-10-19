@@ -2,12 +2,17 @@
  * Base interceptor protocol and shared utilities.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { Cassette } from "../cassette.js";
 
 export interface Interceptor {
   install(cassette: Cassette): void;
   uninstall(): void;
 }
+
+/** Set while an interceptor sends a request live, so one built on another is not recorded twice. */
+export const liveRequests = new AsyncLocalStorage<true>();
 
 const LOCALHOST_HOSTS = new Set([
   "localhost",

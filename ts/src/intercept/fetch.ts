@@ -4,7 +4,7 @@
 
 import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap, type HttpResponse } from "../types.js";
-import { isLocalhost, type Interceptor } from "./base.js";
+import { isLocalhost, liveRequests, type Interceptor } from "./base.js";
 
 type FetchPatch = {
   active: boolean;
@@ -65,7 +65,7 @@ export class FetchInterceptor implements Interceptor {
       // write a different cassette on every run.
       const order = cassette.reserveRecordOrder();
 
-      const real = await patch.previous(request.clone());
+      const real = await liveRequests.run(true, () => patch.previous(request.clone()));
       const responseBody = Buffer.from(await real.clone().arrayBuffer());
 
       cassette.record(

@@ -1,7 +1,21 @@
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  createServer,
+  get as httpGet,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type RequestOptions,
+  type Server,
+} from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { once } from "node:events";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { gunzipSync, gzipSync } from "node:zlib";
 
+import { BigQuery } from "@google-cloud/bigquery";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Cassette, NoMatchError } from "../src/cassette.js";
@@ -382,5 +396,254 @@ describe("overlapping scopes", () => {
     expect(globalThis.fetch).toBe(original);
     expect(upstream).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
+  });
+});
+
+describe("node:http", () => {
+  let server: Server;
+  let origin: string;
+  let hits: number;
+  let release: () => void;
+
+  beforeEach(async () => {
+    hits = 0;
+    server = createServer(async (req, res) => {
+      hits += 1;
+      if (req.url === "/stall") return;
+      if (req.url === "/stream") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.write("first ");
+        release = () => res.end("last");
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "content-encoding": "gzip",
+        "x-hit": String(hits),
+      });
+      res.end(
+        gzipSync(
+          JSON.stringify({ method: req.method, url: req.url, body: Buffer.concat(chunks).toString() }),
+        ),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => {
+    server.close();
+  });
+
+  function send(
+    url: string,
+    options: RequestOptions = {},
+    body?: string,
+  ): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = httpRequest(url, options, async (res) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of res) chunks.push(chunk as Buffer);
+        const raw = Buffer.concat(chunks);
+        const decoded = res.headers["content-encoding"] === "gzip" ? gunzipSync(raw) : raw;
+        resolve({ status: res.statusCode!, headers: res.headers, body: decoded.toString() });
+      });
+      req.on("error", reject);
+      req.end(body);
+    });
+  }
+
+  it("records on first run and replays on the second", async () => {
+    const path = join(dir, "http.yaml");
+    const expected = { method: "POST", url: "/echo?q=1", body: '{"hello":"world"}' };
+
+    const cassette = await useCassette(path, async () => {
+      const res = await send(
+        `${origin}/echo?q=1`,
+        { method: "POST", headers: { "content-type": "application/json" } },
+        JSON.stringify({ hello: "world" }),
+      );
+      expect(res.status).toBe(200);
+      expect(JSON.parse(res.body)).toEqual(expected);
+    });
+
+    expect(hits).toBe(1);
+    const rec = cassette.interactions[0];
+    expect(rec.request.uri).toBe(`${origin}/echo?q=1`);
+    expect(rec.request.body.content).toEqual({ hello: "world" });
+    expect(rec.response.body.content).toEqual(expected);
+
+    await useCassette(path, { recordMode: "none" }, async () => {
+      const res = await send(
+        `${origin}/echo?q=1`,
+        { method: "POST", headers: { "content-type": "application/json" } },
+        JSON.stringify({ hello: "world" }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers["x-hit"]).toBe("1");
+      expect(JSON.parse(res.body)).toEqual(expected);
+    });
+
+    expect(hits).toBe(1);
+  });
+
+  it("intercepts http.get with an options object", async () => {
+    const { hostname, port } = new URL(origin);
+    const cassette = await useCassette(join(dir, "get.yaml"), async () => {
+      const status = await new Promise<number>((resolve, reject) => {
+        httpGet({ hostname, port, path: "/thing" }, (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode!));
+        }).on("error", reject);
+      });
+      expect(status).toBe(200);
+    });
+
+    expect(cassette.interactions[0].request.uri).toBe(`${origin}/thing`);
+  });
+
+  it("emits NoMatchError on the request in none mode", async () => {
+    await expect(
+      useCassette(join(dir, "none.yaml"), { recordMode: "none" }, () => send(`${origin}/nope`)),
+    ).rejects.toThrow(NoMatchError);
+    expect(hits).toBe(0);
+  });
+
+  it("bypasses the cassette for localhost when configured", async () => {
+    const cassette = await useCassette(
+      join(dir, "local.yaml"),
+      { recordMode: "none", ignoreLocalhost: true },
+      () => send(`${origin}/health`),
+    );
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
+
+  it("stops intercepting after the scope ends", async () => {
+    const before = httpRequest;
+    const cassette = await useCassette(join(dir, "after.yaml"), async () => {
+      expect(httpRequest).not.toBe(before);
+    });
+    expect(httpRequest).toBe(before);
+
+    await send(`${origin}/after`);
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
+
+  it("hands the live response over before its body ends", async () => {
+    const cassette = await useCassette(join(dir, "stream.yaml"), async () => {
+      const res = await new Promise<IncomingMessage>((resolve, reject) =>
+        httpGet(`${origin}/stream`, resolve).on("error", reject),
+      );
+      const [first] = (await once(res, "data")) as [Buffer];
+      expect(first.toString()).toBe("first ");
+      release();
+      let rest = "";
+      for await (const chunk of res) rest += chunk;
+      expect(rest).toBe("last");
+    });
+
+    expect(cassette.interactions[0].response.body.content).toBe("first last");
+  });
+
+  it("applies setTimeout to the live request", async () => {
+    await useCassette(join(dir, "timeout.yaml"), async () => {
+      const req = httpGet(`${origin}/stall`);
+      req.on("error", () => {});
+      await new Promise<void>((resolve) => req.setTimeout(50, resolve));
+      req.destroy();
+    });
+    expect(hits).toBe(1);
+  });
+
+  it("reads headers given as a flat array", async () => {
+    const cassette = await useCassette(join(dir, "raw.yaml"), () =>
+      send(`${origin}/raw`, { headers: ["X-Tag", "a", "X-Tag", "b", "Accept", "text/plain"] }),
+    );
+    const { headers } = cassette.interactions[0].request;
+    expect(headers["x-tag"]).toEqual(["a", "b"]);
+    expect(headers.accept).toEqual(["text/plain"]);
+  });
+
+  it("records a fetch built on node:http once", async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const res = await send(String(input instanceof Request ? input.url : input));
+      return new Response(res.body, { status: res.status });
+    }) as typeof globalThis.fetch;
+
+    const cassette = await useCassette(join(dir, "polyfill.yaml"), async () => {
+      await fetch(`${origin}/polyfill`);
+    });
+
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(1);
+  });
+
+  it("records a nested scope's request only in the inner cassette", async () => {
+    const outer = await useCassette(join(dir, "outer.yaml"), { recordMode: "none" }, async () => {
+      const inner = await useCassette(join(dir, "inner.yaml"), () => send(`${origin}/nested`));
+      expect(inner.interactions).toHaveLength(1);
+    });
+    expect(outer.interactions).toHaveLength(0);
+    expect(hits).toBe(1);
+  });
+
+  it("aborts a replayed request through its signal", async () => {
+    const path = join(dir, "signal.yaml");
+    await useCassette(path, () => send(`${origin}/signal`));
+
+    await useCassette(path, { recordMode: "none" }, async () => {
+      const controller = new AbortController();
+      const result = send(`${origin}/signal`, { signal: controller.signal });
+      controller.abort();
+      await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    });
+  });
+
+  it("sends Expect: 100-continue requests live", async () => {
+    const cassette = await useCassette(join(dir, "expect.yaml"), { recordMode: "none" }, async () => {
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = httpRequest(`${origin}/expect`, { method: "POST", headers: { expect: "100-continue" } }, (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        });
+        req.on("error", reject);
+        req.on("continue", () => req.end("late body"));
+      });
+      expect(status).toBe(200);
+    });
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
+});
+
+describe("Google Cloud clients", () => {
+  const cassettePath = join(dirname(fileURLToPath(import.meta.url)), "cassettes", "bigquery.yaml");
+
+  it("replays a BigQuery query and its token exchange", async () => {
+    // Delete the cassette to re-record with your Application Default Credentials.
+    const credentials = existsSync(cassettePath)
+      ? { type: "authorized_user", client_id: "replay", client_secret: "replay", refresh_token: "replay" }
+      : undefined;
+
+    const cassette = await useCassette(cassettePath, { bodyScrubPatterns: ["id_token"] }, async () => {
+      const [rows] = await new BigQuery({ projectId: "pydantic-ai", credentials }).query(
+        "SELECT word, word_count FROM `bigquery-public-data.samples.shakespeare` " +
+          "WHERE corpus = 'hamlet' ORDER BY word_count DESC LIMIT 3",
+      );
+      expect(rows).toEqual([
+        { word: "the", word_count: 995 },
+        { word: "and", word_count: 706 },
+        { word: "to", word_count: 635 },
+      ]);
+    });
+
+    expect(cassette.interactions.map((i) => new URL(i.request.uri).hostname).sort()).toEqual([
+      "bigquery.googleapis.com",
+      "oauth2.googleapis.com",
+    ]);
   });
 });

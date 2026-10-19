@@ -152,9 +152,26 @@ binaryBodyBytes({ type: "binary", content: "6869" });
 
 ## Interception
 
-The global `fetch` is intercepted, which covers `fetch`, `undici`, and
-libraries built on them. `ignoreLocalhost: true` lets localhost traffic through
-untouched.
+Two interceptors are installed by default:
+
+| Name | Patches | Covers |
+| --- | --- | --- |
+| `fetch` | the global `fetch` | `fetch` and libraries built on it |
+| `http` | `request` and `get` on `node:http` and `node:https` | `node-fetch`, `axios`, `gaxios` and the Google Cloud clients |
+
+Pass `intercept` to install only some of them:
+
+```ts
+await useCassette("cassette.yaml", { intercept: ["fetch"] }, async () => { ... });
+```
+
+`ignoreLocalhost: true` lets localhost traffic through untouched. `CONNECT`,
+upgrade, and `Expect: 100-continue` requests always go live, since they trade data
+before or instead of a response.
+
+> [!NOTE]
+> The `http` interceptor swaps the functions on the module. Code that saved
+> `http.request` into a variable before the cassette started keeps the original.
 
 ## Development
 

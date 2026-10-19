@@ -11,6 +11,7 @@
 
 import { Cassette } from "./cassette.js";
 import { FetchInterceptor } from "./intercept/fetch.js";
+import { HttpInterceptor } from "./intercept/http.js";
 import type { Interceptor } from "./intercept/base.js";
 import { RecordMode, parseRecordMode } from "./recording.js";
 import type { CassetteConfig } from "./types.js";
@@ -19,10 +20,11 @@ export type UseCassetteOptions = CassetteConfig;
 
 const INTERCEPTORS: Record<string, () => Interceptor> = {
   fetch: () => new FetchInterceptor(),
+  http: () => new HttpInterceptor(),
 };
 
 /**
- * Record or replay every `fetch` made inside `fn`.
+ * Record or replay every `fetch` and `http.request` made inside `fn`.
  *
  * Interceptors are installed before the callback and removed after it, even
  * if it throws; the cassette is written on the way out.
@@ -92,7 +94,7 @@ export async function useCassette(
 /** Instantiate the named interceptors, or the default set. */
 function resolveInterceptors(names?: string[]): Interceptor[] {
   if (!names || names.length === 0) {
-    return [new FetchInterceptor()];
+    return [new FetchInterceptor(), new HttpInterceptor()];
   }
   return names.map((name) => {
     const factory = INTERCEPTORS[name];
