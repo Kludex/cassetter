@@ -102,11 +102,12 @@ def session_finish(session: pytest.Session) -> None:
     if orphan_dir is None:
         return
     if config.stash.get(WORKER_CRASHED, False):
-        warnings.warn(
-            "Skipped the orphan check: an xdist worker crashed, so the cassettes it loaded are unknown.",
-            OrphanedCassetteWarning,
-            stacklevel=1,
-        )
+        # Not a warning: `-W error` would raise it here and drop the session report.
+        if reporter := config.pluginmanager.get_plugin("terminalreporter"):
+            reporter.write_line(
+                "cassetter: skipped the orphan check: an xdist worker crashed, so the cassettes it loaded are unknown.",
+                yellow=True,
+            )
         return
 
     orphan_dir = os.path.abspath(orphan_dir)

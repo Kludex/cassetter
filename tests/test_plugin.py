@@ -663,8 +663,10 @@ def test_crashed_worker_skips_the_orphan_report(tmp_path: Path) -> None:
 
     session = MagicMock()
     session.config = config
-    with pytest.warns(UserWarning, match="Skipped the orphan check"):
-        session_finish(session)
+    session_finish(session)
+
+    reporter = config.pluginmanager.get_plugin.return_value
+    assert "skipped the orphan check" in reporter.write_line.call_args.args[0]
 
 
 def test_aggregator_hook_forwards_to_node_down() -> None:

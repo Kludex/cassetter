@@ -60,15 +60,14 @@ def test_real_orphan_is_still_reported_under_xdist(orphan_project: pytest.Pytest
     result.stdout.fnmatch_lines(["*OrphanedCassetteWarning: Found 1 orphaned cassette file(s)*", "*orphan_here.yaml*"])
 
 
-@pytest.mark.parametrize("check_orphans", [False, True])
-def test_crashed_worker_keeps_the_session_report(orphan_project: pytest.Pytester, check_orphans: bool) -> None:
+@pytest.mark.parametrize("args", [[], ["--vcr-check-orphans", "cassettes", "-W", "error"]])
+def test_crashed_worker_keeps_the_session_report(orphan_project: pytest.Pytester, args: list[str]) -> None:
     orphan_project.makepyfile(test_crash="import os\n\ndef test_crash():\n    os._exit(1)\n")
-    args = ["--vcr-check-orphans", "cassettes"] if check_orphans else []
 
     result = orphan_project.runpytest_subprocess("-n", "2", *args)
 
     assert "INTERNALERROR" not in result.stdout.str() + result.stderr.str()
     result.assert_outcomes(passed=2, failed=1)
-    if check_orphans:
-        result.stdout.fnmatch_lines(["*Skipped the orphan check: an xdist worker crashed*"])
+    if args:
+        result.stdout.fnmatch_lines(["*skipped the orphan check: an xdist worker crashed*"])
         assert "Found" not in result.stdout.str()
