@@ -43,8 +43,10 @@ class _XdistOrphanAggregator:
     everyone who does not have xdist installed.
     """
 
-    def pytest_testnodedown(self, node: WorkerNode, error: object) -> None:
-        node_down(node)
+    def pytest_testnodedown(
+        self, node: WorkerNode, error: str | Exception | pytest.ExceptionInfo[BaseException] | None
+    ) -> None:
+        node_down(node, crashed=error is not None)
 
 
 def pytest_configure(config: pytest.Config) -> None:
