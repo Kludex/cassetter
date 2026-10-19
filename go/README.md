@@ -14,7 +14,7 @@ See the [Go changelog](CHANGELOG.md) for release details. Maintainers can use th
 
 ## Requirements
 
-Use Go 1.25 or newer. Install the latest patch release for your Go toolchain.
+Use Go 1.26 or newer. Install the latest patch release for your Go toolchain.
 
 ## Record and replay HTTP
 

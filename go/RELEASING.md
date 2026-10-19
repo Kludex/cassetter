@@ -3,7 +3,7 @@
 Go ships as part of the [coordinated release](../RELEASING.md). A root
 `vX.Y.Z` release publishes every ecosystem at the same version.
 
-The release workflow validates the Go module on the latest Go 1.25 patch and
+The release workflow validates the Go module on the latest Go 1.26 patch and
 latest stable Go release. It runs race tests, vet, lint, and `govulncheck`
 before creating the matching `go/vX.Y.Z` tag.
 
