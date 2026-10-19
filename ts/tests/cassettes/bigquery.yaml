@@ -1,0 +1,155 @@
+version: 1
+interactions:
+- request:
+    method: POST
+    uri: >-
+      https://bigquery.googleapis.com/bigquery/v2/projects/pydantic-ai/queries?prettyPrint=false
+    headers:
+      accept:
+      - "*/*"
+      accept-encoding:
+      - gzip, deflate, br
+      content-length:
+      - "255"
+      content-type:
+      - application/json
+      user-agent:
+      - gcloud-node-bigquery/8.3.1
+      x-goog-api-client:
+      - gl-node/24.18.0 gccl/8.3.1
+      x-goog-user-project:
+      - pydantic-ai
+    body:
+      type: json
+      content:
+        formatOptions:
+          useInt64Timestamp: true
+        query: >-
+          SELECT word, word_count FROM `bigquery-public-data.samples.shakespeare` WHERE
+          corpus = 'hamlet' ORDER BY word_count DESC LIMIT 3
+        useLegacySql: false
+        requestId: 7f1714a4-778d-4e78-ad4f-379c74b3f03d
+  response:
+    status: 200
+    headers:
+      alt-svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      content-type:
+      - application/json; charset=UTF-8
+      date:
+      - Mon, 19 Oct 2026 06:37:29 GMT
+      server:
+      - ESF
+      transfer-encoding:
+      - chunked
+      vary:
+      - Origin
+      - X-Origin
+      - Referer
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-xss-protection:
+      - "0"
+    body:
+      type: json
+      content:
+        kind: "bigquery#queryResponse"
+        schema:
+          fields:
+          - name: word
+            type: STRING
+            mode: NULLABLE
+          - name: word_count
+            type: INTEGER
+            mode: NULLABLE
+        jobReference:
+          projectId: pydantic-ai
+          jobId: job_cgkY1rp_HtifgOXLOleg-93yEPqp
+          location: US
+        totalRows: "3"
+        rows:
+        - f:
+          - v: the
+          - v: "995"
+        - f:
+          - v: and
+          - v: "706"
+        - f:
+          - v: to
+          - v: "635"
+        totalBytesProcessed: "0"
+        jobComplete: true
+        cacheHit: true
+        queryId: job_cgkY1rp_HtifgOXLOleg-93yEPqp
+        jobCreationReason:
+          code: REQUESTED
+        totalBytesBilled: "0"
+        location: US
+        creationTime: "1792391848991"
+        startTime: "1792391849135"
+        endTime: "1792391849247"
+        pageRowCount: "3"
+        statementType: SELECT
+  recorded_at: 2026-10-19T06:37:29.434Z
+- request:
+    method: POST
+    uri: https://oauth2.googleapis.com/token
+    headers:
+      accept:
+      - "*/*"
+      accept-encoding:
+      - gzip, deflate, br
+      content-length:
+      - "268"
+      content-type:
+      - application/x-www-form-urlencoded;charset=UTF-8
+      user-agent:
+      - google-api-nodejs-client/10.9.1
+      x-goog-api-client:
+      - gl-node/24.18.0
+    body:
+      type: text
+      content: >-
+        refresh_token=[FILTERED]&client_id=764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com&client_secret=[FILTERED]&grant_type=refresh_token
+  response:
+    status: 200
+    headers:
+      alt-svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      cache-control:
+      - no-cache, no-store, max-age=0, must-revalidate
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Mon, 19 Oct 2026 06:37:28 GMT
+      expires:
+      - Mon, 01 Jan 1990 00:00:00 GMT
+      pragma:
+      - no-cache
+      server:
+      - scaffolding on HTTPServer2
+      transfer-encoding:
+      - chunked
+      vary:
+      - Origin
+      - X-Origin
+      - Referer
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-xss-protection:
+      - "0"
+    body:
+      type: json
+      content:
+        access_token: "[FILTERED]"
+        expires_in: 3599
+        scope: >-
+          https://www.googleapis.com/auth/cloud-platform
+          https://www.googleapis.com/auth/sqlservice.login https://www.googleapis.com/auth/userinfo.email openid
+        token_type: Bearer
+        id_token: "[FILTERED]"
+  recorded_at: 2026-10-19T06:37:28.739Z

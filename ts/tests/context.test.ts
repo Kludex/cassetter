@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import {
   createServer,
   get as httpGet,
@@ -11,9 +11,11 @@ import {
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { once } from "node:events";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 
+import { BigQuery } from "@google-cloud/bigquery";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Cassette, NoMatchError } from "../src/cassette.js";
@@ -615,5 +617,33 @@ describe("node:http", () => {
     });
     expect(hits).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
+  });
+});
+
+describe("Google Cloud clients", () => {
+  const cassettePath = join(dirname(fileURLToPath(import.meta.url)), "cassettes", "bigquery.yaml");
+
+  it("replays a BigQuery query and its token exchange", async () => {
+    // Delete the cassette to re-record with your Application Default Credentials.
+    const credentials = existsSync(cassettePath)
+      ? { type: "authorized_user", client_id: "replay", client_secret: "replay", refresh_token: "replay" }
+      : undefined;
+
+    const cassette = await useCassette(cassettePath, { bodyScrubPatterns: ["id_token"] }, async () => {
+      const [rows] = await new BigQuery({ projectId: "pydantic-ai", credentials }).query(
+        "SELECT word, word_count FROM `bigquery-public-data.samples.shakespeare` " +
+          "WHERE corpus = 'hamlet' ORDER BY word_count DESC LIMIT 3",
+      );
+      expect(rows).toEqual([
+        { word: "the", word_count: 995 },
+        { word: "and", word_count: 706 },
+        { word: "to", word_count: 635 },
+      ]);
+    });
+
+    expect(cassette.interactions.map((i) => new URL(i.request.uri).hostname).sort()).toEqual([
+      "bigquery.googleapis.com",
+      "oauth2.googleapis.com",
+    ]);
   });
 });
