@@ -9,6 +9,8 @@ import pytest
 
 #: Cassette paths loaded during this session, stashed on the pytest config.
 LOADED_CASSETTES: pytest.StashKey[set[str]] = pytest.StashKey()
+#: Set when an xdist worker crashed, so the cassettes it loaded are unknown.
+WORKER_CRASHED: pytest.StashKey[bool] = pytest.StashKey()
 
 
 class OrphanedCassetteWarning(UserWarning):
@@ -70,12 +72,16 @@ def is_xdist_worker(config: pytest.Config) -> bool:
     return hasattr(config, "workerinput")
 
 
-def node_down(node: WorkerNode) -> None:
+def node_down(node: WorkerNode, error: object) -> None:
     """Merge a finished xdist worker's loaded cassettes into the controller's set.
 
     Each worker only sees the tests in its own shard, so without this the
     controller reports every cassette the other workers used as an orphan.
+    A crashed worker never sends its output, so it is recorded instead.
     """
+    if error is not None:
+        node.config.stash[WORKER_CRASHED] = True
+        return
     loaded = node.workeroutput.get("vcr_loaded_cassettes")
     if loaded is None:
         return
@@ -94,6 +100,13 @@ def session_finish(session: pytest.Session) -> None:
 
     orphan_dir = config.getoption("--vcr-check-orphans", default=None)
     if orphan_dir is None:
+        return
+    if config.stash.get(WORKER_CRASHED, False):
+        warnings.warn(
+            "Skipped the orphan check: an xdist worker crashed, so the cassettes it loaded are unknown.",
+            OrphanedCassetteWarning,
+            stacklevel=1,
+        )
         return
 
     orphan_dir = os.path.abspath(orphan_dir)

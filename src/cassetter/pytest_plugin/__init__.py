@@ -44,7 +44,7 @@ class _XdistOrphanAggregator:
     """
 
     def pytest_testnodedown(self, node: WorkerNode, error: object) -> None:
-        node_down(node)
+        node_down(node, error)
 
 
 def pytest_configure(config: pytest.Config) -> None:

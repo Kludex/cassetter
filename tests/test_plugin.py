@@ -636,7 +636,7 @@ def test_controller_aggregates_worker_shards(tmp_path: Path) -> None:
         node = MagicMock()
         node.config = config
         node.workeroutput = {"vcr_loaded_cassettes": [os.path.abspath(os.path.join(cassette_dir, name))]}
-        node_down(node)
+        node_down(node, None)
 
     session = MagicMock()
     session.config = config
@@ -646,7 +646,25 @@ def test_controller_aggregates_worker_shards(tmp_path: Path) -> None:
 def test_node_down_without_workeroutput_is_ignored() -> None:
     node = MagicMock()
     node.workeroutput = {}
-    node_down(node)
+    node_down(node, None)
+
+
+def test_crashed_worker_skips_the_orphan_report(tmp_path: Path) -> None:
+    """A crashed worker never sends its cassettes, so every one it used would look orphaned."""
+    from cassetter.pytest_plugin import _XdistOrphanAggregator
+
+    tmp_path.joinpath("a.yaml").write_text("---")
+    config = controller_config()
+    config.getoption.return_value = str(tmp_path)
+    node = MagicMock()
+    node.config = config
+
+    _XdistOrphanAggregator().pytest_testnodedown(node, "Not properly terminated")
+
+    session = MagicMock()
+    session.config = config
+    with pytest.warns(UserWarning, match="Skipped the orphan check"):
+        session_finish(session)
 
 
 def test_aggregator_hook_forwards_to_node_down() -> None:
