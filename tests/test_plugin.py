@@ -636,7 +636,7 @@ def test_controller_aggregates_worker_shards(tmp_path: Path) -> None:
         node = MagicMock()
         node.config = config
         node.workeroutput = {"vcr_loaded_cassettes": [os.path.abspath(os.path.join(cassette_dir, name))]}
-        node_down(node, None)
+        node_down(node, crashed=False)
 
     session = MagicMock()
     session.config = config
@@ -646,7 +646,7 @@ def test_controller_aggregates_worker_shards(tmp_path: Path) -> None:
 def test_node_down_without_workeroutput_is_ignored() -> None:
     node = MagicMock()
     node.workeroutput = {}
-    node_down(node, None)
+    node_down(node, crashed=False)
 
 
 def test_crashed_worker_skips_the_orphan_report(tmp_path: Path) -> None:

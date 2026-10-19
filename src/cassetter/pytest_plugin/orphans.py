@@ -72,14 +72,14 @@ def is_xdist_worker(config: pytest.Config) -> bool:
     return hasattr(config, "workerinput")
 
 
-def node_down(node: WorkerNode, error: object) -> None:
+def node_down(node: WorkerNode, crashed: bool) -> None:
     """Merge a finished xdist worker's loaded cassettes into the controller's set.
 
     Each worker only sees the tests in its own shard, so without this the
     controller reports every cassette the other workers used as an orphan.
     A crashed worker never sends its output, so it is recorded instead.
     """
-    if error is not None:
+    if crashed:
         node.config.stash[WORKER_CRASHED] = True
         return
     loaded = node.workeroutput.get("vcr_loaded_cassettes")
