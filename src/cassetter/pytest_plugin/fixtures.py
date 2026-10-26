@@ -196,6 +196,7 @@ def cassette(
         current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()
+    cassette.check_observed()
     schedule_check(request.node, cassette, on_unplayed)
 
 

@@ -33,3 +33,5 @@ class CassetteConfig(TypedDict, total=False):
     before_record_ws_frame: BeforeRecordWsFrame
     compare: Compare
     before_compare_response: BeforeCompareResponse
+    observe_compare: Compare
+    observe_timeout: float

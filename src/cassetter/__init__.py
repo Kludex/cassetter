@@ -13,6 +13,7 @@ from cassetter._core import (
     WsFrame,
     WsInteraction,
 )
+from cassetter._state import get_current_cassette as active_cassette
 from cassetter.cassette import (
     BeforeRecordRequest,
     BeforeRecordResponse,
@@ -65,5 +66,6 @@ __all__ = [
     "UriNormalizer",
     "WsFrame",
     "WsInteraction",
+    "active_cassette",
     "use_cassette",
 ]

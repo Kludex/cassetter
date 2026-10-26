@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import urllib.request
 from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -16,8 +17,19 @@ import pytest
 import requests
 import urllib3
 
-from cassetter import Compare, HttpResponse, NoMatchError, RecordMode, ResponseMismatchError, use_cassette
+from cassetter import (
+    Compare,
+    HttpResponse,
+    NoMatchError,
+    RawRequest,
+    RecordMode,
+    ResponseMismatchError,
+    active_cassette,
+    use_cassette,
+)
 from cassetter._core import Body
+
+pytest_plugins = ("pytester",)
 
 
 class Reply:
@@ -232,3 +244,123 @@ def test_verify_before_compare_response_normalizes_both(url: str, reply: Reply, 
     reply.body = b'{"answer": 42}'
     with use_cassette(path, record_mode="verify", intercept=["httpx"], before_compare_response=drop_nulls):
         httpx.get(url)
+
+
+@pytest.fixture
+def collector() -> Iterator[str]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            body = self.rfile.read(int(self.headers["content-length"]))
+            headers = {name.lower(): [value] for name, value in self.headers.items()}
+            cassette = active_cassette()
+            assert cassette is not None
+            cassette.observe(RawRequest("POST", f"http://collector{self.path}", headers, body))
+            self.send_response(200)
+            self.send_header("content-length", "0")
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+def _export(collector: str, body: bytes, delay: float = 0.0) -> None:
+    """What the service under test does on its own: send telemetry the client never sees."""
+
+    def send() -> None:
+        request = urllib.request.Request(
+            f"{collector}/v1/traces", data=body, headers={"content-type": "application/x-protobuf"}
+        )
+        urllib.request.urlopen(request).close()
+
+    threading.Timer(delay, send).start()
+
+
+def test_observed_requests_are_recorded_after_the_interactions(url: str, collector: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["httpx"]) as cassette:
+        httpx.get(url)
+        _export(collector, b"\x0a\xff")
+        for _ in range(500):
+            if len(cassette) == 2:
+                break
+            threading.Event().wait(0.01)
+
+    content = Path(path).read_text()
+    assert content.index("interactions:") < content.index("observed_requests:\n- method: POST\n  uri: http://collector")
+    assert "content: 0aff" in content
+
+
+def test_verify_waits_for_observed_requests_and_compares_them(url: str, collector: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["httpx"]) as cassette:
+        httpx.get(url)
+        cassette.observe(RawRequest("POST", "http://127.0.0.1:1/v1/traces", {}, b"\x0a\xff"))
+
+    with use_cassette(path, record_mode="verify", intercept=["httpx"]):
+        httpx.get(url)
+        _export(collector, b"\x0a\xff", delay=0.2)
+
+    decoded = Compare(decode=lambda raw: {"span": list(raw)})
+    with pytest.raises(ResponseMismatchError, match=r"observed request 0\n(.*\n)*     10,\n-    255\n\+    254\n"):
+        with use_cassette(path, record_mode="verify", intercept=["httpx"], observe_compare=decoded):
+            httpx.get(url)
+            _export(collector, b"\x0a\xfe")
+
+
+def test_verify_fails_on_missing_observed_requests(url: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["httpx"]) as cassette:
+        httpx.get(url)
+        cassette.observe(RawRequest("POST", "http://collector/v1/traces", {}, b"{}"))
+
+    with pytest.raises(ResponseMismatchError, match="expected 1 observed requests, got 0"):
+        with use_cassette(path, record_mode="verify", intercept=["httpx"], observe_timeout=0.05):
+            httpx.get(url)
+
+
+def test_replay_ignores_observed_requests(url: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+    before = Path(path).read_text()
+
+    with use_cassette(path, record_mode="none", intercept=["httpx"]) as cassette:
+        httpx.get(url)
+        cassette.observe(RawRequest("POST", "http://collector/v1/traces", {}, b"{}"))
+    assert Path(path).read_text() == before
+    assert "observed_requests" not in before
+
+
+def test_pytest_plugin_checks_observed_requests(pytester: pytest.Pytester) -> None:
+    pytester.makeconftest(
+        """
+import pytest
+from cassetter._core import Body, Cassette, HttpRequest
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {"observe_timeout": 0.05}
+
+def pytest_collection_modifyitems(config, items):
+    path = items[0].path.parent / "cassettes" / items[0].path.stem / (items[0].name + ".yaml")
+    path.parent.mkdir(parents=True)
+    cassette = Cassette()
+    cassette.add_observed_request(HttpRequest("POST", "http://collector/v1/logs", body=Body("text", "x")))
+    cassette.save(str(path))
+"""
+    )
+    pytester.makepyfile(
+        """
+import pytest
+
+@pytest.mark.vcr(record_mode="verify")
+def test_service():
+    pass
+"""
+    )
+    result = pytester.runpytest("-p", "no:cacheprovider")
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*expected 1 observed requests, got 0*"])

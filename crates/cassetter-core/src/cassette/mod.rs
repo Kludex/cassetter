@@ -23,6 +23,8 @@ pub struct Cassette {
     pub grpc_played: Vec<bool>,
     pub ws_interactions: Vec<WsInteraction>,
     pub ws_played: Vec<bool>,
+    /// Requests the code under test sent to a receiver the test runs, in arrival order.
+    pub observed_requests: Vec<HttpRequest>,
     /// Cached method+URI index, invalidated whenever `interactions` changes.
     index: Option<index::CassetteIndex>,
     /// Whether this session can record. See [`Cassette::set_recording`].
@@ -291,9 +293,13 @@ impl Cassette {
 
     /// Serialize to TOML text. TOML cannot carry gRPC or WebSocket interactions.
     pub fn to_toml(&self, order: &[usize]) -> Result<String> {
-        if !self.grpc_interactions.is_empty() || !self.ws_interactions.is_empty() {
+        if !self.grpc_interactions.is_empty()
+            || !self.ws_interactions.is_empty()
+            || !self.observed_requests.is_empty()
+        {
             return Err(CassetteError::Value(
-                "TOML cassettes cannot store gRPC or WebSocket interactions; use YAML".to_string(),
+                "TOML cassettes cannot store gRPC, WebSocket or observed interactions; use YAML"
+                    .to_string(),
             ));
         }
         let raw = format_toml::to_toml(self, order);
@@ -384,7 +390,10 @@ impl Cassette {
 
     /// How many interactions this holds, across all protocols.
     pub fn len(&self) -> usize {
-        self.interactions.len() + self.grpc_interactions.len() + self.ws_interactions.len()
+        self.interactions.len()
+            + self.grpc_interactions.len()
+            + self.ws_interactions.len()
+            + self.observed_requests.len()
     }
 
     /// Whether it holds no interactions at all.

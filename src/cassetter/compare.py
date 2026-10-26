@@ -6,12 +6,13 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
-from cassetter._core import HttpResponse
+from cassetter._core import Body, HttpRequest, HttpResponse
 
 
 class ResponseMismatchError(AssertionError):
-    """Raised in `verify` mode when a live response differs from its recording."""
+    """Raised in `verify` mode when a live response or observed request differs from its recording."""
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -26,12 +27,15 @@ class Compare:
             (`id`, `data.created`, `items[0].id`). With `sse`, they apply to each event's payload.
         sse: Compare the body as a list of Server-Sent Events `data:` payloads, so chunk boundaries do not matter.
         float_tolerance: Largest absolute difference between two JSON numbers that still counts as equal.
+        decode: Turns a body into a JSON-able value before comparing, e.g. OTLP protobuf into spans.
+            `json_ignore` and `float_tolerance` apply to what it returns.
     """
 
     headers: list[str] = field(default_factory=list)
     json_ignore: list[str] = field(default_factory=list)
     sse: bool = False
     float_tolerance: float = 0.0
+    decode: Callable[[bytes], Any] | None = None
 
 
 BeforeCompareResponse = Callable[[HttpResponse, HttpResponse], tuple[HttpResponse, HttpResponse]]
@@ -40,25 +44,71 @@ BeforeCompareResponse = Callable[[HttpResponse, HttpResponse], tuple[HttpRespons
 
 def compare_responses(compare: Compare, recorded: HttpResponse, live: HttpResponse, label: str) -> None:
     """Raise `ResponseMismatchError` with a unified diff when `live` is not equivalent to `recorded`."""
-    expected = _render(_normalize(compare, recorded))
-    actual = _render(_tolerate(_normalize(compare, recorded), _normalize(compare, live), compare.float_tolerance))
+    _compare(
+        compare,
+        _normalize(compare, f"status: {recorded.status}", recorded.headers, recorded.body),
+        _normalize(compare, f"status: {live.status}", live.headers, live.body),
+        label,
+    )
+
+
+def compare_requests(compare: Compare, recorded: HttpRequest, live: HttpRequest, label: str) -> None:
+    """Like `compare_responses`, for observed requests. Only the path and query of the URI count."""
+    _compare(
+        compare,
+        _normalize(compare, f"{recorded.method} {_path(recorded.uri)}", recorded.headers, recorded.body),
+        _normalize(compare, f"{live.method} {_path(live.uri)}", live.headers, live.body),
+        label,
+    )
+
+
+def body_to_bytes(body: Body) -> bytes:
+    """Serialize a recorded body to the wire bytes of a replayed response.
+
+    A JSON body is stored parsed, so the original bytes are gone by the time
+    this runs: the output is stdlib `json.dumps` formatting, not a byte-for-byte
+    reproduction of what the server sent. Callers that recompute Content-Length
+    must do so from these bytes.
+
+    `body.content` materializes a fresh Python object on every read, so each
+    branch reads it once.
+    """
+    content = body.content
+    if body.body_type == "json":
+        return json.dumps(content).encode()
+    if body.body_type == "text":
+        return content.encode() if isinstance(content, str) else b""
+    if body.body_type == "binary":
+        return content if isinstance(content, bytes) else b""
+    return b""
+
+
+def _compare(compare: Compare, recorded: dict[str, Any], live: dict[str, Any], label: str) -> None:
+    expected = _render(recorded)
+    actual = _render(_tolerate(recorded, live, compare.float_tolerance))
     if expected == actual:
         return
     diff = difflib.unified_diff(expected, actual, "recorded", "live", lineterm="")
     raise ResponseMismatchError(f"{label}\n" + "\n".join(diff))
 
 
-def _normalize(compare: Compare, response: HttpResponse) -> dict[str, Any]:
-    headers = {
+def _path(uri: str) -> str:
+    # The receiver usually listens on a random port, so the host never matches across runs.
+    return urlsplit(uri)._replace(scheme="", netloc="").geturl()
+
+
+def _normalize(compare: Compare, head: str, headers: dict[str, list[str]], body: Body) -> dict[str, Any]:
+    kept = {
         name: values
-        for name, values in sorted(response.headers.items())
+        for name, values in sorted(headers.items())
         if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers)
     }
-    return {"status": response.status, "headers": headers, "body": _body(compare, response)}
+    return {"head": head, "headers": kept, "body": _body(compare, body)}
 
 
-def _body(compare: Compare, response: HttpResponse) -> Any:
-    body = response.body
+def _body(compare: Compare, body: Body) -> Any:
+    if compare.decode is not None:
+        return _drop_paths(compare.decode(body_to_bytes(body)), compare.json_ignore, "")
     content = body.content
     if body.body_type == "json":
         return _drop_paths(content, compare.json_ignore, "")
@@ -108,7 +158,7 @@ def _is_number(value: Any) -> bool:
 
 
 def _render(normalized: dict[str, Any]) -> list[str]:
-    lines = [f"status: {normalized['status']}", "@@ headers @@"]
+    lines = [normalized["head"], "@@ headers @@"]
     lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
     lines.append("@@ body @@")
     body = normalized["body"]

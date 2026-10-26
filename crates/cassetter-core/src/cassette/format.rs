@@ -23,6 +23,8 @@ pub struct RawCassette {
     pub grpc_interactions: Vec<RawGrpcInteraction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ws_interactions: Vec<RawWsInteraction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observed_requests: Vec<RawRequest>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -624,15 +626,7 @@ pub fn from_raw(raw: RawCassette, binaries: &[Vec<u8>]) -> crate::Result<Cassett
         .interactions
         .into_iter()
         .map(|ri| {
-            let request = HttpRequest {
-                method: ri.request.method,
-                uri: ri.request.uri,
-                headers: resolve_headers(ri.request.headers, binaries),
-                body: match ri.request.parsed_body {
-                    Some(v) => Body::json(v),
-                    None => body_from_raw(ri.request.body, binaries),
-                },
-            };
+            let request = request_from_raw(ri.request, binaries);
             let response = HttpResponse {
                 status: ri.response.status,
                 headers: resolve_headers(ri.response.headers, binaries),
@@ -661,6 +655,12 @@ pub fn from_raw(raw: RawCassette, binaries: &[Vec<u8>]) -> crate::Result<Cassett
         .map(|ri| ws_from_raw(ri, binaries))
         .collect();
 
+    let observed_requests = raw
+        .observed_requests
+        .into_iter()
+        .map(|r| request_from_raw(r, binaries))
+        .collect();
+
     let played_indices = vec![false; interactions.len()];
     let grpc_played = vec![false; grpc_interactions.len()];
     let ws_played = vec![false; ws_interactions.len()];
@@ -673,8 +673,31 @@ pub fn from_raw(raw: RawCassette, binaries: &[Vec<u8>]) -> crate::Result<Cassett
         grpc_played,
         ws_interactions,
         ws_played,
+        observed_requests,
         ..Cassette::default()
     })
+}
+
+fn request_from_raw(raw: RawRequest, binaries: &[Vec<u8>]) -> HttpRequest {
+    HttpRequest {
+        method: raw.method,
+        uri: raw.uri,
+        headers: resolve_headers(raw.headers, binaries),
+        body: match raw.parsed_body {
+            Some(v) => Body::json(v),
+            None => body_from_raw(raw.body, binaries),
+        },
+    }
+}
+
+fn request_to_raw(request: &HttpRequest) -> RawRequest {
+    RawRequest {
+        method: request.method.clone(),
+        uri: request.uri.clone(),
+        headers: sorted_headers(&request.headers),
+        body: body_to_raw(&request.body),
+        parsed_body: None,
+    }
 }
 
 /// Convert internal Cassette to raw YAML format.
@@ -683,13 +706,7 @@ pub fn to_raw(cassette: &Cassette, order: &[usize]) -> RawCassette {
         .iter()
         .filter_map(|&idx| cassette.interactions.get(idx))
         .map(|i| RawInteraction {
-            request: RawRequest {
-                method: i.request.method.clone(),
-                uri: i.request.uri.clone(),
-                headers: sorted_headers(&i.request.headers),
-                body: body_to_raw(&i.request.body),
-                parsed_body: None,
-            },
+            request: request_to_raw(&i.request),
             response: RawResponse {
                 status: i.response.status,
                 headers: sorted_headers(&i.response.headers),
@@ -713,6 +730,7 @@ pub fn to_raw(cassette: &Cassette, order: &[usize]) -> RawCassette {
         interactions,
         grpc_interactions,
         ws_interactions,
+        observed_requests: cassette.observed_requests.iter().map(request_to_raw).collect(),
     }
 }
 
@@ -1114,5 +1132,30 @@ interactions:
             BodyContent::Text(s) => assert_eq!(s, "data: x\n\ndata: [DONE]\n\n"),
             other => panic!("expected text body, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_observed_requests_round_trip_after_interactions() {
+        let yaml = "\
+version: 1
+interactions: []
+observed_requests:
+- method: POST
+  uri: http://127.0.0.1/v1/traces
+  headers:
+    content-type:
+    - application/x-protobuf
+  body:
+    type: binary
+    content: 0a00
+";
+        let cassette = load_yaml(yaml);
+        assert_eq!(cassette.observed_requests[0].method, "POST");
+        assert_eq!(cassette.len(), 1);
+        let written = serde_saphyr::to_string(&to_raw(&cassette, &[])).unwrap();
+        assert_eq!(load_yaml(&written).observed_requests, cassette.observed_requests);
+
+        let empty = serde_saphyr::to_string(&to_raw(&Cassette::new(), &[])).unwrap();
+        assert!(!empty.contains("observed_requests"), "{empty}");
     }
 }
