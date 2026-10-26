@@ -258,11 +258,11 @@ class _PatchedConnect:
                 raise
             interaction = None
 
-        conn = self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
-        real_ws = await conn  # pragma: no cover
-        headers = extract_ws_headers(self._kwargs)  # pragma: no cover
-        self._ws = VCRWebSocket(real_ws, self._uri, headers, real_ws.subprotocol, interaction)  # pragma: no cover
-        return self._ws  # pragma: no cover
+        conn = self._original_connect(self._uri, **self._kwargs)
+        real_ws = await conn
+        headers = extract_ws_headers(self._kwargs)
+        self._ws = VCRWebSocket(real_ws, self._uri, headers, real_ws.subprotocol, interaction)
+        return self._ws
 
     async def _cleanup(self, exc_type: type[BaseException] | None = None) -> None:
         # Flush recorded frames / close the connection regardless of call style.

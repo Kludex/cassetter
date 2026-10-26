@@ -82,7 +82,7 @@ class VCRUnaryUnaryCallable:
 
         assert self._real is not None
         messages = unary_messages(self._response_deserializer)
-        with verify_status(cassette, self._method, md, req_body, grpc_resp, messages):
+        with verify_status(cassette, self._method, md, req_body, grpc_resp, messages, []):
             response = await self._real(
                 request,
                 timeout=timeout,
@@ -195,7 +195,7 @@ class VCRUnaryStreamCallable:
         )
         messages = stream_messages(self._response_deserializer)
         chunks: list[bytes] = []
-        with verify_status(cassette, self._method, md, req_body, expected, messages):
+        with verify_status(cassette, self._method, md, req_body, expected, messages, chunks):
             async for response in call:
                 resp_bytes = response.SerializeToString()
                 chunks.append(resp_bytes)
@@ -265,7 +265,7 @@ class VCRStreamUnaryCallable:
 
         assert self._real is not None
         messages = unary_messages(self._response_deserializer)
-        with verify_status(cassette, self._method, md, req_body, grpc_resp, messages):
+        with verify_status(cassette, self._method, md, req_body, grpc_resp, messages, []):
             response = await self._real(
                 async_iter(req_chunks),
                 timeout=timeout,
@@ -391,7 +391,7 @@ class VCRStreamStreamCallable:
         )
         messages = stream_messages(self._response_deserializer)
         resp_chunks: list[bytes] = []
-        with verify_status(cassette, self._method, md, req_body, expected, messages):
+        with verify_status(cassette, self._method, md, req_body, expected, messages, resp_chunks):
             async for response in call:
                 resp_bytes = response.SerializeToString()
                 resp_chunks.append(resp_bytes)
@@ -574,30 +574,31 @@ def verify_status(
     req_body: Body,
     expected: GrpcResponse | None,
     messages: Callable[[GrpcResponse], list[Any]],
+    received: list[bytes],
 ) -> Iterator[None]:
-    """In `verify` mode, compare a live error status with the recording before it propagates."""
+    """In `verify` mode, compare a live error status, and the messages `received` before it, with the recording."""
     try:
         yield
     except grpc.aio.AioRpcError as exc:
         if cassette is not None and expected is not None:
             status = (exc.code().value[0], exc.details() or "")
-            cassette.record_grpc(
-                method, md, req_body, Body("binary", b""), *status, expected=expected, messages=messages
-            )
+            body = Body("binary", encode_chunks(received))
+            cassette.record_grpc(method, md, req_body, body, *status, expected=expected, messages=messages)
         raise
 
 
 def unary_messages(deserializer: Any) -> Callable[[GrpcResponse], list[Any]]:
-    return lambda grpc_resp: [readable(deserializer(body_bytes(grpc_resp)))]
+    return lambda grpc_resp: [readable(deserializer, body_bytes(grpc_resp))]
 
 
 def stream_messages(deserializer: Any) -> Callable[[GrpcResponse], list[Any]]:
-    return lambda grpc_resp: [readable(deserializer(chunk)) for chunk in decode_chunks(body_bytes(grpc_resp))]
+    return lambda grpc_resp: [readable(deserializer, chunk) for chunk in decode_chunks(body_bytes(grpc_resp))]
 
 
-def readable(message: Any) -> Any:
-    debug = build_json_debug(None, message)
-    return message if debug is None else debug["response"]
+def readable(deserializer: Any, data: bytes) -> Any:
+    """The message as JSON when protobuf can convert it, otherwise its serialized bytes."""
+    debug = build_json_debug(None, deserializer(data))
+    return data if debug is None else debug["response"]
 
 
 async def serialize(requests: AsyncIterator[Any], serializer: Any) -> AsyncIterator[bytes]:
