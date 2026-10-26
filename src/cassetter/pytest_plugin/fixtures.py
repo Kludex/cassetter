@@ -190,15 +190,15 @@ def cassette(
 
     try:
         yield cassette
+        # A failing test already reports why, and should not wait out the timeout too.
+        if call_passed(request.node):
+            cassette.check_observed()
     finally:
         # Reset context and release patches even if the test errors out
         pop_fallback_cassette(cassette)
         current_cassette.reset(token)
         release_patches(interceptor_classes)
         cassette.save()
-    # A failing test already reports why, and should not wait out the timeout too.
-    if call_passed(request.node):
-        cassette.check_observed()
     schedule_check(request.node, cassette, on_unplayed)
 
 

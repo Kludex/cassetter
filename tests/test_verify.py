@@ -342,7 +342,7 @@ from cassetter._core import Body, Cassette, HttpRequest
 
 @pytest.fixture(scope="module")
 def vcr_config():
-    return {"observe_timeout": 0.05}
+    return {"observe_timeout": 2}
 
 def pytest_collection_modifyitems(config, items):
     for item in items:
@@ -357,9 +357,18 @@ def pytest_collection_modifyitems(config, items):
         """
 import pytest
 
+import threading
+
+from cassetter import RawRequest, active_cassette
+
 @pytest.mark.vcr(record_mode="verify")
 def test_service():
     pass
+
+@pytest.mark.vcr(record_mode="verify")
+def test_exports_after_the_body():
+    request = RawRequest("POST", "http://collector/v1/logs", {"content-type": ["text/plain"]}, b"x")
+    threading.Timer(0.1, lambda: active_cassette().observe(request)).start()
 
 @pytest.mark.vcr(record_mode="verify")
 def test_fails_itself():
@@ -367,7 +376,7 @@ def test_fails_itself():
 """
     )
     result = pytester.runpytest("-p", "no:cacheprovider")
-    result.assert_outcomes(passed=1, failed=1, errors=1)
+    result.assert_outcomes(passed=2, failed=1, errors=1)
     result.stdout.fnmatch_lines(["*ERROR at teardown of test_service*", "*expected 1 observed requests, got 0*"])
     assert "ERROR at teardown of test_fails_itself" not in result.stdout.str()
 
