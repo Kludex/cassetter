@@ -428,6 +428,16 @@ class Cassette:
         body: bytes | None,
     ) -> HttpResponse:
         """Find a matching response for the given request, or raise NoMatchError."""
+        return self.match(method, uri, headers, body)[1]
+
+    def match(
+        self,
+        method: str,
+        uri: str,
+        headers: dict[str, list[str]],
+        body: bytes | None,
+    ) -> tuple[int, HttpResponse]:
+        """Like `play()`, but also returns the index of the matched interaction."""
         if self._inner is None:
             raise NoMatchError("cassette not loaded")
 
@@ -451,7 +461,7 @@ class Cassette:
 
         idx, interaction = result
         self._play_counter[idx] += 1
-        return interaction.response
+        return idx, interaction.response
 
     def _take_normalized_match(self, request: HttpRequest) -> tuple[int, HttpInteraction] | None:
         """Match against the mirror, whose URIs were normalized at load time.
@@ -478,14 +488,14 @@ class Cassette:
         response_headers: dict[str, list[str]],
         response_body: bytes | None,
         order: int | None = None,
-        expected: HttpResponse | None = None,
+        expected: tuple[int, HttpResponse] | None = None,
     ) -> HttpResponse:
         """Record an interaction and return the response.
 
         Args:
             order: Position claimed by `reserve_record_order()` before the
                 request went out. Defaults to the order this call arrives in.
-            expected: The recording `play()` matched in `verify` mode. The response
+            expected: The index and recording `match()` found in `verify` mode. The response
                 is compared against it, with the same processing as a recording,
                 instead of being recorded.
         """
@@ -524,11 +534,12 @@ class Cassette:
         interaction = _retag_content_length(interaction)
 
         if expected is not None:
+            index, recorded = expected
             live = interaction.response
             if self._before_compare_response is not None:
-                expected, live = self._before_compare_response(expected, live)
-            label = f"cassette {self._path}, {method} {interaction.request.uri}"
-            compare_responses(self._compare, expected, live, label)
+                recorded, live = self._before_compare_response(recorded, live)
+            label = f"cassette {self._path}, interaction {index} ({method} {interaction.request.uri})"
+            compare_responses(self._compare, recorded, live, label)
             return interaction.response
 
         if self._inner is None:
