@@ -176,12 +176,25 @@ fn tolerate(recorded: &Value, live: &Value, tolerance: f64) -> Value {
                 })
                 .collect(),
         ),
-        (Value::Number(a), Value::Number(b)) => match (a.as_f64(), b.as_f64()) {
-            (Some(a), Some(b)) if (a - b).abs() <= tolerance => recorded.clone(),
-            _ => live.clone(),
-        },
+        (Value::Number(a), Value::Number(b)) => {
+            let difference = match (integer(a), integer(b)) {
+                (Some(a), Some(b)) => Some(a.abs_diff(b) as f64),
+                _ => a.as_f64().zip(b.as_f64()).map(|(a, b)| (a - b).abs()),
+            };
+            match difference {
+                Some(difference) if difference <= tolerance => recorded.clone(),
+                _ => live.clone(),
+            }
+        }
         _ => live.clone(),
     }
+}
+
+fn integer(number: &serde_json::Number) -> Option<i128> {
+    number
+        .as_i64()
+        .map(i128::from)
+        .or_else(|| number.as_u64().map(i128::from))
 }
 
 fn render(response: Response) -> Vec<String> {
@@ -352,7 +365,20 @@ fn edit_script<'a>(expected: &'a [String], actual: &'a [String]) -> Vec<Op<'a>> 
 
 #[cfg(test)]
 mod tests {
-    use super::{glob, unified_diff};
+    use serde_json::json;
+
+    use super::{glob, tolerate, unified_diff};
+
+    #[test]
+    fn tolerance_compares_integers_exactly() {
+        let recorded = json!([9007199254740992u64, 1, 0.3]);
+        let live = json!([9007199254740993u64, 2, 0.30000000000000004]);
+        assert_eq!(
+            tolerate(&recorded, &live, 1e-9),
+            json!([9007199254740993u64, 2, 0.3])
+        );
+        assert_eq!(tolerate(&recorded, &live, 1.0), recorded);
+    }
 
     fn lines(text: &str) -> Vec<String> {
         text.split('\n').map(str::to_string).collect()
