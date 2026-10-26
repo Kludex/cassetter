@@ -83,12 +83,13 @@ def body_to_bytes(body: Body) -> bytes:
     return b""
 
 
-def _compare(compare: Compare, recorded: dict[str, Any], live: dict[str, Any], label: str) -> None:
-    expected = _render(recorded)
-    actual = _render(_tolerate(recorded, live, compare.float_tolerance))
-    if expected == actual:
+def _compare(compare: Compare, expected: dict[str, Any], actual: dict[str, Any], label: str) -> None:
+    actual["body"]["content"] = _tolerate(
+        expected["body"]["content"], actual["body"]["content"], compare.float_tolerance
+    )
+    if _render(expected) == _render(actual):
         return
-    diff = difflib.unified_diff(expected, actual, "recorded", "live", lineterm="")
+    diff = difflib.unified_diff(_render(expected), _render(actual), "recorded", "live", lineterm="")
     raise ResponseMismatchError(f"{label}\n" + "\n".join(diff))
 
 
@@ -98,12 +99,12 @@ def _path(uri: str) -> str:
 
 
 def _normalize(compare: Compare, head: str, headers: dict[str, list[str]], body: Body) -> dict[str, Any]:
-    kept = {
-        name: values
-        for name, values in sorted(headers.items())
-        if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers)
-    }
-    return {"head": head, "headers": kept, "body": _body(compare, body)}
+    kept: dict[str, list[str]] = {}
+    for name, values in sorted(headers.items(), key=lambda item: item[0].lower()):
+        if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers):
+            kept.setdefault(name.lower(), []).extend(values)
+    body_type = "decoded" if compare.decode is not None else body.body_type
+    return {"head": head, "headers": kept, "body": {"type": body_type, "content": _body(compare, body)}}
 
 
 def _body(compare: Compare, body: Body) -> Any:
@@ -132,6 +133,8 @@ def _sse_events(text: str) -> list[Any]:
 
 
 def _drop_paths(value: Any, paths: list[str], current: str) -> Any:
+    if current in paths:
+        return None
     if isinstance(value, dict):
         prefix = f"{current}." if current else ""
         return {key: _drop_paths(item, paths, prefix + key) for key, item in value.items() if prefix + key not in paths}
@@ -160,12 +163,12 @@ def _is_number(value: Any) -> bool:
 def _render(normalized: dict[str, Any]) -> list[str]:
     lines = [normalized["head"], "@@ headers @@"]
     lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
-    lines.append("@@ body @@")
-    body = normalized["body"]
+    lines.append(f"@@ {normalized['body']['type']} body @@")
+    body = normalized["body"]["content"]
     if isinstance(body, bytes):
         lines.append(repr(body))
     elif isinstance(body, str):
-        lines += body.splitlines()
+        lines += body.split("\n")
     else:
         lines += json.dumps(body, indent=2, sort_keys=True).splitlines()
     return lines

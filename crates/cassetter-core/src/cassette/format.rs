@@ -730,7 +730,11 @@ pub fn to_raw(cassette: &Cassette, order: &[usize]) -> RawCassette {
         interactions,
         grpc_interactions,
         ws_interactions,
-        observed_requests: cassette.observed_requests.iter().map(request_to_raw).collect(),
+        observed_requests: cassette
+            .observed_requests
+            .iter()
+            .map(request_to_raw)
+            .collect(),
     }
 }
 
@@ -1153,7 +1157,10 @@ observed_requests:
         assert_eq!(cassette.observed_requests[0].method, "POST");
         assert_eq!(cassette.len(), 1);
         let written = serde_saphyr::to_string(&to_raw(&cassette, &[])).unwrap();
-        assert_eq!(load_yaml(&written).observed_requests, cassette.observed_requests);
+        assert_eq!(
+            load_yaml(&written).observed_requests,
+            cassette.observed_requests
+        );
 
         let empty = serde_saphyr::to_string(&to_raw(&Cassette::new(), &[])).unwrap();
         assert!(!empty.contains("observed_requests"), "{empty}");
