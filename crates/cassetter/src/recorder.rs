@@ -10,6 +10,10 @@ use cassetter_core::security::scrub_grpc_interaction;
 #[cfg(feature = "reqwest")]
 use cassetter_core::security::scrub_interaction;
 
+#[cfg(feature = "reqwest")]
+use crate::compare::diff_responses;
+#[cfg(feature = "reqwest")]
+use crate::config::RecordMode;
 use crate::config::{path_text, RecorderBuilder};
 #[cfg(feature = "reqwest")]
 use crate::recorder_state::retag_content_length;
@@ -98,6 +102,44 @@ impl Recorder {
             "HTTP",
             format!("{} {}", request.method, request.uri),
         )
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub(crate) fn verifies(&self) -> Result<bool> {
+        Ok(self.lock()?.mode == RecordMode::Verify)
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub(crate) fn verify_http(
+        &self,
+        recorded: HttpResponse,
+        interaction: HttpInteraction,
+    ) -> Result<()> {
+        let (compare, hook, label, mut live) = {
+            let state = self.lock()?;
+            let interaction = scrub_interaction(&interaction, &state.security);
+            let label = format!(
+                "cassette {}, {} {}",
+                state.path.display(),
+                interaction.request.method,
+                interaction.request.uri
+            );
+            (
+                state.compare.clone(),
+                state.before_compare_response.clone(),
+                label,
+                interaction.response,
+            )
+        };
+        retag_content_length(&mut live.headers, &live.body)?;
+        let (recorded, live) = match hook {
+            Some(hook) => (hook.0)(recorded, live),
+            None => (recorded, live),
+        };
+        match diff_responses(&compare, &recorded, &live) {
+            Some(diff) => Err(Error::ResponseMismatch(format!("{label}\n{diff}"))),
+            None => Ok(()),
+        }
     }
 
     #[cfg(feature = "tonic")]

@@ -18,6 +18,8 @@ pub enum Error {
     Recording(Vec<String>),
     /// An HTTP body, header, or response could not be represented.
     InvalidTransportData(String),
+    /// A live response differs from its recording in [`RecordMode::Verify`](crate::RecordMode::Verify).
+    ResponseMismatch(String),
     /// The live HTTP request failed.
     #[cfg(feature = "reqwest")]
     Reqwest(reqwest::Error),
@@ -40,7 +42,9 @@ impl fmt::Display for Error {
             Error::Recording(errors) => {
                 write!(f, "cassette recording failed: {}", errors.join("; "))
             }
-            Error::InvalidTransportData(message) => f.write_str(message),
+            Error::InvalidTransportData(message) | Error::ResponseMismatch(message) => {
+                f.write_str(message)
+            }
             #[cfg(feature = "reqwest")]
             Error::Reqwest(error) => error.fmt(f),
         }

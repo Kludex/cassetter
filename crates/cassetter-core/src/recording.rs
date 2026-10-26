@@ -12,6 +12,9 @@ pub enum RecordMode {
     All,
     /// Remove the existing cassette, then record every request.
     Rewrite,
+    /// Send matched requests live and compare each response to its recording.
+    /// A missing interaction is an error and the cassette is never written.
+    Verify,
 }
 
 impl RecordMode {
@@ -46,5 +49,8 @@ mod tests {
         assert!(RecordMode::NewEpisodes.replays());
         assert!(!RecordMode::All.replays());
         assert!(RecordMode::Rewrite.replaces());
+        assert!(RecordMode::Verify.replays());
+        assert!(!RecordMode::Verify.can_record(false));
+        assert!(!RecordMode::Verify.replaces());
     }
 }

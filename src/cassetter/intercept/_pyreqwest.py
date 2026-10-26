@@ -117,9 +117,9 @@ def intercept(
     method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
-        expected = cassette.play(method, url, norm_headers, body)
+        expected = cassette.match(method, url, norm_headers, body)
         if not cassette.verifies:
-            return build_replay_response(url, expected)
+            return build_replay_response(url, expected[1])
     except NoMatchError:
         if not cassette.can_record:
             raise

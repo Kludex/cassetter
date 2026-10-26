@@ -102,7 +102,7 @@ Any other body is compared as text or bytes.
 On a difference, the test fails with a unified diff of both responses, as compared:
 
 ```
-cassette tests/expected/chat.yaml, POST http://localhost:8000/v1/chat
+cassette tests/expected/chat.yaml, interaction 0 (POST http://localhost:8000/v1/chat)
 --- recorded
 +++ live
 @@ -1,7 +1,7 @@

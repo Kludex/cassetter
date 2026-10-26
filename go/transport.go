@@ -86,6 +86,7 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		return nil, errors.Join(errors.New("cassetter request hook removed the request URL"), closeRequestBody(request))
 	}
 	uri := request.URL.String()
+	var expected *HTTPResponse
 	if t.config.mode != RecordModeAll && t.config.mode != RecordModeRewrite {
 		probe, err := t.requestForMatching(request)
 		if err != nil {
@@ -95,14 +96,16 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 		if err != nil {
 			return nil, errors.Join(err, closeRequestBody(request))
 		}
-		if found {
+		if found && t.config.mode == RecordModeVerify {
+			expected = &interaction.Response
+		} else if found {
 			if err := closeRequestBody(request); err != nil {
 				return nil, err
 			}
 			return replayResponse(request, interaction.Response)
 		}
 	}
-	if !t.canRecord {
+	if !t.canRecord && expected == nil {
 		return nil, errors.Join(&NoMatchError{Method: request.Method, URI: uri}, closeRequestBody(request))
 	}
 
@@ -171,6 +174,9 @@ func (t *Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 				Body:    responseBody,
 			},
 			RecordedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		if expected != nil {
+			return t.verify(interaction, *expected)
 		}
 		return t.record(interaction, order)
 	}
