@@ -150,7 +150,7 @@ jobs:
               *) echo "unexpected wheel version: $wheel" >&2; exit 1 ;;
             esac
           done
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}-${{ matrix.manylinux || 'auto' }}
           path: dist/*.whl
@@ -198,7 +198,7 @@ jobs:
           artifact="dist/cassetter-${VERSION}.tar.gz"
           test -f "$artifact"
           test "$(tar -xOf "$artifact" "cassetter-${VERSION}/PKG-INFO" | grep -E '^Version: ')" = "Version: $VERSION"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -248,7 +248,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.target }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           package-manager-cache: false
@@ -258,7 +258,7 @@ jobs:
           version: 0.15.2
           use-cache: false
       - if: matrix.cross == 'zig'
-        uses: taiki-e/install-action@5bf6ce016fd2e72eefc647cbca1e4213f65955b8 # v2
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
           tool: cargo-zigbuild
       - run: npm ci
@@ -275,7 +275,7 @@ jobs:
             args+=(-x)
           fi
           npm run build:native -- --target "$TARGET" "${args[@]}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: node-${{ matrix.target }}
           path: ts/native/cassetter.*.node
@@ -295,13 +295,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           package-manager-cache: false
       - run: npm ci
       - run: npm run build:native
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: node-*
           path: ts/native
@@ -378,7 +378,7 @@ jobs:
           node --input-type=module -e 'import { formatVersion } from "cassetter"; if (formatVersion() !== 1) process.exit(1)'
         env:
           VERSION: ${{ needs.version.outputs.version }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: npm-dist
           path: ts/npm-dist/*.tgz
@@ -430,7 +430,7 @@ jobs:
             grep -Fx "${package}-${VERSION}/README.md" "${package}-crate-files.txt"
             grep -Fx "${package}-${VERSION}/src/lib.rs" "${package}-crate-files.txt"
           done
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: crates-io-dist
           path: target/package/cassetter*.crate
@@ -506,12 +506,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sdist
           path: dist
@@ -530,14 +530,14 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.20.0"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - name: Verify npm version
         run: test "$(npm --version)" = 11.19.0
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: npm-dist
           path: npm-dist
@@ -555,7 +555,7 @@ jobs:
       id-token: write
     steps:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: crates-io-dist
           path: ${{ runner.temp }}/crates-io-dist
@@ -592,7 +592,7 @@ jobs:
       id-token: write
     steps:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: crates-io-dist
           path: ${{ runner.temp }}/crates-io-dist
