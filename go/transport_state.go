@@ -13,7 +13,7 @@ func (t *Transport) load() {
 		return
 	}
 	switch t.config.mode {
-	case RecordModeNone, RecordModeOnce, RecordModeNewEpisodes, RecordModeAll, RecordModeRewrite:
+	case RecordModeNone, RecordModeOnce, RecordModeNewEpisodes, RecordModeAll, RecordModeRewrite, RecordModeVerify:
 	default:
 		t.initErr = fmt.Errorf("cassetter: unknown record mode %q", t.config.mode)
 		return

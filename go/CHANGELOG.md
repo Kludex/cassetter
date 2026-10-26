@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added `RecordModeVerify`, which sends matched HTTP requests live and reports a `ResponseMismatchError` with a unified
+  diff when the response differs from the recording.
+
 ## 0.1.0 - 2026-09-04
 
 This is the first release of the Go SDK.
