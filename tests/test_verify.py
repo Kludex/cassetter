@@ -153,7 +153,8 @@ def test_verify_compares_only_listed_headers(url: str, reply: Reply, path: str) 
 
     reply.headers["x-price-estimate"] = "0.0002USD"
     expected = (
-        f"cassette {path}, GET {url}\n--- recorded\n+++ live\n@@ -1,6 +1,6 @@\n status: 200\n @@ headers @@\n"
+        f"cassette {path}, interaction 0 (GET {url})\n--- recorded\n+++ live\n"
+        "@@ -1,6 +1,6 @@\n status: 200\n @@ headers @@\n"
         '-x-price-estimate: 0.0001USD\n+x-price-estimate: 0.0002USD\n @@ body @@\n {\n   "answer": 42'
     )
     with use_cassette(path, record_mode="verify", intercept=["httpx"], compare=compare):

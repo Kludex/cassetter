@@ -53,9 +53,9 @@ class AiohttpInterceptor:
             norm_method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
-                expected = cassette.play(norm_method, uri, headers, body)
+                expected = cassette.match(norm_method, uri, headers, body)
                 if not cassette.verifies:
-                    return build_aiohttp_response(norm_method, uri, expected)
+                    return build_aiohttp_response(norm_method, uri, expected[1])
             except NoMatchError:
                 if not cassette.can_record:
                     raise
