@@ -46,7 +46,11 @@ export function compareResponses(
 ): void {
   const before = normalize(compare, recorded);
   const after = normalize(compare, live);
-  after.body = tolerate(before.body, after.body, compare.floatTolerance ?? 0);
+  after.body.content = tolerate(
+    before.body.content,
+    after.body.content,
+    compare.floatTolerance ?? 0,
+  );
   const expected = render(before);
   const actual = render(after);
   if (expected.join("\n") === actual.join("\n")) return;
@@ -58,14 +62,18 @@ export function compareResponses(
 interface Normalized {
   status: number;
   headers: [string, string[]][];
-  body: unknown;
+  body: { type: string; content: unknown };
 }
 
 function normalize(compare: Compare, response: HttpResponse): Normalized {
   const patterns = (compare.headers ?? []).map(glob);
-  const headers = Object.entries(response.headers)
-    .filter(([name]) => patterns.some((pattern) => pattern.test(name)))
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const headers = new Map<string, string[]>();
+  for (const [name, values] of Object.entries(response.headers)) {
+    const lower = name.toLowerCase();
+    if (patterns.some((pattern) => pattern.test(lower))) {
+      headers.set(lower, [...(headers.get(lower) ?? []), ...values]);
+    }
+  }
   const ignore = compare.jsonIgnore ?? [];
   const { type, content } = response.body;
   let body = content;
@@ -73,7 +81,8 @@ function normalize(compare: Compare, response: HttpResponse): Normalized {
   else if (compare.sse && type === "text") {
     body = sseEvents(String(content)).map((event) => dropPaths(event, ignore, ""));
   }
-  return { status: response.status, headers, body };
+  const sorted = [...headers].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return { status: response.status, headers: sorted, body: { type, content: body } };
 }
 
 function glob(pattern: string): RegExp {
@@ -103,6 +112,7 @@ function sseEvents(text: string): unknown[] {
 }
 
 function dropPaths(value: unknown, paths: string[], current: string): unknown {
+  if (paths.includes(current)) return null;
   if (Array.isArray(value))
     return value.map((item, i) => dropPaths(item, paths, `${current}[${i}]`));
   if (isObject(value)) {
@@ -148,9 +158,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function render({ status, headers, body }: Normalized): string[] {
   const lines = [`status: ${status}`, "@@ headers @@"];
   for (const [name, values] of headers) lines.push(...values.map((value) => `${name}: ${value}`));
-  lines.push("@@ body @@");
-  if (typeof body === "string") lines.push(...body.split(/\r?\n/));
-  else if (body !== undefined) lines.push(...JSON.stringify(sortKeys(body), null, 2).split("\n"));
+  lines.push(`@@ ${body.type} body @@`);
+  if (body.type !== "json" && typeof body.content === "string") {
+    lines.push(...body.content.split("\n"));
+  } else if (body.content !== undefined) {
+    lines.push(...JSON.stringify(sortKeys(body.content), null, 2).split("\n"));
+  }
   return lines;
 }
 
@@ -167,6 +180,8 @@ function sortKeys(value: unknown): unknown {
 }
 
 const CONTEXT = 3;
+/** Past this many LCS cells (4 bytes each), a greedy diff stands in for the exact one. */
+const MAX_TABLE_CELLS = 4_000_000;
 
 /** Hunks of a unified diff from `a` to `b`, without the `---`/`+++` header. */
 function unifiedDiff(a: string[], b: string[]): string[] {
@@ -183,10 +198,9 @@ function unifiedDiff(a: string[], b: string[]): string[] {
   const x = a.slice(start, a.length - end);
   const y = b.slice(start, b.length - end);
 
-  const lcs = Array.from({ length: x.length + 1 }, () =>
-    Array.from({ length: y.length + 1 }, () => 0),
-  );
-  for (let i = x.length - 1; i >= 0; i--) {
+  const exact = x.length * y.length <= MAX_TABLE_CELLS;
+  const lcs = Array.from({ length: exact ? x.length + 1 : 0 }, () => new Int32Array(y.length + 1));
+  for (let i = lcs.length - 2; i >= 0; i--) {
     for (let j = y.length - 1; j >= 0; j--) {
       lcs[i][j] = x[i] === y[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
@@ -199,7 +213,7 @@ function unifiedDiff(a: string[], b: string[]): string[] {
     if (i < x.length && j < y.length && x[i] === y[j]) {
       ops.push([" ", x[i++]]);
       j++;
-    } else if (i < x.length && (j === y.length || lcs[i + 1][j] >= lcs[i][j + 1])) {
+    } else if (i < x.length && (j === y.length || !exact || lcs[i + 1][j] >= lcs[i][j + 1])) {
       ops.push(["-", x[i++]]);
     } else {
       ops.push(["+", y[j++]]);

@@ -126,7 +126,7 @@ cassette tests/expected/chat.yaml, POST http://localhost:8000/v1/chat
  content-type: application/json
 -x-price-estimate: 0.0001USD
 +x-price-estimate: 0.0002USD
- @@ body @@
+ @@ json body @@
  {
    "content": "hi"
 ```

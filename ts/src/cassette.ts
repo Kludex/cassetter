@@ -352,7 +352,8 @@ export class Cassette {
       const [recorded, live] = this._beforeCompareResponse
         ? this._beforeCompareResponse(expected, interaction.response)
         : [expected, interaction.response];
-      compareResponses(this._compare, recorded, live, `cassette ${this._path}, ${method} ${uri}`);
+      const label = `cassette ${this._path}, ${method} ${interaction.request.uri}`;
+      compareResponses(this._compare, recorded, live, label);
       return interaction.response;
     }
 

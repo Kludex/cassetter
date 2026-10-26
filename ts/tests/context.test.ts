@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import {
   createServer,
   get as httpGet,
@@ -684,7 +684,7 @@ describe("verify mode", () => {
         "-status: 200",
         "+status: 201",
         " @@ headers @@",
-        " @@ body @@",
+        " @@ json body @@",
         " {",
         '-  "a": 1',
         '+  "a": 2',
@@ -767,6 +767,82 @@ describe("verify mode", () => {
     await verify(path, {
       beforeCompareResponse: (recorded, live) => [dropNulls(recorded), dropNulls(live)],
     });
+  });
+
+  it("never tolerates a status change", async () => {
+    const path = join(dir, "verify.yaml");
+    await record(path);
+    reply.status = 201;
+
+    await expect(verify(path, { compare: { floatTolerance: 10 } })).rejects.toThrow(
+      /-status: 200\n\+status: 201/,
+    );
+  });
+
+  it("compares trailing newlines", async () => {
+    const path = join(dir, "verify.yaml");
+    reply = { status: 200, headers: { "content-type": "text/plain" }, body: "answer\n" };
+    await record(path);
+    reply.body = "answer";
+
+    await expect(verify(path)).rejects.toThrow(/ answer\n-$/);
+  });
+
+  it("compares body types and top-level JSON scalars", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.body = "1";
+    await record(path);
+
+    reply.body = '"1"';
+    await expect(verify(path)).rejects.toThrow(/-1\n\+"1"/);
+    reply = { status: 200, headers: { "content-type": "text/plain" }, body: "1" };
+    await expect(verify(path)).rejects.toThrow(/-@@ json body @@\n\+@@ text body @@/);
+  });
+
+  it("ignores array elements", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.body = '{"items":[1,2]}';
+    await record(path);
+    reply.body = '{"items":[3,2]}';
+
+    await verify(path, { compare: { jsonIgnore: ["items[0]"] } });
+  });
+
+  it("compares header names case-insensitively", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.headers["x-price-estimate"] = "1";
+    await record(path);
+    const yaml = readFileSync(path, "utf-8");
+    writeFileSync(path, yaml.replace("x-price-estimate", "X-Price-Estimate"));
+
+    await verify(path, { compare: { headers: ["x-price-*"] } });
+  });
+
+  it("does not leak scrubbed query parameters in the mismatch", async () => {
+    const path = join(dir, "verify.yaml");
+    const options = { filterQueryParameters: ["api_key"] };
+    const call = async () => void (await fetch(`${origin}/chat?api_key=secret`)).text();
+    await useCassette(path, { ...options, recordMode: "all" }, call);
+    reply.status = 500;
+
+    const error = (await useCassette(path, { ...options, recordMode: "verify" }, call).catch(
+      (e: unknown) => e,
+    )) as Error;
+    expect(error).toBeInstanceOf(ResponseMismatchError);
+    expect(error.message).not.toContain("secret");
+  });
+
+  it("bounds the diff of a large mismatch", async () => {
+    const path = join(dir, "verify.yaml");
+    const numbers = (offset: number) => Array.from({ length: 5000 }, (_, i) => i * 2 + offset);
+    reply.body = JSON.stringify(numbers(0));
+    await record(path);
+    reply.body = JSON.stringify(numbers(1));
+
+    const error = (await verify(path).catch((e: unknown) => e)) as Error;
+    expect(error).toBeInstanceOf(ResponseMismatchError);
+    expect(error.message).toContain("-  0,\n");
+    expect(error.message).toContain("+  9999\n");
   });
 
   it("throws NoMatchError for an unmatched request", async () => {
