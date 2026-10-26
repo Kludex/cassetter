@@ -7,6 +7,7 @@ describe("RecordMode", () => {
     expect(RecordMode.ONCE).toBe("once");
     expect(RecordMode.NEW_EPISODES).toBe("new_episodes");
     expect(RecordMode.ALL).toBe("all");
+    expect(RecordMode.VERIFY).toBe("verify");
   });
 });
 
@@ -16,6 +17,7 @@ describe("parseRecordMode", () => {
     expect(parseRecordMode("once")).toBe(RecordMode.ONCE);
     expect(parseRecordMode("new_episodes")).toBe(RecordMode.NEW_EPISODES);
     expect(parseRecordMode("all")).toBe(RecordMode.ALL);
+    expect(parseRecordMode("verify")).toBe(RecordMode.VERIFY);
   });
 
   it("is case insensitive", () => {

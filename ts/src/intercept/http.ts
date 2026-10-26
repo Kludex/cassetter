@@ -12,7 +12,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { Readable, Transform, Writable, addAbortSignal, pipeline } from "node:stream";
 
 import { NoMatchError, type Cassette } from "../cassette.js";
-import { bodyToBuffer, type HeaderMap } from "../types.js";
+import { bodyToBuffer, type HeaderMap, type HttpResponse } from "../types.js";
 import { isLocalhost, liveRequests, type Interceptor } from "./base.js";
 
 type RequestFn = (...args: unknown[]) => http.ClientRequest;
@@ -185,14 +185,17 @@ class CassetteRequest extends Writable {
     }
     const body = Buffer.concat(this._chunks);
 
+    let expected: HttpResponse | undefined;
     try {
-      const recorded = cassette.play(this.method, this._url, headers, body);
-      const replayed = bodyToBuffer(recorded.body);
-      return this._emitResponse(
-        recorded.status,
-        recorded.headers,
-        Readable.from(replayed.length ? [replayed] : [], { objectMode: false }),
-      );
+      expected = cassette.play(this.method, this._url, headers, body);
+      if (!cassette.verifies) {
+        const replayed = bodyToBuffer(expected.body);
+        return this._emitResponse(
+          expected.status,
+          expected.headers,
+          Readable.from(replayed.length ? [replayed] : [], { objectMode: false }),
+        );
+      }
     } catch (e) {
       if (!(e instanceof NoMatchError) || !cassette.canRecord) throw e;
     }
@@ -213,7 +216,14 @@ class CassetteRequest extends Writable {
       },
       flush: (next) => {
         this._inflight = null;
-        cassette.record(this.method, this._url, headers, body, status, responseHeaders, Buffer.concat(chunks), order);
+        try {
+          const data = Buffer.concat(chunks);
+          cassette.record(
+            this.method, this._url, headers, body, status, responseHeaders, data, order, expected,
+          );
+        } catch (error) {
+          return next(error as Error);
+        }
         next();
       },
     });
