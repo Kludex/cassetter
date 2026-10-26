@@ -21,6 +21,9 @@ class RecordMode(enum.Enum):
     REWRITE = enum.auto()
     """Delete the cassette up front, then record everything. A run that records nothing leaves no file."""
 
+    VERIFY = enum.auto()
+    """Send matched requests live and fail if the response differs from the recording. Raises if no match found."""
+
     @classmethod
     def from_str(cls, value: str) -> RecordMode:
         mapping = {
@@ -29,6 +32,7 @@ class RecordMode(enum.Enum):
             "all": cls.ALL,
             "once": cls.ONCE,
             "rewrite": cls.REWRITE,
+            "verify": cls.VERIFY,
         }
         normalized = value.lower().replace("-", "_")
         if normalized not in mapping:

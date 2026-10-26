@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING
 
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, BeforeRecordWsFrame, Cassette, UriNormalizer
+from cassetter.compare import BeforeCompareResponse, Compare
 from cassetter.config import Cassetter
 from cassetter.recording import RecordMode
 
@@ -31,6 +32,8 @@ def use_cassette(
     before_record_response: BeforeRecordResponse | None = None,
     uri_normalizer: UriNormalizer | None = None,
     before_record_ws_frame: BeforeRecordWsFrame | None = None,
+    compare: Compare | None = None,
+    before_compare_response: BeforeCompareResponse | None = None,
 ) -> AbstractContextManager[Cassette]:
     """Context manager for recording/replaying HTTP interactions.
 
@@ -54,6 +57,8 @@ def use_cassette(
             before comparison, e.g. to erase region or account differences.
         before_record_ws_frame: Hook to modify or skip WebSocket frames. Also applied to live sends
             before strict replay compares them.
+        compare: What `verify` mode compares between a recorded and a live response.
+        before_compare_response: Hook receiving `(recorded, live)` in `verify` mode and returning both normalized.
 
     Returns:
         A context manager yielding the active cassette.
@@ -75,5 +80,7 @@ def use_cassette(
         before_record_response=before_record_response,
         uri_normalizer=uri_normalizer,
         before_record_ws_frame=before_record_ws_frame,
+        compare=compare,
+        before_compare_response=before_compare_response,
     )
     return config.use_cassette(path)

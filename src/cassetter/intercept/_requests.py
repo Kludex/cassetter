@@ -43,11 +43,13 @@ class RequestsInterceptor:
             method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
-                response = cassette.play(method, uri, headers, body)
-                return build_requests_response(request, response)
+                expected = cassette.play(method, uri, headers, body)
+                if not cassette.verifies:
+                    return build_requests_response(request, expected)
             except NoMatchError:
                 if not cassette.can_record:
                     raise
+                expected = None
 
             order = cassette.reserve_record_order()
             real_response = original_send(session, request, **kwargs)
@@ -64,6 +66,7 @@ class RequestsInterceptor:
                 response_headers=resp_headers,
                 response_body=real_response.content,
                 order=order,
+                expected=expected,
             )
             return real_response
 

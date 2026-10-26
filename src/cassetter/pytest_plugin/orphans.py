@@ -44,8 +44,8 @@ def add_options(parser: pytest.Parser) -> None:
         "--record-mode",
         action="store",
         default=None,
-        choices=["none", "new_episodes", "all", "once", "rewrite"],
-        help="VCR record mode: none, new_episodes, all, once, rewrite",
+        choices=["none", "new_episodes", "all", "once", "rewrite", "verify"],
+        help="VCR record mode: none, new_episodes, all, once, rewrite, verify",
     )
     group.addoption(
         "--vcr-check-orphans",

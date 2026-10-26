@@ -15,6 +15,7 @@ from cassetter._state import (
     release_patches,
 )
 from cassetter.cassette import BeforeRecordRequest, BeforeRecordResponse, BeforeRecordWsFrame, Cassette, UriNormalizer
+from cassetter.compare import BeforeCompareResponse, Compare
 from cassetter.intercept._registry import resolve_interceptors
 from cassetter.recording import RecordMode
 
@@ -56,6 +57,8 @@ class Cassetter:
     before_record_response: BeforeRecordResponse | None = None
     uri_normalizer: UriNormalizer | None = None
     before_record_ws_frame: BeforeRecordWsFrame | None = None
+    compare: Compare | None = None
+    before_compare_response: BeforeCompareResponse | None = None
 
     def cassette(self, name: str | os.PathLike[str]) -> Cassette:
         """Build an unloaded cassette for `name`, resolved against `cassette_library_dir`.
@@ -87,6 +90,8 @@ class Cassetter:
             before_record_response=self.before_record_response,
             uri_normalizer=self.uri_normalizer,
             before_record_ws_frame=self.before_record_ws_frame,
+            compare=self.compare,
+            before_compare_response=self.before_compare_response,
         )
 
     @contextlib.contextmanager

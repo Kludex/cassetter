@@ -31,6 +31,7 @@ from cassetter._core import (
     scrub_interaction,
     scrub_ws_interaction,
 )
+from cassetter.compare import BeforeCompareResponse, Compare, compare_responses
 from cassetter.intercept._base import is_localhost
 from cassetter.introspection import RecordedRequest, recorded_request, sent_request
 from cassetter.recording import RecordMode
@@ -119,6 +120,8 @@ class Cassette:
         before_record_response: BeforeRecordResponse | None = None,
         uri_normalizer: UriNormalizer | None = None,
         before_record_ws_frame: BeforeRecordWsFrame | None = None,
+        compare: Compare | None = None,
+        before_compare_response: BeforeCompareResponse | None = None,
     ) -> None:
         self._path = os.fspath(path)
         self._record_mode = record_mode
@@ -134,6 +137,8 @@ class Cassette:
         self._before_record_response = before_record_response
         self._before_record_ws_frame = before_record_ws_frame
         self._uri_normalizer = uri_normalizer
+        self._compare = compare or Compare()
+        self._before_compare_response = before_compare_response
         # Mirror of the inner cassette holding copies with normalized URIs, so
         # matching stays on the Rust path. None when no normalizer.
         self._match_inner: _RustCassette | None = None
@@ -157,6 +162,11 @@ class Cassette:
     @property
     def record_mode(self) -> RecordMode:
         return self._record_mode
+
+    @property
+    def verifies(self) -> bool:
+        """Whether a matched request goes live and its response is compared to the recording."""
+        return self._record_mode == RecordMode.VERIFY
 
     @property
     def match_config(self) -> MatchConfig:
@@ -468,12 +478,16 @@ class Cassette:
         response_headers: dict[str, list[str]],
         response_body: bytes | None,
         order: int | None = None,
+        expected: HttpResponse | None = None,
     ) -> HttpResponse:
         """Record an interaction and return the response.
 
         Args:
             order: Position claimed by `reserve_record_order()` before the
                 request went out. Defaults to the order this call arrives in.
+            expected: The recording `play()` matched in `verify` mode. The response
+                is compared against it, with the same processing as a recording,
+                instead of being recorded.
         """
         # Apply before_record_response hook
         if self._before_record_response is not None:
@@ -508,6 +522,13 @@ class Cassette:
         # Apply security filtering
         interaction = scrub_interaction(interaction, self._security_config)
         interaction = _retag_content_length(interaction)
+
+        if expected is not None:
+            live = interaction.response
+            if self._before_compare_response is not None:
+                expected, live = self._before_compare_response(expected, live)
+            compare_responses(self._compare, expected, live, f"cassette {self._path}, {method} {uri}")
+            return interaction.response
 
         if self._inner is None:
             self._inner = _RustCassette()
