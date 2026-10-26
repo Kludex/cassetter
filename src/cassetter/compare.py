@@ -111,10 +111,10 @@ def _frame(compare: Compare, frame: WsFrame) -> Any:
         return f"{struct.unpack('>H', content[:2])[0]} {content[2:].decode()}"
     if isinstance(content, str):
         try:
-            return _drop_paths(json.loads(content), compare.json_ignore, "")
+            content = json.loads(content)
         except json.JSONDecodeError:
             return content
-    return content
+    return _drop_paths(content, compare.json_ignore, "")
 
 
 def _sse_events(text: str) -> list[Any]:

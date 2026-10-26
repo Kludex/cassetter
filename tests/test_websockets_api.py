@@ -5,10 +5,11 @@ from pathlib import Path
 
 import pytest
 import websockets
+from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from websockets.frames import Close
 
-from cassetter import Body, ResponseMismatchError, WsFrame, use_cassette
+from cassetter import Body, Compare, ResponseMismatchError, WsFrame, use_cassette
 
 
 @pytest.fixture
@@ -124,3 +125,31 @@ async def test_verify_reports_different_received_frames(tmp_path: Path, ws_uri: 
         '-@@ text 1 @@\n-{\n-  "greeting": "hello"\n-}\n+text 1: hello\n'
         " binary 2: b'\\x00\\x01'\n close 3: 4000 bye"
     )
+
+
+async def send_price(ws: ServerConnection) -> None:
+    await ws.send('{"id": "live", "price": 42.5}')
+    await ws.close(4000, "bye")
+
+
+async def receive_price(path: Path, uri: str) -> None:
+    with use_cassette(path, record_mode="verify", intercept=["websockets"], compare=Compare(json_ignore=["id"])):
+        async with websockets.connect(uri) as ws:
+            assert await ws.recv() == '{"id": "live", "price": 42.5}'
+            with pytest.raises(ConnectionClosedError):
+                await ws.recv()
+
+
+@pytest.mark.anyio
+async def test_verify_ignores_json_paths_in_recorded_json_frames(tmp_path: Path) -> None:
+    path = tmp_path / "ws.yaml"
+    async with serve(send_price, "localhost", 0) as server:
+        uri = f"ws://localhost:{server.sockets[0].getsockname()[1]}/"
+        frames = [
+            WsFrame("recv", "text", Body("json", {"id": "recorded", "price": 42.5})),
+            WsFrame("recv", "close", Body("binary", b"\x0f\xa0bye")),
+        ]
+        with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+            cassette.record_ws(uri, {}, frames)
+
+        await asyncio.create_task(receive_price(path, uri))
