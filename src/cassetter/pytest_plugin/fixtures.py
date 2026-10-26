@@ -22,7 +22,7 @@ from cassetter.config import Cassetter
 from cassetter.intercept._base import InterceptorProtocol
 from cassetter.intercept._registry import resolve_interceptors
 from cassetter.pytest_plugin.orphans import loaded_cassettes
-from cassetter.pytest_plugin.unplayed import resolve_on_unplayed, schedule_check
+from cassetter.pytest_plugin.unplayed import call_passed, resolve_on_unplayed, schedule_check
 
 _CASSETTER_FIELDS = {field.name for field in fields(Cassetter)}
 
@@ -190,6 +190,9 @@ def cassette(
 
     try:
         yield cassette
+        # A failing test already reports why, and should not wait out the timeout too.
+        if call_passed(request.node):
+            cassette.check_observed()
     finally:
         # Reset context and release patches even if the test errors out
         pop_fallback_cassette(cassette)

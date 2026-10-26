@@ -29,6 +29,9 @@ export {
 } from "./cassette.js";
 export type { CassetteOptions } from "./cassette.js";
 
+export { ResponseMismatchError } from "./compare.js";
+export type { BeforeCompareResponse, Compare } from "./compare.js";
+
 export {
   DISCARDING_MODES,
   RecordMode,

@@ -80,6 +80,16 @@ Each interaction has an optional `recorded_at` ISO 8601 timestamp.
 
 **Why this choice:** Optional gives the best of both worlds - available when useful, not in the way when not.
 
+### 1.5. Optional `observed_requests` section
+
+Requests the code under test sends to a receiver the test runs, such as telemetry exports to a collector, are stored as a top-level `observed_requests` list, after the interactions. Each entry has the shape of an interaction's `request`. The section is omitted when empty, so cassettes without it are unchanged.
+
+**Alternatives considered:**
+
+- **HTTP interactions without a response.** Replay would try to match them, and every reader would need to accept an interaction without a response. Rejected because they are not something the client sends.
+
+**Why this choice:** A separate section keeps replay untouched. Readers that do not know it ignore it, as they ignore any unknown top-level field.
+
 ## 2. Interception
 
 Each library is intercepted at the highest-level extension point available:

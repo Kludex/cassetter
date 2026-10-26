@@ -54,8 +54,10 @@ export class FetchInterceptor implements Interceptor {
           ? null
           : Buffer.from(await request.clone().arrayBuffer());
 
+      let expected: HttpResponse | undefined;
       try {
-        return buildResponse(cassette.play(method, uri, headers, requestBody));
+        expected = cassette.play(method, uri, headers, requestBody);
+        if (!cassette.verifies) return buildResponse(expected);
       } catch (e) {
         if (!(e instanceof NoMatchError) || !cassette.canRecord) throw e;
       }
@@ -79,6 +81,7 @@ export class FetchInterceptor implements Interceptor {
         extractDecodedResponseHeaders(real.headers),
         responseBody,
         order,
+        expected,
       );
 
       return real;

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import {
   createServer,
   get as httpGet,
@@ -21,7 +21,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Cassette, NoMatchError } from "../src/cassette.js";
 import { FetchInterceptor } from "../src/intercept/fetch.js";
 import { RecordMode } from "../src/recording.js";
-import { useCassette } from "../src/context.js";
+import { ResponseMismatchError } from "../src/compare.js";
+import { useCassette, type UseCassetteOptions } from "../src/context.js";
+import type { HttpResponse } from "../src/types.js";
 
 let dir: string;
 let realFetch: typeof globalThis.fetch;
@@ -617,6 +619,264 @@ describe("node:http", () => {
     });
     expect(hits).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
+  });
+});
+
+describe("verify mode", () => {
+  let server: Server;
+  let origin: string;
+  let hits: number;
+  let reply: { status: number; headers: Record<string, string>; body: string };
+
+  beforeEach(async () => {
+    hits = 0;
+    reply = { status: 200, headers: { "content-type": "application/json" }, body: '{"a":1}' };
+    server = createServer((_req, res) => {
+      hits += 1;
+      res.writeHead(reply.status, { ...reply.headers, date: new Date(hits * 1e12).toUTCString() });
+      res.end(reply.body);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => {
+    server.close();
+  });
+
+  async function record(path: string): Promise<string> {
+    await useCassette(path, { recordMode: "all" }, async () => {
+      await (await fetch(`${origin}/chat`)).text();
+    });
+    return readFileSync(path, "utf-8");
+  }
+
+  function verify(path: string, options: UseCassetteOptions = {}): Promise<Cassette> {
+    return useCassette(path, { ...options, recordMode: "verify" }, async () => {
+      await (await fetch(`${origin}/chat`)).text();
+    });
+  }
+
+  it("sends a matched request live and never writes the cassette", async () => {
+    const path = join(dir, "verify.yaml");
+    const recorded = await record(path);
+
+    await verify(path);
+
+    expect(hits).toBe(2);
+    expect(readFileSync(path, "utf-8")).toBe(recorded);
+  });
+
+  it("throws a unified diff when the live response differs", async () => {
+    const path = join(dir, "verify.yaml");
+    await record(path);
+    reply = { ...reply, status: 201, body: '{"a":2}' };
+
+    const error = await verify(path).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ResponseMismatchError);
+    expect((error as Error).message).toBe(
+      [
+        `cassette ${path}, GET ${origin}/chat`,
+        "--- recorded",
+        "+++ live",
+        "@@ -1,6 +1,6 @@",
+        "-status: 200",
+        "+status: 201",
+        " @@ headers @@",
+        " @@ json body @@",
+        " {",
+        '-  "a": 1',
+        '+  "a": 2',
+        " }",
+      ].join("\n"),
+    );
+  });
+
+  it("compares only the listed headers, with globs", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.headers["x-price-estimate"] = "1";
+    await record(path);
+    reply.headers["x-other"] = "new";
+    await verify(path, { compare: { headers: ["X-Price-*"] } });
+
+    reply.headers["x-price-estimate"] = "2";
+    await expect(verify(path, { compare: { headers: ["x-price-*"] } })).rejects.toThrow(
+      /-x-price-estimate: 1\n\+x-price-estimate: 2/,
+    );
+  });
+
+  it("ignores JSON paths and tolerates floats", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.body = JSON.stringify({ id: "a", items: [{ id: 1, score: 0.1 }], total: 3 });
+    await record(path);
+    reply.body = JSON.stringify({ id: "b", items: [{ id: 2, score: 0.1000001 }], total: 3 });
+    const compare = { jsonIgnore: ["id", "items[0].id"], floatTolerance: 1e-3 };
+
+    await verify(path, { compare });
+
+    reply.body = JSON.stringify({ id: "b", items: [{ id: 2, score: 0.2 }], total: 4 });
+    const error = (await verify(path, { compare }).catch((e: unknown) => e)) as Error;
+    expect(error.message).toContain('-      "score": 0.1\n+      "score": 0.2');
+    expect(error.message).toContain('-  "total": 3\n+  "total": 4');
+  });
+
+  it("compares Server-Sent Events by their data payloads", async () => {
+    const path = join(dir, "verify.yaml");
+    reply = {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+      body: 'data: {"id":1,"delta":"hi"}\n\n: ping\n\ndata: [DONE]\n\n',
+    };
+    await record(path);
+    reply.body = 'data: {"id":2,\r\ndata: "delta":"hi"}\r\n\r\ndata:[DONE]\r\n\r\n';
+    const compare = { sse: true, jsonIgnore: ["id"] };
+
+    await verify(path, { compare });
+
+    reply.body = 'data: {"id":2,"delta":"bye"}\n\ndata: [DONE]\n\n';
+    await expect(verify(path, { compare })).rejects.toThrow(
+      /-    "delta": "hi"\n\+    "delta": "bye"/,
+    );
+  });
+
+  it("compares other bodies as text", async () => {
+    const path = join(dir, "verify.yaml");
+    reply = { status: 200, headers: { "content-type": "text/plain" }, body: "one\ntwo" };
+    await record(path);
+    reply.body = "one\nthree";
+
+    await expect(verify(path)).rejects.toThrow(/ one\n-two\n\+three/);
+  });
+
+  it("normalizes both responses with beforeCompareResponse", async () => {
+    const path = join(dir, "verify.yaml");
+    await record(path);
+    reply.body = '{"a":1,"b":null}';
+    const dropNulls = (response: HttpResponse): HttpResponse => ({
+      ...response,
+      body: {
+        type: "json",
+        content: Object.fromEntries(
+          Object.entries(response.body.content as object).filter(([, value]) => value !== null),
+        ),
+      },
+    });
+
+    await expect(verify(path)).rejects.toThrow(ResponseMismatchError);
+    await verify(path, {
+      beforeCompareResponse: (recorded, live) => [dropNulls(recorded), dropNulls(live)],
+    });
+  });
+
+  it("never tolerates a status change", async () => {
+    const path = join(dir, "verify.yaml");
+    await record(path);
+    reply.status = 201;
+
+    await expect(verify(path, { compare: { floatTolerance: 10 } })).rejects.toThrow(
+      /-status: 200\n\+status: 201/,
+    );
+  });
+
+  it("compares trailing newlines", async () => {
+    const path = join(dir, "verify.yaml");
+    reply = { status: 200, headers: { "content-type": "text/plain" }, body: "answer\n" };
+    await record(path);
+    reply.body = "answer";
+
+    await expect(verify(path)).rejects.toThrow(/ answer\n-$/);
+  });
+
+  it("compares body types and top-level JSON scalars", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.body = "1";
+    await record(path);
+
+    reply.body = '"1"';
+    await expect(verify(path)).rejects.toThrow(/-1\n\+"1"/);
+    reply = { status: 200, headers: { "content-type": "text/plain" }, body: "1" };
+    await expect(verify(path)).rejects.toThrow(/-@@ json body @@\n\+@@ text body @@/);
+  });
+
+  it("ignores array elements", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.body = '{"items":[1,2]}';
+    await record(path);
+    reply.body = '{"items":[3,2]}';
+
+    await verify(path, { compare: { jsonIgnore: ["items[0]"] } });
+  });
+
+  it("compares header names case-insensitively", async () => {
+    const path = join(dir, "verify.yaml");
+    reply.headers["x-price-estimate"] = "1";
+    await record(path);
+    const yaml = readFileSync(path, "utf-8");
+    writeFileSync(path, yaml.replace("x-price-estimate", "X-Price-Estimate"));
+
+    await verify(path, { compare: { headers: ["x-price-*"] } });
+  });
+
+  it("does not leak scrubbed query parameters in the mismatch", async () => {
+    const path = join(dir, "verify.yaml");
+    const options = { filterQueryParameters: ["api_key"] };
+    const call = async () => void (await fetch(`${origin}/chat?api_key=secret`)).text();
+    await useCassette(path, { ...options, recordMode: "all" }, call);
+    reply.status = 500;
+
+    const error = (await useCassette(path, { ...options, recordMode: "verify" }, call).catch(
+      (e: unknown) => e,
+    )) as Error;
+    expect(error).toBeInstanceOf(ResponseMismatchError);
+    expect(error.message).not.toContain("secret");
+  });
+
+  it("bounds the diff of a large mismatch", async () => {
+    const path = join(dir, "verify.yaml");
+    const numbers = (offset: number) => Array.from({ length: 5000 }, (_, i) => i * 2 + offset);
+    reply.body = JSON.stringify(numbers(0));
+    await record(path);
+    reply.body = JSON.stringify(numbers(1));
+
+    const error = (await verify(path).catch((e: unknown) => e)) as Error;
+    expect(error).toBeInstanceOf(ResponseMismatchError);
+    expect(error.message).toContain("-  0,\n");
+    expect(error.message).toContain("+  9999\n");
+  });
+
+  it("throws NoMatchError for an unmatched request", async () => {
+    const path = join(dir, "verify.yaml");
+    await record(path);
+
+    await expect(
+      useCassette(path, { recordMode: "verify" }, async () => {
+        await fetch(`${origin}/other`);
+      }),
+    ).rejects.toThrow(NoMatchError);
+    expect(hits).toBe(1);
+  });
+
+  it("fails the node:http response stream on a mismatch", async () => {
+    const path = join(dir, "verify.yaml");
+    await record(path);
+    reply.body = '{"a":2}';
+
+    await expect(
+      useCassette(path, { recordMode: "verify" }, async () => {
+        await new Promise((resolve, reject) => {
+          httpGet(`${origin}/chat`, async (res) => {
+            try {
+              for await (const chunk of res) void chunk;
+              resolve(undefined);
+            } catch (e) {
+              reject(e);
+            }
+          }).on("error", reject);
+        });
+      }),
+    ).rejects.toThrow(ResponseMismatchError);
+    expect(hits).toBe(2);
   });
 });
 

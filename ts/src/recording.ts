@@ -13,6 +13,8 @@ export enum RecordMode {
   ALL = "all",
   /** Delete the cassette, then record everything. */
   REWRITE = "rewrite",
+  /** Send matched requests live and fail if the response differs. Throws if nothing matches. */
+  VERIFY = "verify",
 }
 
 const RECORD_MODES: Record<string, RecordMode> = {
@@ -21,6 +23,7 @@ const RECORD_MODES: Record<string, RecordMode> = {
   new_episodes: RecordMode.NEW_EPISODES,
   all: RecordMode.ALL,
   rewrite: RecordMode.REWRITE,
+  verify: RecordMode.VERIFY,
 };
 
 /** Modes that discard whatever the cassette already held. */

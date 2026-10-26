@@ -999,6 +999,24 @@ impl Cassette {
             .map(|(idx, i)| (idx, WsInteraction(i)))
     }
 
+    // --- Observed ---
+
+    /// Requests the code under test sent to a receiver the test runs, in arrival order.
+    #[getter]
+    fn observed_requests(&self) -> Vec<HttpRequest> {
+        self.0
+            .observed_requests
+            .iter()
+            .cloned()
+            .map(HttpRequest)
+            .collect()
+    }
+
+    /// Append an observed request.
+    fn add_observed_request(&mut self, request: HttpRequest) {
+        self.0.observed_requests.push(request.0);
+    }
+
     // --- Persistence ---
 
     /// Load a cassette from disk.

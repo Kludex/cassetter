@@ -7,6 +7,8 @@
  * between hex and `Buffer`.
  */
 
+import type { BeforeCompareResponse, Compare } from "./compare.js";
+
 export type BodyType = "json" | "text" | "binary" | "none";
 
 /** The matchers a `MatchConfig` may name. */
@@ -100,6 +102,10 @@ export interface CassetteConfig extends MatchConfig, SecurityConfig {
   maxAge?: string;
   onExpiry?: "warn" | "fail" | "rerecord";
   ignoreLocalhost?: boolean;
+  /** What `verify` mode compares between a recorded and a live response. */
+  compare?: Compare;
+  /** Receives `(recorded, live)` in `verify` mode and returns both normalized. */
+  beforeCompareResponse?: BeforeCompareResponse;
 }
 
 // --- Body helpers ---

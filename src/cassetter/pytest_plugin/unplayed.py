@@ -32,6 +32,12 @@ def store_report(item: pytest.Item, report: pytest.TestReport) -> None:
     item.stash.setdefault(_REPORTS, {})[report.when] = report
 
 
+def call_passed(item: pytest.Item) -> bool:
+    """Whether the test's call phase ran and passed, so far."""
+    reports = item.stash.get(_REPORTS, {})
+    return "call" in reports and all(phase.passed for phase in reports.values())
+
+
 def resolve_on_unplayed(
     marker_kwargs: Mapping[str, Any], vcr_config: Mapping[str, Any] | None, ini_on_unplayed: str | None
 ) -> str:
@@ -73,8 +79,7 @@ def check_after_teardown(item: pytest.Item, report: pytest.TestReport) -> None:
     if (pending := item.stash.get(_PENDING, None)) is None:
         return
     cassette, action = pending
-    reports = item.stash.get(_REPORTS, {})
-    if "call" not in reports or not all(phase.passed for phase in reports.values()):
+    if not call_passed(item):
         return
     if not (unplayed := unplayed_interactions(cassette)):
         return
