@@ -131,6 +131,79 @@ cassette tests/expected/chat.yaml, interaction 0 (POST http://localhost:8000/v1/
         return clean(recorded), clean(live)
     ```
 
+### Observed requests
+
+The service under test often sends HTTP requests of its own that the client never sees, such as telemetry exports to a collector. cassetter cannot intercept them, but your test runs the receiver, so the receiver hands them in with `observe()`:
+
+```python
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import httpx2
+from cassetter import RawRequest, active_cassette, use_cassette
+
+
+class Collector(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        body = self.rfile.read(int(self.headers["content-length"]))
+        headers = {name.lower(): [value] for name, value in self.headers.items()}
+        cassette = active_cassette()
+        if cassette is not None:
+            cassette.observe(RawRequest("POST", f"http://collector{self.path}", headers, body))
+        self.send_response(200)
+        self.send_header("content-length", "0")
+        self.end_headers()
+
+
+collector = ThreadingHTTPServer(("127.0.0.1", 4318), Collector)
+threading.Thread(target=collector.serve_forever, daemon=True).start()
+
+with use_cassette("chat.yaml", record_mode="verify"):
+    httpx2.post("http://localhost:8000/v1/chat", json={"model": "m", "messages": []})
+```
+
+`active_cassette()` returns the cassette entered by `use_cassette()` or the pytest plugin, or `None`. It also works from the receiver's own thread, as long as a single cassette is active.
+
+| Mode | What `observe()` does |
+|------|-----------------------|
+| Recording (`all`, `rewrite`, `new_episodes`, `once` on a new cassette) | Stores the request under `observed_requests`, after the interactions, scrubbed like them. |
+| `verify` | Keeps the request. When the cassette exits, compares each one, in arrival order, to the recorded one. |
+| Replaying (`none`, `once` on an existing cassette) | Nothing. |
+
+The requests arrive on their own schedule, so on exit `verify` waits until as many arrived as were recorded, or until `observe_timeout` seconds (5 by default) pass. A missing, extra or different request raises `ResponseMismatchError`.
+
+!!! warning "Flush before the cassette exits when recording"
+    A recording cassette cannot know how many requests to wait for. Make the service flush its exports before the `with` block ends, or they are not recorded.
+
+!!! warning "Run the receiver in another thread"
+    The wait blocks the thread that exits the cassette. A receiver served from that same thread, or its event loop, never gets to run.
+
+Observed requests have their own `Compare`, passed as `observe_compare`. The method, and the path and query of the URI are always compared. The host is not, since the receiver usually listens on a different port on every run.
+
+`Compare(decode=...)` turns a body into a JSON-able value before comparing, for a format cassetter cannot read, such as OTLP protobuf. `json_ignore` and `float_tolerance` apply to what it returns:
+
+```python
+from cassetter import Compare, use_cassette
+from google.protobuf.json_format import MessageToDict
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+
+
+def decode_spans(body: bytes) -> object:
+    return MessageToDict(ExportTraceServiceRequest.FromString(body))
+
+
+observe_compare = Compare(
+    headers=["content-type"],
+    json_ignore=["resourceSpans[0].scopeSpans[0].spans[0].traceId"],
+    decode=decode_spans,
+)
+
+with use_cassette("chat.yaml", record_mode="verify", observe_compare=observe_compare):
+    ...
+```
+
+`decode` works the same way in `compare`, for response bodies.
+
 ## Set the mode from the command line
 
 With the pytest plugin, `--record-mode` overrides whatever the tests configure:
