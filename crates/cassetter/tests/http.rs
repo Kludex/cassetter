@@ -488,3 +488,84 @@ async fn raw_server(responses: Vec<String>) -> (Url, tokio::task::JoinHandle<()>
         server,
     )
 }
+
+#[tokio::test]
+async fn verify_renders_bodies_losslessly_and_labels_with_the_scrubbed_uri() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("lossless.yaml");
+    let response = |content_type: &str, body: &str| {
+        format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: {content_type}\r\nx-price: 1\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    };
+    let recorded = [
+        response("text/plain", "ok\n"),
+        response("application/json", r#"{"n":"1"}"#),
+        response("text/plain", "null"),
+        response("application/json", r#"{"items":[{"id":1},2]}"#),
+    ];
+    let live = [
+        response("text/plain", "ok"),
+        response("application/json", r#"{"n":1}"#),
+        response("application/json", "null"),
+        response("application/json", r#"{"items":[{"id":9},2]}"#),
+    ];
+    let (url, server) = raw_server(recorded.into_iter().chain(live).collect()).await;
+    let urls: Vec<Url> = (0..4)
+        .map(|index| url.join(&format!("/{index}?token=secret")).unwrap())
+        .collect();
+    let recorder = Recorder::builder(&path)
+        .record_mode(RecordMode::All)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+    for url in &urls {
+        client
+            .execute(Request::new(Method::GET, url.clone()))
+            .await
+            .unwrap();
+    }
+    recorder.finish().await.unwrap();
+
+    let verifier = Recorder::builder(&path)
+        .record_mode(RecordMode::Verify)
+        .compare(Compare {
+            headers: vec!["x-price".to_string()],
+            json_ignore: vec!["items[0]".to_string()],
+            ..Compare::default()
+        })
+        .before_compare_response(|mut recorded: HttpResponse, live| {
+            if let Some(values) = recorded.headers.remove("x-price") {
+                recorded.headers.insert("X-Price".to_string(), values);
+            }
+            (recorded, live)
+        })
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), verifier.clone());
+    let mut mismatches = Vec::new();
+    for url in &urls {
+        match client.execute(Request::new(Method::GET, url.clone())).await {
+            Ok(_) => mismatches.push(None),
+            Err(Error::ResponseMismatch(message)) => mismatches.push(Some(message)),
+            Err(error) => panic!("{error}"),
+        }
+    }
+    verifier.finish().await.unwrap();
+    server.await.unwrap();
+
+    let [Some(newline), Some(string), Some(null), None] = mismatches.as_slice() else {
+        panic!("{mismatches:?}");
+    };
+    assert!(
+        newline.contains("token=") && !newline.contains("secret"),
+        "{newline}"
+    );
+    assert!(newline.ends_with("@@ text body @@\n ok\n-"), "{newline}");
+    assert!(string.contains("-  \"n\": \"1\"\n+  \"n\": 1"), "{string}");
+    assert!(
+        null.contains("-@@ text body @@\n+@@ json body @@\n null"),
+        "{null}"
+    );
+}

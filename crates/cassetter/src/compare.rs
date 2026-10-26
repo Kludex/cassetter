@@ -39,11 +39,18 @@ pub(crate) fn diff_responses(
 ) -> Option<String> {
     let expected = normalize(compare, recorded);
     let mut actual = normalize(compare, live);
-    if let (Normalized::Json(recorded), Normalized::Json(live)) = (&expected.2, &actual.2) {
-        actual.2 = Normalized::Json(tolerate(recorded, live, compare.float_tolerance));
+    if let (Normalized::Json(recorded), Normalized::Json(live)) = (&expected.body, &actual.body) {
+        actual.body = Normalized::Json(tolerate(recorded, live, compare.float_tolerance));
     }
     let (expected, actual) = (render(expected), render(actual));
     (expected != actual).then(|| unified_diff(&expected, &actual))
+}
+
+struct Response {
+    status: u16,
+    headers: Vec<(String, String)>,
+    body_type: &'static str,
+    body: Normalized,
 }
 
 enum Normalized {
@@ -53,10 +60,7 @@ enum Normalized {
     None,
 }
 
-fn normalize(
-    compare: &Compare,
-    response: &HttpResponse,
-) -> (u16, Vec<(String, String)>, Normalized) {
+fn normalize(compare: &Compare, response: &HttpResponse) -> Response {
     let mut headers: Vec<(String, String)> = response
         .headers
         .iter()
@@ -74,7 +78,10 @@ fn normalize(
                 .map(move |value| (name.clone(), value.clone()))
         })
         .collect();
-    headers.sort_by(|a, b| a.0.cmp(&b.0));
+    headers.sort_by(|a, b| (a.0.to_ascii_lowercase(), &a.0).cmp(&(b.0.to_ascii_lowercase(), &b.0)));
+    headers
+        .iter_mut()
+        .for_each(|(name, _)| name.make_ascii_lowercase());
     let body = match &response.body.inner {
         BodyContent::Json(value) => Normalized::Json(drop_paths(value, &compare.json_ignore, "")),
         BodyContent::Text(text) if compare.sse => Normalized::Json(Value::Array(
@@ -87,7 +94,12 @@ fn normalize(
         BodyContent::Binary(bytes) => Normalized::Binary(bytes.clone()),
         BodyContent::None => Normalized::None,
     };
-    (response.status, headers, body)
+    Response {
+        status: response.status,
+        headers,
+        body_type: response.body.inner.type_name(),
+        body,
+    }
 }
 
 fn sse_events(text: &str) -> Vec<Value> {
@@ -127,7 +139,14 @@ fn drop_paths(value: &Value, paths: &[String], current: &str) -> Value {
             items
                 .iter()
                 .enumerate()
-                .map(|(index, item)| drop_paths(item, paths, &format!("{current}[{index}]")))
+                .map(|(index, item)| {
+                    let path = format!("{current}[{index}]");
+                    if paths.contains(&path) {
+                        Value::Null
+                    } else {
+                        drop_paths(item, paths, &path)
+                    }
+                })
                 .collect(),
         ),
         _ => value.clone(),
@@ -165,23 +184,29 @@ fn tolerate(recorded: &Value, live: &Value, tolerance: f64) -> Value {
     }
 }
 
-fn render((status, headers, mut body): (u16, Vec<(String, String)>, Normalized)) -> Vec<String> {
+fn render(response: Response) -> Vec<String> {
+    let Response {
+        status,
+        headers,
+        body_type,
+        mut body,
+    } = response;
     let mut lines = vec![format!("status: {status}"), "@@ headers @@".to_string()];
     lines.extend(
         headers
             .iter()
             .map(|(name, value)| format!("{name}: {value}")),
     );
-    lines.push("@@ body @@".to_string());
+    lines.push(format!("@@ {body_type} body @@"));
     match &mut body {
         Normalized::Json(value) => {
             sort_keys(value);
             let pretty = serde_json::to_string_pretty(value).unwrap_or_default();
             lines.extend(pretty.lines().map(str::to_string));
         }
-        Normalized::Text(text) => lines.extend(text.lines().map(str::to_string)),
-        Normalized::Binary(bytes) => lines.push(bytes.escape_ascii().to_string()),
-        Normalized::None => {}
+        Normalized::Text(text) => lines.extend(text.split('\n').map(str::to_string)),
+        Normalized::Binary(bytes) => lines.push(format!("b'{}'", bytes.escape_ascii())),
+        Normalized::None => lines.push("null".to_string()),
     }
     lines
 }
@@ -213,39 +238,150 @@ fn glob(pattern: &[u8], text: &[u8]) -> bool {
     }
 }
 
-// shortcut: whole-file diff without hunk headers or trimmed context, add hunks if large bodies make it unreadable.
+const CONTEXT: usize = 3;
+const MAX_LCS_CELLS: usize = 1 << 22;
+
+/// A unified diff in the format of Python's `difflib.unified_diff`, with 3 lines of context.
 fn unified_diff(expected: &[String], actual: &[String]) -> String {
-    let (n, m) = (expected.len(), actual.len());
-    let mut lcs = vec![vec![0usize; m + 1]; n + 1];
-    for i in (0..n).rev() {
-        for j in (0..m).rev() {
-            lcs[i][j] = if expected[i] == actual[j] {
-                lcs[i + 1][j + 1] + 1
-            } else {
-                lcs[i + 1][j].max(lcs[i][j + 1])
-            };
+    let ops = edit_script(expected, actual);
+    let mut groups: Vec<(usize, usize)> = Vec::new();
+    for (index, _) in ops.iter().enumerate().filter(|(_, op)| op.tag != ' ') {
+        match groups.last_mut() {
+            Some((_, end)) if index - *end <= 2 * CONTEXT => *end = index + 1,
+            _ => groups.push((index, index + 1)),
         }
     }
     let mut out = vec!["--- recorded".to_string(), "+++ live".to_string()];
-    let (mut i, mut j) = (0, 0);
-    while i < n || j < m {
-        if i < n && j < m && expected[i] == actual[j] {
-            out.push(format!(" {}", expected[i]));
-            (i, j) = (i + 1, j + 1);
-        } else if j == m || (i < n && lcs[i + 1][j] >= lcs[i][j + 1]) {
-            out.push(format!("-{}", expected[i]));
-            i += 1;
-        } else {
-            out.push(format!("+{}", actual[j]));
-            j += 1;
-        }
+    for (start, end) in groups {
+        let hunk = &ops[start.saturating_sub(CONTEXT)..(end + CONTEXT).min(ops.len())];
+        let old = hunk.iter().filter(|op| op.tag != '+').count();
+        let new = hunk.iter().filter(|op| op.tag != '-').count();
+        out.push(format!(
+            "@@ -{} +{} @@",
+            range(hunk[0].old, old),
+            range(hunk[0].new, new)
+        ));
+        out.extend(hunk.iter().map(|op| format!("{}{}", op.tag, op.line)));
     }
     out.join("\n")
 }
 
+fn range(start: usize, length: usize) -> String {
+    match length {
+        0 => format!("{start},0"),
+        1 => format!("{}", start + 1),
+        _ => format!("{},{length}", start + 1),
+    }
+}
+
+struct Op<'a> {
+    tag: char,
+    line: &'a str,
+    old: usize,
+    new: usize,
+}
+
+/// The common prefix and suffix are kept; the middle is diffed by LCS, or replaced wholesale when too large.
+fn edit_script<'a>(expected: &'a [String], actual: &'a [String]) -> Vec<Op<'a>> {
+    let prefix = expected
+        .iter()
+        .zip(actual)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let suffix = expected[prefix..]
+        .iter()
+        .rev()
+        .zip(actual[prefix..].iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let (a, b) = (
+        &expected[prefix..expected.len() - suffix],
+        &actual[prefix..actual.len() - suffix],
+    );
+    let (n, m) = (a.len(), b.len());
+    let mut tags = Vec::with_capacity(n + m);
+    if n * m <= MAX_LCS_CELLS {
+        let mut lcs = vec![0u32; (n + 1) * (m + 1)];
+        let at = |i: usize, j: usize| i * (m + 1) + j;
+        for i in (0..n).rev() {
+            for j in (0..m).rev() {
+                lcs[at(i, j)] = if a[i] == b[j] {
+                    lcs[at(i + 1, j + 1)] + 1
+                } else {
+                    lcs[at(i + 1, j)].max(lcs[at(i, j + 1)])
+                };
+            }
+        }
+        let (mut i, mut j) = (0, 0);
+        while i < n || j < m {
+            if i < n && j < m && a[i] == b[j] {
+                tags.push(' ');
+                (i, j) = (i + 1, j + 1);
+            } else if j == m || (i < n && lcs[at(i + 1, j)] >= lcs[at(i, j + 1)]) {
+                tags.push('-');
+                i += 1;
+            } else {
+                tags.push('+');
+                j += 1;
+            }
+        }
+    } else {
+        tags.extend(std::iter::repeat_n('-', n).chain(std::iter::repeat_n('+', m)));
+    }
+    let tags = std::iter::repeat_n(' ', prefix)
+        .chain(tags)
+        .chain(std::iter::repeat_n(' ', suffix));
+    let (mut old, mut new) = (0, 0);
+    tags.map(|tag| {
+        let op = Op {
+            tag,
+            line: if tag == '+' {
+                &actual[new]
+            } else {
+                &expected[old]
+            },
+            old,
+            new,
+        };
+        old += usize::from(tag != '+');
+        new += usize::from(tag != '-');
+        op
+    })
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::glob;
+    use super::{glob, unified_diff};
+
+    fn lines(text: &str) -> Vec<String> {
+        text.split('\n').map(str::to_string).collect()
+    }
+
+    #[test]
+    fn unified_diff_matches_difflib_hunks() {
+        let expected = lines("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn");
+        let mut actual = expected.clone();
+        actual[1] = "B".to_string();
+        actual.remove(12);
+        assert_eq!(
+            unified_diff(&expected, &actual),
+            "--- recorded\n+++ live\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -10,5 +10,4 @@\n j\n k\n l\n-m\n n"
+        );
+        assert_eq!(
+            unified_diff(&lines("a"), &lines("")),
+            "--- recorded\n+++ live\n@@ -1 +1 @@\n-a\n+"
+        );
+    }
+
+    #[test]
+    fn unified_diff_replaces_large_mismatches_without_a_quadratic_table() {
+        let expected: Vec<String> = (0..5000).map(|i| format!("a{i}")).collect();
+        let actual: Vec<String> = (0..5000).map(|i| format!("b{i}")).collect();
+        let diff = unified_diff(&expected, &actual);
+        assert!(diff.starts_with("--- recorded\n+++ live\n@@ -1,5000 +1,5000 @@\n-a0\n"));
+        assert_eq!(diff.lines().count(), 3 + 10000);
+    }
 
     #[test]
     fn glob_matches_like_fnmatch() {
