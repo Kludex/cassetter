@@ -1,4 +1,4 @@
-use cassetter::{Error, RecordMode, Recorder};
+use cassetter::{Compare, Error, HttpResponse, RecordMode, Recorder};
 use reqwest::{Method, Request, Url};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -323,4 +323,168 @@ fn request(url: Url, value: &str, credential: &str) -> Request {
         .insert("content-length", body.len().into());
     *request.body_mut() = Some(reqwest::Body::from(body));
     request
+}
+
+#[tokio::test]
+async fn verify_compares_live_responses_without_writing_the_cassette() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("verify.yaml");
+    let recorded_response = json_response(
+        "x-price: 1\r\ndate: monday",
+        r#"{"id":"a","total":0.3,"items":[{"id":1}]}"#,
+    );
+    let (url, server) = raw_server(vec![
+        recorded_response.clone(),
+        recorded_response,
+        json_response(
+            "x-price: 1\r\ndate: tuesday",
+            r#"{"total":0.30000000000000004,"id":"b","items":[{"id":2}]}"#,
+        ),
+        json_response("x-price: 2", r#"{"id":"c","total":0.4,"items":[{"id":3}]}"#),
+    ])
+    .await;
+    let recorder = Recorder::builder(&path)
+        .record_mode(RecordMode::All)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+    client
+        .execute(Request::new(Method::GET, url.clone()))
+        .await
+        .unwrap();
+    client
+        .execute(Request::new(Method::GET, url.clone()))
+        .await
+        .unwrap();
+    recorder.finish().await.unwrap();
+    let recorded = std::fs::read_to_string(&path).unwrap();
+
+    let verifier = Recorder::builder(&path)
+        .record_mode(RecordMode::Verify)
+        .compare(Compare {
+            headers: vec!["X-PRICE*".to_string()],
+            json_ignore: vec!["id".to_string(), "items[0].id".to_string()],
+            float_tolerance: 1e-9,
+            ..Compare::default()
+        })
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), verifier.clone());
+    let response = client
+        .execute(Request::new(Method::GET, url.clone()))
+        .await
+        .unwrap();
+    assert!(response.text().await.unwrap().contains(r#""id":"b""#));
+
+    let error = client
+        .execute(Request::new(Method::GET, url.clone()))
+        .await
+        .unwrap_err();
+    let Error::ResponseMismatch(message) = error else {
+        panic!("{error}")
+    };
+    assert!(
+        message.starts_with(&format!("cassette {}, GET {url}", path.display())),
+        "{message}"
+    );
+    assert!(message.contains("--- recorded\n+++ live"), "{message}");
+    assert!(
+        message.contains("\n-x-price: 1\n+x-price: 2\n"),
+        "{message}"
+    );
+    assert!(
+        message.contains("\n-  \"total\": 0.3\n+  \"total\": 0.4"),
+        "{message}"
+    );
+
+    let error = client
+        .execute(Request::new(Method::GET, url.join("/unrecorded").unwrap()))
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        Error::NoMatch {
+            protocol: "HTTP",
+            ..
+        }
+    ));
+    verifier.finish().await.unwrap();
+    server.await.unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), recorded);
+}
+
+#[tokio::test]
+async fn verify_compares_sse_payloads_after_the_before_compare_hook() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("sse.yaml");
+    let sse = |status: &str, body: &str| {
+        format!(
+            "HTTP/1.1 {status}\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    };
+    let (url, server) =
+        raw_server(vec![
+        sse("200 OK", "data: {\"delta\":\"hi\",\"id\":1}\n\ndata: [DONE]\n\n"),
+        sse(
+            "201 Created",
+            ": ping\r\n\r\ndata: {\"id\":2,\r\ndata: \"delta\":\"hi\"}\r\n\r\ndata: [DONE]\r\n\r\n",
+        ),
+    ])
+        .await;
+    let recorder = Recorder::builder(&path)
+        .record_mode(RecordMode::All)
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), recorder.clone());
+    client
+        .execute(Request::new(Method::GET, url.clone()))
+        .await
+        .unwrap();
+    recorder.finish().await.unwrap();
+
+    let verifier = Recorder::builder(&path)
+        .record_mode(RecordMode::Verify)
+        .compare(Compare {
+            json_ignore: vec!["id".to_string()],
+            sse: true,
+            ..Compare::default()
+        })
+        .before_compare_response(|recorded, mut live: HttpResponse| {
+            live.status = recorded.status;
+            (recorded, live)
+        })
+        .build()
+        .unwrap();
+    let client = cassetter::reqwest::Client::new(reqwest::Client::new(), verifier.clone());
+    client
+        .execute(Request::new(Method::GET, url))
+        .await
+        .unwrap();
+    verifier.finish().await.unwrap();
+    server.await.unwrap();
+}
+
+fn json_response(headers: &str, body: &str) -> String {
+    format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n{headers}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+async fn raw_server(responses: Vec<String>) -> (Url, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        for response in responses {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let _ = stream.read(&mut request).await.unwrap();
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    });
+    (
+        Url::parse(&format!("http://{address}/verify")).unwrap(),
+        server,
+    )
 }
