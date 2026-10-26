@@ -155,7 +155,7 @@ def test_verify_compares_only_listed_headers(url: str, reply: Reply, path: str) 
     expected = (
         f"cassette {path}, interaction 0 (GET {url})\n--- recorded\n+++ live\n"
         "@@ -1,6 +1,6 @@\n status: 200\n @@ headers @@\n"
-        '-x-price-estimate: 0.0001USD\n+x-price-estimate: 0.0002USD\n @@ body @@\n {\n   "answer": 42'
+        '-x-price-estimate: 0.0001USD\n+x-price-estimate: 0.0002USD\n @@ json body @@\n {\n   "answer": 42'
     )
     with use_cassette(path, record_mode="verify", intercept=["httpx"], compare=compare):
         with pytest.raises(ResponseMismatchError) as exc_info:
@@ -233,3 +233,67 @@ def test_verify_before_compare_response_normalizes_both(url: str, reply: Reply, 
     reply.body = b'{"answer": 42}'
     with use_cassette(path, record_mode="verify", intercept=["httpx"], before_compare_response=drop_nulls):
         httpx.get(url)
+
+
+def test_verify_never_tolerates_a_status_change(url: str, reply: Reply, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+
+    reply.status = 201
+    with use_cassette(path, record_mode="verify", intercept=["httpx"], compare=Compare(float_tolerance=10)):
+        with pytest.raises(ResponseMismatchError, match="-status: 200\n\\+status: 201"):
+            httpx.get(url)
+
+
+def test_verify_compares_trailing_newlines(url: str, reply: Reply, path: str) -> None:
+    reply.headers["content-type"] = "text/plain"
+    reply.body = b"answer\n"
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+
+    reply.body = b"answer"
+    with use_cassette(path, record_mode="verify", intercept=["httpx"]):
+        with pytest.raises(ResponseMismatchError, match=r" answer\n-$"):
+            httpx.get(url)
+
+
+def test_verify_compares_body_types(url: str, reply: Reply, path: str) -> None:
+    reply.body = b"null"
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+
+    reply.headers["content-type"] = "text/plain"
+    with use_cassette(path, record_mode="verify", intercept=["httpx"]):
+        with pytest.raises(ResponseMismatchError, match="-@@ json body @@\n\\+@@ text body @@"):
+            httpx.get(url)
+
+
+def test_verify_ignores_array_elements(url: str, reply: Reply, path: str) -> None:
+    reply.body = b'{"items": [1, 2]}'
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+
+    reply.body = b'{"items": [3, 2]}'
+    with use_cassette(path, record_mode="verify", intercept=["httpx"], compare=Compare(json_ignore=["items[0]"])):
+        httpx.get(url)
+
+
+def test_verify_compares_header_names_case_insensitively(url: str, reply: Reply, path: str) -> None:
+    reply.headers["x-price-estimate"] = "0.0001USD"
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+    Path(path).write_text(Path(path).read_text().replace("x-price-estimate", "X-Price-Estimate"))
+
+    with use_cassette(path, record_mode="verify", intercept=["httpx"], compare=Compare(headers=["x-price-*"])):
+        httpx.get(url)
+
+
+def test_verify_mismatch_does_not_leak_scrubbed_query_parameters(url: str, reply: Reply, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["httpx"], filter_query_parameters=["api_key"]):
+        httpx.get(url, params={"api_key": "secret"})
+
+    reply.status = 500
+    with use_cassette(path, record_mode="verify", intercept=["httpx"], filter_query_parameters=["api_key"]):
+        with pytest.raises(ResponseMismatchError) as exc_info:
+            httpx.get(url, params={"api_key": "secret"})
+    assert "secret" not in str(exc_info.value)

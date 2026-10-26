@@ -538,7 +538,7 @@ class Cassette:
             live = interaction.response
             if self._before_compare_response is not None:
                 recorded, live = self._before_compare_response(recorded, live)
-            label = f"cassette {self._path}, interaction {index} ({method} {uri})"
+            label = f"cassette {self._path}, interaction {index} ({method} {interaction.request.uri})"
             compare_responses(self._compare, recorded, live, label)
             return interaction.response
 
