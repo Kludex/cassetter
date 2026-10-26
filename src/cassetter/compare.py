@@ -163,7 +163,10 @@ def _render(normalized: dict[str, Any]) -> list[str]:
     lines = [f"status: {normalized['status']}", "@@ headers @@"]
     lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
     lines.append(f"@@ {normalized['body']['type']} body @@")
-    return lines + _content_lines(normalized["body"]["content"])
+    content = normalized["body"]["content"]
+    if normalized["body"]["type"] == "json":
+        return lines + json.dumps(content, indent=2, sort_keys=True).splitlines()
+    return lines + _content_lines(content)
 
 
 def _render_sections(normalized: dict[str, Any]) -> list[str]:
