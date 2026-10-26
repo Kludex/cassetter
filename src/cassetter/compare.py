@@ -40,21 +40,22 @@ BeforeCompareResponse = Callable[[HttpResponse, HttpResponse], tuple[HttpRespons
 
 def compare_responses(compare: Compare, recorded: HttpResponse, live: HttpResponse, label: str) -> None:
     """Raise `ResponseMismatchError` with a unified diff when `live` is not equivalent to `recorded`."""
-    expected = _render(_normalize(compare, recorded))
-    actual = _render(_tolerate(_normalize(compare, recorded), _normalize(compare, live), compare.float_tolerance))
-    if expected == actual:
+    expected = _normalize(compare, recorded)
+    actual = _normalize(compare, live)
+    actual["body"] = _tolerate(expected["body"], actual["body"], compare.float_tolerance)
+    if _render(expected) == _render(actual):
         return
-    diff = difflib.unified_diff(expected, actual, "recorded", "live", lineterm="")
+    diff = difflib.unified_diff(_render(expected), _render(actual), "recorded", "live", lineterm="")
     raise ResponseMismatchError(f"{label}\n" + "\n".join(diff))
 
 
 def _normalize(compare: Compare, response: HttpResponse) -> dict[str, Any]:
-    headers = {
-        name: values
-        for name, values in sorted(response.headers.items())
-        if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers)
-    }
-    return {"status": response.status, "headers": headers, "body": _body(compare, response)}
+    headers: dict[str, list[str]] = {}
+    for name, values in sorted(response.headers.items(), key=lambda item: item[0].lower()):
+        if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers):
+            headers.setdefault(name.lower(), []).extend(values)
+    body = {"type": response.body.body_type, "content": _body(compare, response)}
+    return {"status": response.status, "headers": headers, "body": body}
 
 
 def _body(compare: Compare, response: HttpResponse) -> Any:
@@ -82,6 +83,8 @@ def _sse_events(text: str) -> list[Any]:
 
 
 def _drop_paths(value: Any, paths: list[str], current: str) -> Any:
+    if current in paths:
+        return None
     if isinstance(value, dict):
         prefix = f"{current}." if current else ""
         return {key: _drop_paths(item, paths, prefix + key) for key, item in value.items() if prefix + key not in paths}
@@ -110,12 +113,12 @@ def _is_number(value: Any) -> bool:
 def _render(normalized: dict[str, Any]) -> list[str]:
     lines = [f"status: {normalized['status']}", "@@ headers @@"]
     lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
-    lines.append("@@ body @@")
-    body = normalized["body"]
+    lines.append(f"@@ {normalized['body']['type']} body @@")
+    body = normalized["body"]["content"]
     if isinstance(body, bytes):
         lines.append(repr(body))
     elif isinstance(body, str):
-        lines += body.splitlines()
+        lines += body.split("\n")
     else:
         lines += json.dumps(body, indent=2, sort_keys=True).splitlines()
     return lines
