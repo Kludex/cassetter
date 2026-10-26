@@ -167,7 +167,7 @@ def _render(normalized: dict[str, Any]) -> list[str]:
     body = normalized["body"]["content"]
     if isinstance(body, bytes):
         lines.append(repr(body))
-    elif isinstance(body, str):
+    elif isinstance(body, str) and normalized["body"]["type"] != "json":
         lines += body.split("\n")
     else:
         lines += json.dumps(body, indent=2, sort_keys=True).splitlines()

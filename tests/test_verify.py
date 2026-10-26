@@ -405,6 +405,17 @@ def test_verify_compares_body_types(url: str, reply: Reply, path: str) -> None:
             httpx.get(url)
 
 
+def test_verify_compares_json_scalar_types(url: str, reply: Reply, path: str) -> None:
+    reply.body = b'"1"'
+    with use_cassette(path, record_mode="all", intercept=["httpx"]):
+        httpx.get(url)
+
+    reply.body = b"1"
+    with use_cassette(path, record_mode="verify", intercept=["httpx"]):
+        with pytest.raises(ResponseMismatchError, match='-"1"\n\\+1$'):
+            httpx.get(url)
+
+
 def test_verify_ignores_array_elements(url: str, reply: Reply, path: str) -> None:
     reply.body = b'{"items": [1, 2]}'
     with use_cassette(path, record_mode="all", intercept=["httpx"]):
