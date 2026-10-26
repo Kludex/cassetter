@@ -131,6 +131,40 @@ cassette tests/expected/chat.yaml, interaction 0 (POST http://localhost:8000/v1/
         return clean(recorded), clean(live)
     ```
 
+### gRPC and WebSockets
+
+`verify` covers gRPC calls and WebSocket connections too. A matched call or connection goes live, and what comes back is compared to the recording when the call or connection ends.
+
+```python
+import grpc
+
+from cassetter import use_cassette
+
+with use_cassette("echo.yaml", record_mode="verify", intercept=["grpc", "websockets"]):
+    async with grpc.aio.insecure_channel("localhost:50051") as channel:
+        response = await EchoStub(channel).Say(StringValue(value="hi"))
+```
+
+| Protocol | Compared |
+|----------|----------|
+| gRPC | The status code and message, then each response message in order. Messages are compared as JSON when `google.protobuf` is available, so `json_ignore` and `float_tolerance` apply to each. |
+| WebSockets | Every frame the client received, in order, including the close code and reason. Received frames go through `before_record_ws_frame` and scrubbing first, like a recording. Text frames that hold JSON are parsed, and `json_ignore` and `float_tolerance` apply to each. Sent frames are not compared. |
+
+A live gRPC error is compared like a response. If the recording holds the same status, the error is raised as it would be without a cassette.
+
+```
+cassette tests/expected/echo.yaml, gRPC /pkg.Echo/Say
+--- recorded
++++ live
+@@ -1,2 +1,2 @@
+ status: 0 OK
+-message 1: echo bye
++message 1: echo hi
+```
+
+!!! note "Response metadata is not compared"
+    Cassettes do not store gRPC response metadata, so there is nothing to compare it with. `Compare.headers` and `before_compare_response` apply to HTTP only.
+
 ### Observed requests
 
 The service under test often sends HTTP requests of its own that the client never sees, such as telemetry exports to a collector. cassetter cannot intercept them, but your test runs the receiver, so the receiver hands them in with `observe()`:

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import struct
 from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
+from typing import Any
 
 import grpc
 import grpc.aio
 import pytest
 from google.protobuf.wrappers_pb2 import StringValue
 
-from cassetter import NoMatchError, use_cassette
+from cassetter import Body, NoMatchError, ResponseMismatchError, use_cassette
 
 
 @pytest.fixture
@@ -64,6 +66,11 @@ async def chat(requests: AsyncIterator[StringValue], context: object) -> AsyncIt
         yield StringValue(value=f"echo {request.value}")
 
 
+async def fail(request: StringValue, context: grpc.aio.ServicerContext[Any, Any]) -> AsyncIterator[StringValue]:
+    yield StringValue(value="a")
+    await context.abort(grpc.StatusCode.INTERNAL, "boom")
+
+
 async def messages(*values: str) -> AsyncIterator[StringValue]:
     for value in values:
         yield StringValue(value=value)
@@ -95,6 +102,7 @@ async def target() -> AsyncIterator[str]:
             "Stream": grpc.unary_stream_rpc_method_handler(stream, **SERIALIZERS),
             "Collect": grpc.stream_unary_rpc_method_handler(collect, **SERIALIZERS),
             "Chat": grpc.stream_stream_rpc_method_handler(chat, **SERIALIZERS),
+            "Fail": grpc.unary_stream_rpc_method_handler(fail, **SERIALIZERS),
         },
     )
     server = grpc.aio.server()
@@ -216,3 +224,121 @@ async def test_body_matching_needs_the_request_body(recorded: Path) -> None:
     with use_cassette(recorded, record_mode="none", intercept=[], match_on=["method", "body"]) as cassette:
         with pytest.raises(ValueError, match="needs the request_body"):
             cassette.play_grpc("/pkg.Echo/Say")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("body_matching", [False, True])
+async def test_verify_sends_every_call_kind_live(recorded: Path, target: str, body_matching: bool) -> None:
+    before = recorded.read_text()
+    with use_cassette(
+        recorded, record_mode="verify", intercept=["grpc"], match_on=["method", "body"] if body_matching else ["method"]
+    ) as cassette:
+        async with grpc.aio.insecure_channel(target) as channel:
+            assert await call_every_kind(channel) == [["echo hi"], ["a", "b"], ["a b"], ["echo a", "echo b"]]
+    assert cassette.all_played
+    assert recorded.read_text() == before
+
+
+@pytest.mark.anyio
+async def test_verify_reports_a_different_response(tmp_path: Path, target: str) -> None:
+    path = tmp_path / "grpc.yaml"
+    with use_cassette(path, record_mode="once", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            await EchoStub(channel).Say(StringValue(value="bye"))
+            [response async for response in EchoStub(channel).Stream(StringValue(value="a"))]
+
+    with use_cassette(path, record_mode="verify", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            stub = EchoStub(channel)
+            with pytest.raises(ResponseMismatchError) as mismatch:
+                await stub.Say(StringValue(value="hi"))
+            with pytest.raises(ResponseMismatchError, match=r" message 1: a\n\+message 2: b$"):
+                [response async for response in stub.Stream(StringValue(value="a b"))]
+    assert str(mismatch.value) == (
+        f"cassette {path}, gRPC /pkg.Echo/Say\n--- recorded\n+++ live\n@@ -1,2 +1,2 @@\n status: 0 OK\n"
+        "-message 1: echo bye\n+message 1: echo hi"
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("status", "raised", "match"),
+    [
+        ((12, "Method not found!"), grpc.aio.AioRpcError, "Method not found!"),
+        ((0, "OK"), ResponseMismatchError, "-status: 0 OK\n\\+status: 12 Method not found!"),
+    ],
+    ids=["same-error", "error-instead-of-ok"],
+)
+async def test_verify_compares_a_live_error_status(
+    tmp_path: Path, target: str, status: tuple[int, str], raised: type[Exception], match: str
+) -> None:
+    path = tmp_path / "grpc.yaml"
+    with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+        cassette.record_grpc("/pkg.Echo/Missing", {}, Body("binary", b""), Body("binary", b""), *status)
+
+    with use_cassette(path, record_mode="verify", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            missing = channel.unary_unary(
+                "/pkg.Echo/Missing",
+                request_serializer=StringValue.SerializeToString,
+                response_deserializer=StringValue.FromString,
+            )
+            with pytest.raises(raised, match=match):
+                await missing(StringValue(value="hi"))
+
+
+def length_prefixed(*values: str) -> bytes:
+    chunks = [StringValue(value=value).SerializeToString() for value in values]
+    return b"".join(struct.pack(">I", len(chunk)) + chunk for chunk in chunks)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("recorded_values", "raised", "match"),
+    [(["a"], grpc.aio.AioRpcError, "boom"), ([], ResponseMismatchError, r" status: 13 boom\n\+message 1: a$")],
+    ids=["same-messages", "unexpected-message"],
+)
+async def test_verify_compares_messages_received_before_an_error(
+    tmp_path: Path, target: str, recorded_values: list[str], raised: type[Exception], match: str
+) -> None:
+    path = tmp_path / "grpc.yaml"
+    with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+        body = Body("binary", length_prefixed(*recorded_values))
+        cassette.record_grpc("/pkg.Echo/Fail", {}, Body("binary", b""), body, 13, "boom")
+
+    with use_cassette(path, record_mode="verify", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            stream = channel.unary_stream(
+                "/pkg.Echo/Fail",
+                request_serializer=StringValue.SerializeToString,
+                response_deserializer=StringValue.FromString,
+            )
+            with pytest.raises(raised, match=match):
+                [response async for response in stream(StringValue(value="hi"))]
+
+
+class Opaque:
+    """A message type `google.protobuf` cannot convert to JSON."""
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    @classmethod
+    def FromString(cls, data: bytes) -> Opaque:
+        return cls(data)
+
+    def SerializeToString(self) -> bytes:
+        return self.data
+
+
+@pytest.mark.anyio
+async def test_verify_compares_messages_protobuf_cannot_convert_as_bytes(recorded: Path, target: str) -> None:
+    with use_cassette(recorded, record_mode="verify", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            say = channel.unary_unary(
+                "/pkg.Echo/Say",
+                request_serializer=StringValue.SerializeToString,
+                response_deserializer=Opaque.FromString,
+            )
+            response = await say(StringValue(value="hi"))
+    assert StringValue.FromString(response.data).value == "echo hi"

@@ -3,12 +3,13 @@ from __future__ import annotations
 import difflib
 import fnmatch
 import json
+import struct
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
-from cassetter._core import Body, HttpRequest, HttpResponse
+from cassetter._core import Body, GrpcResponse, HttpRequest, HttpResponse, WsFrame
 
 
 class ResponseMismatchError(AssertionError):
@@ -52,6 +53,26 @@ def compare_responses(compare: Compare, recorded: HttpResponse, live: HttpRespon
     )
 
 
+def compare_grpc_responses(
+    compare: Compare,
+    recorded: GrpcResponse,
+    live: GrpcResponse,
+    messages: Callable[[GrpcResponse], list[Any]],
+    label: str,
+) -> None:
+    """Like `compare_responses`, for the status and the messages `messages` decodes from each body."""
+    expected = _grpc(compare, recorded, messages)
+    actual = _tolerate(expected, _grpc(compare, live, messages), compare.float_tolerance)
+    _diff(_render_sections(expected), _render_sections(actual), label)
+
+
+def compare_ws_frames(compare: Compare, recorded: list[WsFrame], live: list[WsFrame], label: str) -> None:
+    """Like `compare_responses`, for the frames received in order. Sent frames are ignored."""
+    expected = _received(compare, recorded)
+    actual = _tolerate(expected, _received(compare, live), compare.float_tolerance)
+    _diff(_render_sections(expected), _render_sections(actual), label)
+
+
 def compare_requests(compare: Compare, recorded: HttpRequest, live: HttpRequest, label: str) -> None:
     """Like `compare_responses`, for observed requests. Only the path and query of the URI count."""
     _compare(
@@ -87,9 +108,13 @@ def _compare(compare: Compare, expected: dict[str, Any], actual: dict[str, Any],
     actual["body"]["content"] = _tolerate(
         expected["body"]["content"], actual["body"]["content"], compare.float_tolerance
     )
-    if _render(expected) == _render(actual):
+    _diff(_render(expected), _render(actual), label)
+
+
+def _diff(expected: list[str], actual: list[str], label: str) -> None:
+    if expected == actual:
         return
-    diff = difflib.unified_diff(_render(expected), _render(actual), "recorded", "live", lineterm="")
+    diff = difflib.unified_diff(expected, actual, "recorded", "live", lineterm="")
     raise ResponseMismatchError(f"{label}\n" + "\n".join(diff))
 
 
@@ -116,6 +141,30 @@ def _body(compare: Compare, body: Body) -> Any:
     if compare.sse and isinstance(content, str):
         return [_drop_paths(event, compare.json_ignore, "") for event in _sse_events(content)]
     return content
+
+
+def _grpc(compare: Compare, response: GrpcResponse, messages: Callable[[GrpcResponse], list[Any]]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {"status": f"{response.status_code} {response.status_message}"}
+    for i, message in enumerate(messages(response), 1):
+        normalized[f"message {i}"] = _drop_paths(message, compare.json_ignore, "")
+    return normalized
+
+
+def _received(compare: Compare, frames: list[WsFrame]) -> dict[str, Any]:
+    received = [frame for frame in frames if frame.direction == "recv"]
+    return {f"{frame.frame_type} {i}": _frame(compare, frame) for i, frame in enumerate(received, 1)}
+
+
+def _frame(compare: Compare, frame: WsFrame) -> Any:
+    content = frame.body.content
+    if frame.frame_type == "close" and isinstance(content, bytes):
+        return f"{struct.unpack('>H', content[:2])[0]} {content[2:].decode()}"
+    if isinstance(content, str):
+        try:
+            content = json.loads(content)
+        except json.JSONDecodeError:
+            return content
+    return _drop_paths(content, compare.json_ignore, "")
 
 
 def _sse_events(text: str) -> list[Any]:
@@ -164,11 +213,25 @@ def _render(normalized: dict[str, Any]) -> list[str]:
     lines = [normalized["head"], "@@ headers @@"]
     lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
     lines.append(f"@@ {normalized['body']['type']} body @@")
-    body = normalized["body"]["content"]
-    if isinstance(body, bytes):
-        lines.append(repr(body))
-    elif isinstance(body, str) and normalized["body"]["type"] != "json":
-        lines += body.split("\n")
-    else:
-        lines += json.dumps(body, indent=2, sort_keys=True).splitlines()
+    content = normalized["body"]["content"]
+    if normalized["body"]["type"] == "json":
+        return lines + json.dumps(content, indent=2, sort_keys=True).splitlines()
+    return lines + _content_lines(content)
+
+
+def _render_sections(normalized: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for section, value in normalized.items():
+        if isinstance(value, bytes) or (isinstance(value, str) and "\n" not in value):
+            lines.append(f"{section}: {value!r}" if isinstance(value, bytes) else f"{section}: {value}")
+        else:
+            lines += [f"@@ {section} @@", *_content_lines(value)]
     return lines
+
+
+def _content_lines(content: Any) -> list[str]:
+    if isinstance(content, bytes):
+        return [repr(content)]
+    if isinstance(content, str):
+        return content.split("\n")
+    return json.dumps(content, indent=2, sort_keys=True).splitlines()

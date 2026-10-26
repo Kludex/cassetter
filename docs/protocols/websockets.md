@@ -153,3 +153,7 @@ The same write time filtering as HTTP applies:
 * **Text and JSON frame bodies** are scrubbed with the body scrub patterns. An authentication frame like `{"access_token": "..."}` is stored with the token replaced by `[FILTERED]`.
 
 Binary frames are stored as is.
+
+## Verify a live service
+
+With `record_mode="verify"`, matched connections go live and the received frames are compared to the recording. See [`verify`](../tutorial/record-modes.md#grpc-and-websockets).

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import struct
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import grpc
@@ -71,23 +72,25 @@ class VCRUnaryUnaryCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method, req_body)
-            raise_for_status(grpc_resp)
-            payload = grpc_resp.body.content
-            content = payload if isinstance(payload, bytes) else b""
-            return self._response_deserializer(content)
+            if not cassette.verifies:
+                raise_for_status(grpc_resp)
+                return self._response_deserializer(body_bytes(grpc_resp))
         except NoMatchError:
             if not cassette.can_record:
                 raise
+            grpc_resp = None
 
         assert self._real is not None
-        response = await self._real(
-            request,
-            timeout=timeout,
-            metadata=metadata,
-            credentials=credentials,
-            wait_for_ready=wait_for_ready,
-            compression=compression,
-        )
+        messages = unary_messages(self._response_deserializer)
+        with verify_status(cassette, self._method, md, req_body, grpc_resp, messages, []):
+            response = await self._real(
+                request,
+                timeout=timeout,
+                metadata=metadata,
+                credentials=credentials,
+                wait_for_ready=wait_for_ready,
+                compression=compression,
+            )
         resp_bytes: bytes = response.SerializeToString()
         resp_body = Body("binary", resp_bytes)
 
@@ -99,6 +102,8 @@ class VCRUnaryUnaryCallable:
             request_body=req_body,
             response_body=resp_body,
             json_debug=json_debug,
+            expected=grpc_resp,
+            messages=messages,
         )
         return response
 
@@ -146,10 +151,12 @@ class VCRUnaryStreamCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method, req_body)
-            return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
+            if not cassette.verifies:
+                return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
         except NoMatchError:
             if not cassette.can_record:
                 raise
+            grpc_resp = None
 
         assert self._real is not None
         return self._record_unary_stream(
@@ -161,6 +168,7 @@ class VCRUnaryStreamCallable:
             credentials,
             wait_for_ready,
             compression,
+            grpc_resp,
         )
 
     async def _record_unary_stream(
@@ -173,6 +181,7 @@ class VCRUnaryStreamCallable:
         credentials: Any,
         wait_for_ready: bool | None,
         compression: Any,
+        expected: GrpcResponse | None,
     ) -> AsyncIterator[Any]:
         cassette = get_current_cassette()
         assert self._real is not None
@@ -184,11 +193,13 @@ class VCRUnaryStreamCallable:
             wait_for_ready=wait_for_ready,
             compression=compression,
         )
+        messages = stream_messages(self._response_deserializer)
         chunks: list[bytes] = []
-        async for response in call:
-            resp_bytes = response.SerializeToString()
-            chunks.append(resp_bytes)
-            yield response
+        with verify_status(cassette, self._method, md, req_body, expected, messages, chunks):
+            async for response in call:
+                resp_bytes = response.SerializeToString()
+                chunks.append(resp_bytes)
+                yield response
         resp_body = Body("binary", encode_chunks(chunks))
         if cassette is not None:
             cassette.record_grpc(
@@ -196,6 +207,8 @@ class VCRUnaryStreamCallable:
                 metadata=md,
                 request_body=req_body,
                 response_body=resp_body,
+                expected=expected,
+                messages=messages,
             )
 
 
@@ -242,23 +255,25 @@ class VCRStreamUnaryCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method, req_body)
-            raise_for_status(grpc_resp)
-            payload = grpc_resp.body.content
-            content = payload if isinstance(payload, bytes) else b""
-            return self._response_deserializer(content)
+            if not cassette.verifies:
+                raise_for_status(grpc_resp)
+                return self._response_deserializer(body_bytes(grpc_resp))
         except NoMatchError:
             if not cassette.can_record:
                 raise
+            grpc_resp = None
 
         assert self._real is not None
-        response = await self._real(
-            async_iter(req_chunks),
-            timeout=timeout,
-            metadata=metadata,
-            credentials=credentials,
-            wait_for_ready=wait_for_ready,
-            compression=compression,
-        )
+        messages = unary_messages(self._response_deserializer)
+        with verify_status(cassette, self._method, md, req_body, grpc_resp, messages, []):
+            response = await self._real(
+                async_iter(req_chunks),
+                timeout=timeout,
+                metadata=metadata,
+                credentials=credentials,
+                wait_for_ready=wait_for_ready,
+                compression=compression,
+            )
         resp_bytes: bytes = response.SerializeToString()
         resp_body = Body("binary", resp_bytes)
 
@@ -268,6 +283,8 @@ class VCRStreamUnaryCallable:
             request_body=req_body,
             response_body=resp_body,
             json_debug=build_json_debug(None, response),
+            expected=grpc_resp,
+            messages=messages,
         )
         return response
 
@@ -316,13 +333,15 @@ class VCRStreamStreamCallable:
 
         try:
             grpc_resp = cassette.play_grpc(self._method)
-            return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
+            if not cassette.verifies:
+                return replay_stream(grpc_resp, self._response_deserializer)  # status raised on first iteration
         except NoMatchError:
             if not cassette.can_record:
                 raise
+            grpc_resp = None
 
         assert self._real is not None
-        return self._record_bidi(serialize(request_iterator, self._request_serializer), md, *options)
+        return self._record_bidi(serialize(request_iterator, self._request_serializer), md, *options, grpc_resp)
 
     async def _play_matching_body(
         self,
@@ -338,7 +357,9 @@ class VCRStreamStreamCallable:
         except NoMatchError:
             if not cassette.can_record:
                 raise
-            async for response in self._record_bidi(async_iter(req_chunks), md, *options):
+            grpc_resp = None
+        if grpc_resp is None or cassette.verifies:
+            async for response in self._record_bidi(async_iter(req_chunks), md, *options, grpc_resp):
                 yield response
             return
         async for response in replay_stream(grpc_resp, self._response_deserializer):
@@ -353,6 +374,7 @@ class VCRStreamStreamCallable:
         credentials: Any,
         wait_for_ready: bool | None,
         compression: Any,
+        expected: GrpcResponse | None,
     ) -> AsyncIterator[Any]:
         cassette = get_current_cassette()
         req_chunks = [chunk async for chunk in requests]
@@ -367,11 +389,13 @@ class VCRStreamStreamCallable:
             wait_for_ready=wait_for_ready,
             compression=compression,
         )
+        messages = stream_messages(self._response_deserializer)
         resp_chunks: list[bytes] = []
-        async for response in call:
-            resp_bytes = response.SerializeToString()
-            resp_chunks.append(resp_bytes)
-            yield response
+        with verify_status(cassette, self._method, md, req_body, expected, messages, resp_chunks):
+            async for response in call:
+                resp_bytes = response.SerializeToString()
+                resp_chunks.append(resp_bytes)
+                yield response
         resp_body = Body("binary", encode_chunks(resp_chunks))
         if cassette is not None:
             cassette.record_grpc(
@@ -379,6 +403,8 @@ class VCRStreamStreamCallable:
                 metadata=md,
                 request_body=req_body,
                 response_body=resp_body,
+                expected=expected,
+                messages=messages,
             )
 
 
@@ -525,8 +551,7 @@ def metadata_to_dict(metadata: Any) -> dict[str, list[str]]:
 
 async def replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIterator[Any]:
     raise_for_status(grpc_resp)
-    payload = grpc_resp.body.content
-    data = payload if isinstance(payload, bytes) else b""
+    data = body_bytes(grpc_resp)
     chunks = decode_chunks(data)
     if chunks:
         for chunk in chunks:
@@ -534,6 +559,46 @@ async def replay_stream(grpc_resp: GrpcResponse, deserializer: Any) -> AsyncIter
     else:
         # Single message (non-chunked) fallback
         yield deserializer(data)
+
+
+def body_bytes(grpc_resp: GrpcResponse) -> bytes:
+    payload = grpc_resp.body.content
+    return payload if isinstance(payload, bytes) else b""
+
+
+@contextlib.contextmanager
+def verify_status(
+    cassette: Cassette | None,
+    method: str,
+    md: dict[str, list[str]],
+    req_body: Body,
+    expected: GrpcResponse | None,
+    messages: Callable[[GrpcResponse], list[Any]],
+    received: list[bytes],
+) -> Iterator[None]:
+    """In `verify` mode, compare a live error status, and the messages `received` before it, with the recording."""
+    try:
+        yield
+    except grpc.aio.AioRpcError as exc:
+        if cassette is not None and expected is not None:
+            status = (exc.code().value[0], exc.details() or "")
+            body = Body("binary", encode_chunks(received))
+            cassette.record_grpc(method, md, req_body, body, *status, expected=expected, messages=messages)
+        raise
+
+
+def unary_messages(deserializer: Any) -> Callable[[GrpcResponse], list[Any]]:
+    return lambda grpc_resp: [readable(deserializer, body_bytes(grpc_resp))]
+
+
+def stream_messages(deserializer: Any) -> Callable[[GrpcResponse], list[Any]]:
+    return lambda grpc_resp: [readable(deserializer, chunk) for chunk in decode_chunks(body_bytes(grpc_resp))]
+
+
+def readable(deserializer: Any, data: bytes) -> Any:
+    """The message as JSON when protobuf can convert it, otherwise its serialized bytes."""
+    debug = build_json_debug(None, deserializer(data))
+    return data if debug is None else debug["response"]
 
 
 async def serialize(requests: AsyncIterator[Any], serializer: Any) -> AsyncIterator[bytes]:

@@ -10,6 +10,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from urllib.parse import urlparse
 
 from cassetter._core import (
@@ -35,8 +36,10 @@ from cassetter.compare import (
     Compare,
     ResponseMismatchError,
     body_to_bytes,
+    compare_grpc_responses,
     compare_requests,
     compare_responses,
+    compare_ws_frames,
 )
 from cassetter.intercept._base import is_localhost
 from cassetter.introspection import RecordedRequest, recorded_request, sent_request
@@ -654,8 +657,16 @@ class Cassette:
         status_message: str = "OK",
         response_metadata: dict[str, list[str]] | None = None,
         json_debug: dict[str, object] | None = None,
+        expected: GrpcResponse | None = None,
+        messages: Callable[[GrpcResponse], list[Any]] | None = None,
     ) -> GrpcResponse:
-        """Record a gRPC interaction and return the response."""
+        """Record a gRPC interaction and return the response.
+
+        Args:
+            expected: The recording `play_grpc()` matched in `verify` mode. The response is compared
+                against it instead of being recorded.
+            messages: Decodes a response body into the messages `verify` mode compares. Defaults to the raw body.
+        """
         request = GrpcRequest(method, metadata, request_body)
         response = GrpcResponse(status_code, status_message, response_metadata, response_body)
         recorded_at = datetime.now(timezone.utc).isoformat()
@@ -663,6 +674,12 @@ class Cassette:
 
         # Apply security filtering
         interaction = scrub_grpc_interaction(interaction, self._security_config)
+
+        if expected is not None:
+            decode = messages or (lambda response: [response.body.content])
+            label = f"cassette {self._path}, gRPC {method}"
+            compare_grpc_responses(self._compare, expected, interaction.response, decode, label)
+            return interaction.response
 
         if self._inner is None:
             self._inner = _RustCassette()
@@ -718,13 +735,24 @@ class Cassette:
         uri: str,
         headers: dict[str, list[str]],
         frames: list[WsFrame],
+        expected: WsInteraction | None = None,
     ) -> None:
-        """Record a WebSocket interaction."""
+        """Record a WebSocket interaction.
+
+        Args:
+            expected: The recording `play_ws()` matched in `verify` mode. The received frames are compared
+                against it instead of being recorded.
+        """
         recorded_at = datetime.now(timezone.utc).isoformat()
         interaction = WsInteraction(uri, headers, self._recorded_frames(frames), recorded_at)
 
         # Apply security filtering
         interaction = scrub_ws_interaction(interaction, self._security_config)
+
+        if expected is not None:
+            label = f"cassette {self._path}, WebSocket {interaction.uri}"
+            compare_ws_frames(self._compare, expected.frames, interaction.frames, label)
+            return
 
         if self._inner is None:
             self._inner = _RustCassette()
