@@ -117,11 +117,13 @@ def intercept(
     method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
-        response = cassette.play(method, url, norm_headers, body)
-        return build_replay_response(url, response)
+        expected = cassette.play(method, url, norm_headers, body)
+        if not cassette.verifies:
+            return build_replay_response(url, expected)
     except NoMatchError:
         if not cassette.can_record:
             raise
+        expected = None
 
     order = cassette.reserve_record_order()
     real_response = original(client, *original_args, **kwargs)
@@ -141,6 +143,7 @@ def intercept(
         response_headers=resp_headers,
         response_body=real_response.content,
         order=order,
+        expected=expected,
     )
     return real_response
 

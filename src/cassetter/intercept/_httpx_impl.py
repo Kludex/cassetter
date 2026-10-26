@@ -36,11 +36,13 @@ async def async_intercept(mod: Any, request: Any, passthrough: AsyncPassthrough)
     method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
-        response = cassette.play(method, uri, headers, body)
-        return build_response(mod, response, request)
+        expected = cassette.play(method, uri, headers, body)
+        if not cassette.verifies:
+            return build_response(mod, expected, request)
     except NoMatchError:
         if not cassette.can_record:
             raise
+        expected = None
 
     order = cassette.reserve_record_order()
     real_response = await passthrough(request)
@@ -59,6 +61,7 @@ async def async_intercept(mod: Any, request: Any, passthrough: AsyncPassthrough)
         response_headers=resp_headers,
         response_body=resp_body,
         order=order,
+        expected=expected,
     )
     return real_response
 
@@ -86,11 +89,13 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
     method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
     try:
-        response = cassette.play(method, uri, headers, body)
-        return build_response(mod, response, request)
+        expected = cassette.play(method, uri, headers, body)
+        if not cassette.verifies:
+            return build_response(mod, expected, request)
     except NoMatchError:
         if not cassette.can_record:
             raise
+        expected = None
 
     order = cassette.reserve_record_order()
     real_response = passthrough(request)
@@ -108,6 +113,7 @@ def sync_intercept(mod: Any, request: Any, passthrough: SyncPassthrough) -> Any:
         response_headers=resp_headers,
         response_body=resp_body,
         order=order,
+        expected=expected,
     )
     return real_response
 
