@@ -28,8 +28,10 @@ class VCRWebSocket:
         uri: str,
         headers: dict[str, list[str]],
         subprotocol: str | None = None,
+        expected: WsInteraction | None = None,
     ) -> None:
         self._real = real_ws
+        self._expected = expected
         self._uri = uri
         self._headers = headers
         if subprotocol is not None:
@@ -75,16 +77,18 @@ class VCRWebSocket:
     def _flush(self) -> None:
         cassette = get_current_cassette()
         if not self._flushed and cassette is not None:
-            cassette.record_ws(self._uri, self._headers, self._frames)
-            self._frames = []
             self._flushed = True
+            frames, self._frames = self._frames, []
+            cassette.record_ws(self._uri, self._headers, frames, self._expected)
 
     async def __aenter__(self) -> VCRWebSocket:
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        self._flush()
-        await self._real.close()
+        try:
+            self._flush()
+        finally:
+            await self._real.close()
 
     def __aiter__(self) -> VCRWebSocket:
         return self
@@ -246,16 +250,18 @@ class _PatchedConnect:
 
         try:
             interaction = cassette.play_ws(self._uri)
-            self._ws = VCRWebSocketReplay(interaction, cassette)
-            return self._ws
+            if not cassette.verifies:
+                self._ws = VCRWebSocketReplay(interaction, cassette)
+                return self._ws
         except NoMatchError:
             if not cassette.can_record:
                 raise
+            interaction = None
 
         conn = self._original_connect(self._uri, **self._kwargs)  # pragma: no cover
         real_ws = await conn  # pragma: no cover
         headers = extract_ws_headers(self._kwargs)  # pragma: no cover
-        self._ws = VCRWebSocket(real_ws, self._uri, headers, real_ws.subprotocol)  # pragma: no cover
+        self._ws = VCRWebSocket(real_ws, self._uri, headers, real_ws.subprotocol, interaction)  # pragma: no cover
         return self._ws  # pragma: no cover
 
     async def _cleanup(self, exc_type: type[BaseException] | None = None) -> None:

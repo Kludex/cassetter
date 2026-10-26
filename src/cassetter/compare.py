@@ -3,11 +3,12 @@ from __future__ import annotations
 import difflib
 import fnmatch
 import json
+import struct
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from cassetter._core import HttpResponse
+from cassetter._core import GrpcResponse, HttpResponse, WsFrame
 
 
 class ResponseMismatchError(AssertionError):
@@ -40,8 +41,28 @@ BeforeCompareResponse = Callable[[HttpResponse, HttpResponse], tuple[HttpRespons
 
 def compare_responses(compare: Compare, recorded: HttpResponse, live: HttpResponse, label: str) -> None:
     """Raise `ResponseMismatchError` with a unified diff when `live` is not equivalent to `recorded`."""
-    expected = _render(_normalize(compare, recorded))
-    actual = _render(_tolerate(_normalize(compare, recorded), _normalize(compare, live), compare.float_tolerance))
+    _diff(compare, _normalize(compare, recorded), _normalize(compare, live), label)
+
+
+def compare_grpc_responses(
+    compare: Compare,
+    recorded: GrpcResponse,
+    live: GrpcResponse,
+    messages: Callable[[GrpcResponse], list[Any]],
+    label: str,
+) -> None:
+    """Like `compare_responses`, for the status and the messages `messages` decodes from each body."""
+    _diff(compare, _grpc(compare, recorded, messages), _grpc(compare, live, messages), label)
+
+
+def compare_ws_frames(compare: Compare, recorded: list[WsFrame], live: list[WsFrame], label: str) -> None:
+    """Like `compare_responses`, for the frames received in order. Sent frames are ignored."""
+    _diff(compare, _received(compare, recorded), _received(compare, live), label)
+
+
+def _diff(compare: Compare, recorded: dict[str, Any], live: dict[str, Any], label: str) -> None:
+    expected = _render(recorded)
+    actual = _render(_tolerate(recorded, live, compare.float_tolerance))
     if expected == actual:
         return
     diff = difflib.unified_diff(expected, actual, "recorded", "live", lineterm="")
@@ -64,6 +85,30 @@ def _body(compare: Compare, response: HttpResponse) -> Any:
         return _drop_paths(content, compare.json_ignore, "")
     if compare.sse and isinstance(content, str):
         return [_drop_paths(event, compare.json_ignore, "") for event in _sse_events(content)]
+    return content
+
+
+def _grpc(compare: Compare, response: GrpcResponse, messages: Callable[[GrpcResponse], list[Any]]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {"status": f"{response.status_code} {response.status_message}"}
+    for i, message in enumerate(messages(response), 1):
+        normalized[f"message {i}"] = _drop_paths(message, compare.json_ignore, "")
+    return normalized
+
+
+def _received(compare: Compare, frames: list[WsFrame]) -> dict[str, Any]:
+    received = [frame for frame in frames if frame.direction == "recv"]
+    return {f"{frame.frame_type} {i}": _frame(compare, frame) for i, frame in enumerate(received, 1)}
+
+
+def _frame(compare: Compare, frame: WsFrame) -> Any:
+    content = frame.body.content
+    if frame.frame_type == "close" and isinstance(content, bytes):
+        return f"{struct.unpack('>H', content[:2])[0]} {content[2:].decode()}"
+    if isinstance(content, str):
+        try:
+            return _drop_paths(json.loads(content), compare.json_ignore, "")
+        except json.JSONDecodeError:
+            return content
     return content
 
 
@@ -108,14 +153,19 @@ def _is_number(value: Any) -> bool:
 
 
 def _render(normalized: dict[str, Any]) -> list[str]:
-    lines = [f"status: {normalized['status']}", "@@ headers @@"]
-    lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
-    lines.append("@@ body @@")
-    body = normalized["body"]
-    if isinstance(body, bytes):
-        lines.append(repr(body))
-    elif isinstance(body, str):
-        lines += body.splitlines()
-    else:
-        lines += json.dumps(body, indent=2, sort_keys=True).splitlines()
+    lines: list[str] = []
+    for section, value in normalized.items():
+        if section == "headers":
+            lines.append("@@ headers @@")
+            lines += [f"{name}: {item}" for name, items in value.items() for item in items]
+        elif section != "body" and isinstance(value, (int, str, bytes)):
+            lines.append(f"{section}: {value!r}" if isinstance(value, bytes) else f"{section}: {value}")
+        else:
+            lines.append(f"@@ {section} @@")
+            if isinstance(value, bytes):
+                lines.append(repr(value))
+            elif isinstance(value, str):
+                lines += value.splitlines()
+            else:
+                lines += json.dumps(value, indent=2, sort_keys=True).splitlines()
     return lines

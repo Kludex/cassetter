@@ -84,3 +84,7 @@ The same write time filtering as HTTP applies:
 * The **`json_debug`** payload is scrubbed with the body scrub patterns, so a field like `password` shows up as `[FILTERED]`.
 
 Binary protobuf bodies are stored as is, they cannot be pattern scrubbed.
+
+## Verify a live service
+
+With `record_mode="verify"`, matched calls go live and the status and response messages are compared to the recording. See [`verify`](../tutorial/record-modes.md#grpc-and-websockets).

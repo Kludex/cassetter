@@ -8,7 +8,7 @@ import grpc.aio
 import pytest
 from google.protobuf.wrappers_pb2 import StringValue
 
-from cassetter import NoMatchError, use_cassette
+from cassetter import Body, NoMatchError, ResponseMismatchError, use_cassette
 
 
 @pytest.fixture
@@ -216,3 +216,64 @@ async def test_body_matching_needs_the_request_body(recorded: Path) -> None:
     with use_cassette(recorded, record_mode="none", intercept=[], match_on=["method", "body"]) as cassette:
         with pytest.raises(ValueError, match="needs the request_body"):
             cassette.play_grpc("/pkg.Echo/Say")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("body_matching", [False, True])
+async def test_verify_sends_every_call_kind_live(recorded: Path, target: str, body_matching: bool) -> None:
+    before = recorded.read_text()
+    with use_cassette(
+        recorded, record_mode="verify", intercept=["grpc"], match_on=["method", "body"] if body_matching else ["method"]
+    ) as cassette:
+        async with grpc.aio.insecure_channel(target) as channel:
+            assert await call_every_kind(channel) == [["echo hi"], ["a", "b"], ["a b"], ["echo a", "echo b"]]
+    assert cassette.all_played
+    assert recorded.read_text() == before
+
+
+@pytest.mark.anyio
+async def test_verify_reports_a_different_response(tmp_path: Path, target: str) -> None:
+    path = tmp_path / "grpc.yaml"
+    with use_cassette(path, record_mode="once", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            await EchoStub(channel).Say(StringValue(value="bye"))
+            [response async for response in EchoStub(channel).Stream(StringValue(value="a"))]
+
+    with use_cassette(path, record_mode="verify", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            stub = EchoStub(channel)
+            with pytest.raises(ResponseMismatchError) as mismatch:
+                await stub.Say(StringValue(value="hi"))
+            with pytest.raises(ResponseMismatchError, match=r" message 1: a\n\+message 2: b$"):
+                [response async for response in stub.Stream(StringValue(value="a b"))]
+    assert str(mismatch.value) == (
+        f"cassette {path}, gRPC /pkg.Echo/Say\n--- recorded\n+++ live\n@@ -1,2 +1,2 @@\n status: 0 OK\n"
+        "-message 1: echo bye\n+message 1: echo hi"
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("status", "raised", "match"),
+    [
+        ((12, "Method not found!"), grpc.aio.AioRpcError, "Method not found!"),
+        ((0, "OK"), ResponseMismatchError, "-status: 0 OK\n\\+status: 12 Method not found!"),
+    ],
+    ids=["same-error", "error-instead-of-ok"],
+)
+async def test_verify_compares_a_live_error_status(
+    tmp_path: Path, target: str, status: tuple[int, str], raised: type[Exception], match: str
+) -> None:
+    path = tmp_path / "grpc.yaml"
+    with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+        cassette.record_grpc("/pkg.Echo/Missing", {}, Body("binary", b""), Body("binary", b""), *status)
+
+    with use_cassette(path, record_mode="verify", intercept=["grpc"]):
+        async with grpc.aio.insecure_channel(target) as channel:
+            missing = channel.unary_unary(
+                "/pkg.Echo/Missing",
+                request_serializer=StringValue.SerializeToString,
+                response_deserializer=StringValue.FromString,
+            )
+            with pytest.raises(raised, match=match):
+                await missing(StringValue(value="hi"))

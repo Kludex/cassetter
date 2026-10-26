@@ -8,7 +8,7 @@ import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from websockets.frames import Close
 
-from cassetter import Body, WsFrame, use_cassette
+from cassetter import Body, ResponseMismatchError, WsFrame, use_cassette
 
 
 @pytest.fixture
@@ -91,3 +91,36 @@ async def test_frames_running_out_close_the_connection_normally(tmp_path: Path) 
                 await ws.recv()
             assert closed.value.rcvd == Close(1000, "")
             assert (ws.close_code, ws.close_reason) == (1000, "")
+
+
+async def verify(path: Path, uri: str) -> tuple[list[str | bytes], int | None, str | None]:
+    with use_cassette(path, record_mode="verify", intercept=["websockets"]):
+        return await converse(uri)
+
+
+@pytest.mark.anyio
+async def test_verify_connects_live(recorded: Path, ws_uri: str) -> None:
+    before = recorded.read_text()
+    assert await asyncio.create_task(verify(recorded, ws_uri)) == CONVERSATION
+    assert recorded.read_text() == before
+
+
+@pytest.mark.anyio
+async def test_verify_reports_different_received_frames(tmp_path: Path, ws_uri: str) -> None:
+    path = tmp_path / "ws.yaml"
+    frames = [
+        WsFrame("send", "text", Body("text", "hi")),
+        WsFrame("recv", "text", Body("text", '{"greeting": "hello"}')),
+        WsFrame("recv", "binary", Body("binary", b"\x00\x01")),
+        WsFrame("recv", "close", Body("binary", b"\x0f\xa0bye")),
+    ]
+    with use_cassette(path, record_mode="all", intercept=[]) as cassette:
+        cassette.record_ws(ws_uri, {}, frames)
+
+    with pytest.raises(ResponseMismatchError) as mismatch:
+        await asyncio.create_task(verify(path, ws_uri))
+    assert str(mismatch.value) == (
+        f"cassette {path}, WebSocket {ws_uri}\n--- recorded\n+++ live\n@@ -1,6 +1,3 @@\n"
+        '-@@ text 1 @@\n-{\n-  "greeting": "hello"\n-}\n+text 1: hello\n'
+        " binary 2: b'\\x00\\x01'\n close 3: 4000 bye"
+    )
