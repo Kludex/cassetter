@@ -66,8 +66,46 @@ It only replays when the cassette already exists.
 | `RecordModeNewEpisodes` | Replay unplayed interactions and record everything else. |
 | `RecordModeAll` | Record every request and replace existing interactions. |
 | `RecordModeRewrite` | Remove the cassette first, then record every request. |
+| `RecordModeVerify` | Send matched HTTP requests live. Fail with `ResponseMismatchError` if the response differs. |
 
 Use a `.toml` path to store HTTP cassettes as TOML. Other extensions use YAML.
+
+### Verify a live service against a cassette
+
+`RecordModeVerify` treats the cassette as the expected output of the service
+under test. Matching works as in `RecordModeNone`, and an unmatched request
+returns `ErrNoMatch`. A matched request goes live. Its response goes through
+the response hook, decompression, and scrubbing, like a recording, and is
+compared to the recorded one. The cassette is never written.
+
+```go
+transport := cassetter.NewTransport(
+	nil,
+	cassetter.WithPath("testdata/expected/chat.yaml"),
+	cassetter.WithRecordMode(cassetter.RecordModeVerify),
+	cassetter.WithMatchers(cassetter.MatcherMethod, cassetter.MatcherURI, cassetter.MatcherBody),
+	cassetter.WithCompare(cassetter.Compare{
+		Headers:        []string{"content-type", "x-price-*"},
+		JSONIgnore:     []string{"id", "created"},
+		FloatTolerance: 1e-9,
+	}),
+)
+```
+
+| `Compare` field | Compared |
+|---|---|
+| status | Always, exactly. |
+| `Headers` | Only the listed names, by value. Globs such as `x-price-*` are allowed. |
+| `JSONIgnore` | JSON bodies are compared structurally, without these paths, in the `WithIgnoredJSONPaths` syntax. |
+| `FloatTolerance` | Largest difference between two JSON numbers that still counts as equal. |
+| `SSE` | Compare Server-Sent Events `data:` payloads, so chunk boundaries and comments do not matter. |
+
+Other bodies are compared as text or bytes. A difference is reported as a
+`*ResponseMismatchError`, usable with `errors.As`, whose `Diff` field is a
+unified diff of both responses as compared. Response bodies stream, so the
+error comes from the body `Read` that reaches EOF and from `Transport.Close`.
+`WithBeforeCompareResponse` normalizes both responses for differences `Compare`
+cannot express. gRPC and WebSocket interactions replay as in `RecordModeNone`.
 
 ## Record and replay gRPC
 
@@ -365,7 +403,7 @@ with `grpc.ClientConn`. Use `Transport.DialWebSocket` for WebSockets.
 | Option | Purpose |
 |---|---|
 | `WithPath` | Set the YAML or TOML cassette path. |
-| `WithRecordMode` | Select `none`, `once`, `new_episodes`, `all`, or `rewrite`. |
+| `WithRecordMode` | Select `none`, `once`, `new_episodes`, `all`, `rewrite`, or `verify`. |
 | `WithMatchers` | Select HTTP `method`, `uri`, `headers`, `body`, or `json_body` matching. |
 | `WithIgnoredJSONPaths` | Ignore dot-separated paths during HTTP JSON body matching. |
 | `WithURINormalizer` | Normalize HTTP and WebSocket URIs for comparison. |
@@ -379,6 +417,8 @@ with `grpc.ClientConn`. Use `Transport.DialWebSocket` for WebSockets.
 | `WithIgnoreHosts` | Bypass recording for exact hosts or wildcard host patterns. |
 | `WithRequestHook` | Transform or skip a live HTTP request before matching. |
 | `WithResponseHook` | Transform or skip a live HTTP response before recording. |
+| `WithCompare` | Select what `RecordModeVerify` compares between recorded and live responses. |
+| `WithBeforeCompareResponse` | Normalize the recorded and live responses before `RecordModeVerify` compares them. |
 
 Options add to the safe filtering defaults. `DefaultSecurityConfig` returns a
 copy of those defaults for `Cassette.Scrub`.
@@ -397,11 +437,12 @@ request, response, body, metadata, and frame values.
 ### Errors
 
 Use `errors.Is` with `ErrNoMatch`, `ErrIncompleteRecording`,
-`ErrTransportClosed`, `ErrCassetteExpired`, and `ErrSkipRecording`. Use
-`errors.As` when you need details from `NoMatchError`, `NoGRPCMatchError`,
-`NoWebSocketMatchError`, `IncompleteRecordingError`,
-`IncompleteGRPCRecordingError`, `IncompleteWebSocketRecordingError`, or
-`CassetteExpiredError`.
+`ErrTransportClosed`, `ErrCassetteExpired`, `ErrSkipRecording`, and
+`ErrResponseMismatch`. Use `errors.As` when you need details from
+`NoMatchError`, `NoGRPCMatchError`, `NoWebSocketMatchError`,
+`IncompleteRecordingError`, `IncompleteGRPCRecordingError`,
+`IncompleteWebSocketRecordingError`, `CassetteExpiredError`, or
+`ResponseMismatchError`.
 
 ## Scope
 
