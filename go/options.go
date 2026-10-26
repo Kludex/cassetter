@@ -22,6 +22,9 @@ const (
 	RecordModeAll RecordMode = "all"
 	// RecordModeRewrite removes the cassette before recording every request.
 	RecordModeRewrite RecordMode = "rewrite"
+	// RecordModeVerify sends matched HTTP requests live and fails when the response differs from the recording.
+	// Unmatched requests fail, and the cassette is never written.
+	RecordModeVerify RecordMode = "verify"
 )
 
 // ErrNoMatch identifies a request that cannot be replayed in the selected mode.
@@ -67,6 +70,8 @@ type transportConfig struct {
 	ignoreHosts     []string
 	requestHook     RequestHook
 	responseHook    ResponseHook
+	compare         Compare
+	beforeCompare   BeforeCompareResponse
 }
 
 // WithPath sets the cassette path. A .toml extension selects TOML; other extensions use YAML.
@@ -80,6 +85,21 @@ func WithPath(path string) Option {
 func WithRecordMode(mode RecordMode) Option {
 	return optionFunc(func(config *transportConfig) {
 		config.mode = mode
+	})
+}
+
+// WithCompare sets what RecordModeVerify compares between a recorded and a live response.
+func WithCompare(compare Compare) Option {
+	return optionFunc(func(config *transportConfig) {
+		config.compare = compare
+	})
+}
+
+// WithBeforeCompareResponse sets a hook that normalizes the recorded and the live response before RecordModeVerify
+// compares them.
+func WithBeforeCompareResponse(hook BeforeCompareResponse) Option {
+	return optionFunc(func(config *transportConfig) {
+		config.beforeCompare = hook
 	})
 }
 

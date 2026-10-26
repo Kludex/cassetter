@@ -44,9 +44,9 @@ class RequestsInterceptor:
             method, uri, headers, body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
-                expected = cassette.play(method, uri, headers, body)
+                expected = cassette.match(method, uri, headers, body)
                 if not cassette.verifies:
-                    return build_requests_response(request, expected)
+                    return build_requests_response(request, expected[1])
             except NoMatchError:
                 if not cassette.can_record:
                     raise

@@ -1,9 +1,15 @@
 use std::path::{Path, PathBuf};
+#[cfg(feature = "reqwest")]
+use std::sync::Arc;
 
 use cassetter_core::matching::config::MatchConfig;
+#[cfg(feature = "reqwest")]
+use cassetter_core::protocol::http::HttpResponse;
 pub use cassetter_core::recording::RecordMode;
 use cassetter_core::security::SecurityConfig;
 
+#[cfg(feature = "reqwest")]
+use crate::compare::{BeforeCompareResponse, Compare};
 use crate::{Error, Recorder, Result};
 
 /// Configures a [`Recorder`].
@@ -13,6 +19,10 @@ pub struct RecorderBuilder {
     pub(crate) mode: RecordMode,
     pub(crate) matching: MatchConfig,
     pub(crate) security: SecurityConfig,
+    #[cfg(feature = "reqwest")]
+    pub(crate) compare: Compare,
+    #[cfg(feature = "reqwest")]
+    pub(crate) before_compare_response: Option<BeforeCompareResponse>,
 }
 
 impl RecorderBuilder {
@@ -22,6 +32,10 @@ impl RecorderBuilder {
             mode: RecordMode::Once,
             matching: MatchConfig::default(),
             security: SecurityConfig::default(),
+            #[cfg(feature = "reqwest")]
+            compare: Compare::default(),
+            #[cfg(feature = "reqwest")]
+            before_compare_response: None,
         }
     }
 
@@ -87,6 +101,24 @@ impl RecorderBuilder {
     /// Change the placeholder written in place of filtered values.
     pub fn filter_replacement(mut self, replacement: impl Into<String>) -> Self {
         self.security.replacement = replacement.into();
+        self
+    }
+
+    /// Select what [`RecordMode::Verify`] compares between a recorded and a live HTTP response.
+    #[cfg(feature = "reqwest")]
+    pub fn compare(mut self, compare: Compare) -> Self {
+        self.compare = compare;
+        self
+    }
+
+    /// Normalize `(recorded, live)` HTTP responses in [`RecordMode::Verify`] before they are compared,
+    /// for differences [`Compare`] cannot express.
+    #[cfg(feature = "reqwest")]
+    pub fn before_compare_response<F>(mut self, hook: F) -> Self
+    where
+        F: Fn(HttpResponse, HttpResponse) -> (HttpResponse, HttpResponse) + Send + Sync + 'static,
+    {
+        self.before_compare_response = Some(BeforeCompareResponse(Arc::new(hook)));
         self
     }
 

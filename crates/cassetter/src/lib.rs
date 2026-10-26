@@ -5,6 +5,8 @@
 //! [`Recorder::finish`] so persistence and incomplete recordings cannot be
 //! silently ignored.
 
+#[cfg(feature = "reqwest")]
+mod compare;
 mod config;
 mod error;
 mod recorder;
@@ -21,6 +23,10 @@ pub mod reqwest;
 #[cfg(feature = "tonic")]
 pub mod tonic;
 
+#[cfg(feature = "reqwest")]
+pub use cassetter_core::protocol::http::HttpResponse;
+#[cfg(feature = "reqwest")]
+pub use compare::Compare;
 pub use config::{RecordMode, RecorderBuilder};
 pub use error::{Error, Result};
 pub use recorder::Recorder;

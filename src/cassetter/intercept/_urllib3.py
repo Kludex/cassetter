@@ -51,9 +51,9 @@ class Urllib3Interceptor:
             norm_method, full_url, norm_headers, norm_body = raw.method, raw.uri, raw.headers, raw.body
 
             try:
-                expected = cassette.play(norm_method, full_url, norm_headers, norm_body)
+                expected = cassette.match(norm_method, full_url, norm_headers, norm_body)
                 if not cassette.verifies:
-                    return build_urllib3_response(expected, full_url)
+                    return build_urllib3_response(expected[1], full_url)
             except NoMatchError:
                 if not cassette.can_record:
                     raise

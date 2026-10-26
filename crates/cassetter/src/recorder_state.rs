@@ -26,6 +26,10 @@ pub(crate) struct State {
     pub(crate) matching: MatchConfig,
     #[cfg_attr(not(any(feature = "reqwest", feature = "tonic")), allow(dead_code))]
     pub(crate) security: SecurityConfig,
+    #[cfg(feature = "reqwest")]
+    pub(crate) compare: crate::compare::Compare,
+    #[cfg(feature = "reqwest")]
+    pub(crate) before_compare_response: Option<crate::compare::BeforeCompareResponse>,
     #[cfg_attr(not(any(feature = "reqwest", feature = "tonic")), allow(dead_code))]
     pub(crate) next_order: usize,
     pub(crate) http_order: Vec<usize>,
@@ -70,6 +74,10 @@ impl State {
             can_record,
             matching: builder.matching,
             security: builder.security,
+            #[cfg(feature = "reqwest")]
+            compare: builder.compare,
+            #[cfg(feature = "reqwest")]
+            before_compare_response: builder.before_compare_response,
             next_order,
             http_order: (0..http_count).collect(),
             grpc_order: (0..grpc_count).collect(),

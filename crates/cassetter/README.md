@@ -71,8 +71,31 @@ places during replay. Non-OK gRPC statuses are recorded and replayed.
 | `RecordMode::NewEpisodes` | Replay unplayed matches and record everything else. |
 | `RecordMode::All` | Record every request and replace existing interactions. |
 | `RecordMode::Rewrite` | Remove the cassette first and record every request. |
+| `RecordMode::Verify` | Send matched HTTP requests live and fail with `Error::ResponseMismatch` if the response differs from the recording. |
 
 A session that can record only replays interactions it hasn't played yet, and never replays one it just recorded. A repeated request, like the next turn of a conversation posting to the same URL, reaches the server instead of getting an earlier response back.
+
+### Verify
+
+`RecordMode::Verify` checks a service against a cassette recorded from a reference implementation. Matching works as in `RecordMode::None`, and a request without a recording fails with `Error::NoMatch`. A matched request goes live. Its response goes through the same decompression and scrubbing as a recording, then is compared to the recorded one. The cassette is never written.
+
+```rust,no_run
+use cassetter::{Compare, RecordMode, Recorder};
+
+# fn build() -> cassetter::Result<Recorder> {
+Recorder::builder("tests/expected/chat.yaml")
+    .record_mode(RecordMode::Verify)
+    .compare(Compare {
+        headers: vec!["content-type".into(), "x-price-*".into()],
+        json_ignore: vec!["id".into(), "created".into()],
+        float_tolerance: 1e-9,
+        ..Compare::default()
+    })
+    .build()
+# }
+```
+
+The status is always compared. `headers` lists the header names compared by value, with globs. JSON bodies are compared structurally without the `json_ignore` paths, and numbers within `float_tolerance` count as equal. `sse` compares a Server-Sent Events body as its list of `data:` payloads. Any other body is compared as text or bytes. `before_compare_response` normalizes `(recorded, live)` for differences `Compare` cannot express. A mismatch error carries a unified diff of both responses. gRPC requests replay as in `RecordMode::None`.
 
 Each `Recorder` owns independent playback state. Clone one recorder to share a
 cassette safely across concurrent tasks. Build separate recorders when tests
