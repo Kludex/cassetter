@@ -345,11 +345,12 @@ def vcr_config():
     return {"observe_timeout": 0.05}
 
 def pytest_collection_modifyitems(config, items):
-    path = items[0].path.parent / "cassettes" / items[0].path.stem / (items[0].name + ".yaml")
-    path.parent.mkdir(parents=True)
-    cassette = Cassette()
-    cassette.add_observed_request(HttpRequest("POST", "http://collector/v1/logs", body=Body("text", "x")))
-    cassette.save(str(path))
+    for item in items:
+        path = item.path.parent / "cassettes" / item.path.stem / (item.name + ".yaml")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cassette = Cassette()
+        cassette.add_observed_request(HttpRequest("POST", "http://collector/v1/logs", body=Body("text", "x")))
+        cassette.save(str(path))
 """
     )
     pytester.makepyfile(
@@ -359,11 +360,16 @@ import pytest
 @pytest.mark.vcr(record_mode="verify")
 def test_service():
     pass
+
+@pytest.mark.vcr(record_mode="verify")
+def test_fails_itself():
+    assert False, "the test's own failure"
 """
     )
     result = pytester.runpytest("-p", "no:cacheprovider")
-    result.assert_outcomes(passed=1, errors=1)
-    result.stdout.fnmatch_lines(["*expected 1 observed requests, got 0*"])
+    result.assert_outcomes(passed=1, failed=1, errors=1)
+    result.stdout.fnmatch_lines(["*ERROR at teardown of test_service*", "*expected 1 observed requests, got 0*"])
+    assert "ERROR at teardown of test_fails_itself" not in result.stdout.str()
 
 
 def test_verify_never_tolerates_a_status_change(url: str, reply: Reply, path: str) -> None:
