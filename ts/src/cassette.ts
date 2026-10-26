@@ -9,6 +9,7 @@
 
 import { existsSync, rmSync, statSync } from "node:fs";
 
+import { compareResponses, type BeforeCompareResponse, type Compare } from "./compare.js";
 import { native, processBody, scrubInteraction, scrubGrpcInteraction, scrubWsInteraction } from "./binding.js";
 import type { NativeCassette } from "./binding.js";
 import { DISCARDING_MODES, RecordMode, parseDuration } from "./recording.js";
@@ -71,6 +72,8 @@ export interface CassetteOptions {
   maxAge?: string;
   onExpiry?: "warn" | "fail" | "rerecord";
   ignoreLocalhost?: boolean;
+  compare?: Compare;
+  beforeCompareResponse?: BeforeCompareResponse;
 }
 
 export class Cassette {
@@ -81,6 +84,8 @@ export class Cassette {
   private readonly _maxAge: number | null;
   private readonly _onExpiry: "warn" | "fail" | "rerecord";
   private readonly _ignoreLocalhost: boolean;
+  private readonly _compare: Compare;
+  private readonly _beforeCompareResponse: BeforeCompareResponse | undefined;
 
   private _inner: NativeCassette | null = null;
   private _dirty = false;
@@ -102,6 +107,8 @@ export class Cassette {
     this._maxAge = options.maxAge ? parseDuration(options.maxAge) : null;
     this._onExpiry = options.onExpiry ?? "warn";
     this._ignoreLocalhost = options.ignoreLocalhost ?? false;
+    this._compare = options.compare ?? {};
+    this._beforeCompareResponse = options.beforeCompareResponse;
   }
 
   /** Where this cassette is read from and written to. */
@@ -112,6 +119,11 @@ export class Cassette {
   /** The record mode in force. */
   get recordMode(): RecordMode {
     return this._recordMode;
+  }
+
+  /** Whether a matched request goes live and its response is compared to the recording. */
+  get verifies(): boolean {
+    return this._recordMode === RecordMode.VERIFY;
   }
 
   /** Whether localhost traffic bypasses the cassette entirely. */
@@ -287,6 +299,14 @@ export class Cassette {
     return hit.interaction.response;
   }
 
+  /**
+   * Record an interaction and return the response.
+   *
+   * `order` is the position claimed by `reserveRecordOrder()` before the request
+   * went out. `expected` is the recording `play()` matched in `verify` mode: the
+   * response is compared against it, with the same processing as a recording,
+   * instead of being recorded.
+   */
   record(
     method: string,
     uri: string,
@@ -296,6 +316,7 @@ export class Cassette {
     responseHeaders: HeaderMap,
     responseBody: Buffer | null,
     order?: number,
+    expected?: HttpResponse,
   ): HttpResponse {
     const reqBody = processBody(
       requestBody ?? Buffer.alloc(0),
@@ -326,6 +347,14 @@ export class Cassette {
         this._securityConfig,
       ),
     );
+
+    if (expected) {
+      const [recorded, live] = this._beforeCompareResponse
+        ? this._beforeCompareResponse(expected, interaction.response)
+        : [expected, interaction.response];
+      compareResponses(this._compare, recorded, live, `cassette ${this._path}, ${method} ${uri}`);
+      return interaction.response;
+    }
 
     this._ensureInner().addInteraction(interaction);
     this._recordOrders.push(order ?? this.reserveRecordOrder());

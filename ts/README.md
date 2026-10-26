@@ -61,6 +61,7 @@ await useCassette("cassette.yaml", async (cassette) => {
 | `new_episodes` | Replay unplayed interactions, record everything else. |
 | `all` | Record everything, overwriting the cassette. |
 | `rewrite` | Delete the cassette, then record everything. |
+| `verify` | Send matched requests live and throw `ResponseMismatchError` if the response differs from the recording. |
 
 A session that can record only replays interactions it hasn't played yet, and never replays one it just recorded. A repeated request, like the next turn of a conversation posting to the same URL, reaches the server instead of getting an earlier response back.
 
@@ -70,6 +71,87 @@ await useCassette("cassette.yaml", { recordMode: "none" }, async () => { ... });
 
 Under `once`, an existing cassette replays only: an unmatched request throws
 rather than silently reaching the network and appending to the file.
+
+### `verify`
+
+Use it when the cassette is the expected output of the service under test, not a stand-in for a
+dependency. For example, when you port an HTTP API: record the reference implementation once, then
+check the new one against it.
+
+```ts
+import { useCassette, type UseCassetteOptions } from "cassetter";
+
+const options: UseCassetteOptions = {
+  matchOn: ["method", "uri", "body"],
+  compare: {
+    headers: ["content-type", "x-price-*"],
+    jsonIgnore: ["id", "created"],
+    floatTolerance: 1e-9,
+  },
+};
+const chat = () =>
+  fetch("http://localhost:8000/v1/chat", { method: "POST", body: JSON.stringify({ messages: [] }) });
+
+// Against the reference implementation.
+await useCassette("tests/expected/chat.yaml", { ...options, recordMode: "rewrite" }, chat);
+
+// Against the new implementation.
+await useCassette("tests/expected/chat.yaml", { ...options, recordMode: "verify" }, chat);
+```
+
+Matching works as in `none`: `matchOn` picks the recording, and a request without one throws
+`NoMatchError`. After a match, the request goes to the network, the response is decompressed and
+scrubbed as a recording would be, and compared to the recorded one. The cassette is never written.
+
+`compare` decides what counts as equivalent:
+
+| Field | Compared |
+| --- | --- |
+| status | Always, exactly. |
+| `headers` | Only the listed names, by value. Globs such as `x-price-*` are allowed. Every other header is ignored. |
+| `jsonIgnore` | JSON bodies are compared structurally, without these paths. Same syntax as `ignoreJsonPaths`. |
+| `floatTolerance` | Largest difference between two JSON numbers that still counts as equal. |
+| `sse` | Compare the body as its Server-Sent Events `data:` payloads, so chunk boundaries and comments do not matter. JSON payloads are parsed, and `jsonIgnore` applies to each. |
+
+Any other body is compared as text. On a difference, the request fails with a `ResponseMismatchError`
+whose message is a unified diff of both responses, as compared:
+
+```
+cassette tests/expected/chat.yaml, POST http://localhost:8000/v1/chat
+--- recorded
++++ live
+@@ -1,7 +1,7 @@
+ status: 200
+ @@ headers @@
+ content-type: application/json
+-x-price-estimate: 0.0001USD
++x-price-estimate: 0.0002USD
+ @@ body @@
+ {
+   "content": "hi"
+```
+
+For differences `compare` cannot express, `beforeCompareResponse` receives the recorded and the live
+`HttpResponse` and returns both, normalized:
+
+```ts
+import type { HttpResponse } from "cassetter";
+
+const dropNulls = (response: HttpResponse): HttpResponse => ({
+  ...response,
+  body: {
+    type: "json",
+    content: Object.fromEntries(
+      Object.entries(response.body.content as object).filter(([, value]) => value !== null),
+    ),
+  },
+});
+
+const beforeCompareResponse = (recorded: HttpResponse, live: HttpResponse) =>
+  [dropNulls(recorded), dropNulls(live)] as [HttpResponse, HttpResponse];
+
+await useCassette("tests/expected/chat.yaml", { recordMode: "verify", beforeCompareResponse }, chat);
+```
 
 ## Safe by default
 
