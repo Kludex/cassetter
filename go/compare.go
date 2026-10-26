@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"maps"
+	"math/big"
 	"path"
 	"slices"
 	"strings"
@@ -84,26 +85,34 @@ func compareResponses(compare Compare, recorded HTTPResponse, live HTTPResponse)
 }
 
 type normalizedResponse struct {
-	status  int
-	headers []string
-	body    any
+	status   int
+	headers  map[string][]string
+	bodyType BodyType
+	body     any
 }
 
 func normalizeResponse(compare Compare, response HTTPResponse) (normalizedResponse, error) {
-	var headers []string
-	for name, values := range response.Headers {
-		name = strings.ToLower(name)
+	names := slices.Sorted(maps.Keys(response.Headers))
+	headers := map[string][]string{}
+	for _, name := range names {
+		lower := strings.ToLower(name)
 		if slices.ContainsFunc(compare.Headers, func(pattern string) bool {
-			matched, _ := path.Match(strings.ToLower(pattern), name)
+			matched, _ := path.Match(strings.ToLower(pattern), lower)
 			return matched
 		}) {
-			for _, value := range values {
-				headers = append(headers, name+": "+value)
-			}
+			headers[lower] = append(headers[lower], response.Headers[name]...)
 		}
 	}
-	slices.Sort(headers)
-	normalized := normalizedResponse{status: response.Status, headers: headers, body: response.Body.Content}
+	bodyType := response.Body.Type
+	if bodyType == "" {
+		bodyType = BodyTypeNone
+	}
+	normalized := normalizedResponse{
+		status:   response.Status,
+		headers:  headers,
+		bodyType: bodyType,
+		body:     response.Body.Content,
+	}
 	switch {
 	case response.Body.Type == BodyTypeJSON:
 		value, err := canonicalJSON(response.Body.Content)
@@ -138,18 +147,22 @@ func normalizeResponse(compare Compare, response HTTPResponse) (normalizedRespon
 
 func (r normalizedResponse) render() ([]string, error) {
 	lines := []string{fmt.Sprintf("status: %d\n", r.status), "@@ headers @@\n"}
-	for _, header := range r.headers {
-		lines = append(lines, header+"\n")
+	for _, name := range slices.Sorted(maps.Keys(r.headers)) {
+		for _, value := range r.headers[name] {
+			lines = append(lines, name+": "+value+"\n")
+		}
 	}
-	lines = append(lines, "@@ body @@\n")
-	switch body := r.body.(type) {
-	case []byte:
-		return append(lines, fmt.Sprintf("%q\n", body)), nil
-	case string:
-		if body == "" {
+	lines = append(lines, fmt.Sprintf("@@ %s body @@\n", r.bodyType))
+	if r.bodyType != BodyTypeJSON {
+		switch body := r.body.(type) {
+		case []byte:
+			return append(lines, fmt.Sprintf("%q\n", body)), nil
+		case string:
+			for line := range strings.SplitSeq(body, "\n") {
+				lines = append(lines, line+"\n")
+			}
 			return lines, nil
 		}
-		return append(lines, difflib.SplitLines(strings.TrimSuffix(body, "\n"))...), nil
 	}
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
@@ -213,9 +226,10 @@ func tolerate(recorded any, live any, tolerance float64) any {
 		if !ok {
 			return live
 		}
-		left, leftErr := expected.Float64()
-		right, rightErr := typed.Float64()
-		if leftErr == nil && rightErr == nil && math.Abs(left-right) <= tolerance {
+		left, leftOK := new(big.Rat).SetString(string(expected))
+		right, rightOK := new(big.Rat).SetString(string(typed))
+		limit := new(big.Rat).SetFloat64(tolerance)
+		if leftOK && rightOK && limit != nil && new(big.Rat).Abs(new(big.Rat).Sub(left, right)).Cmp(limit) <= 0 {
 			return expected
 		}
 	}

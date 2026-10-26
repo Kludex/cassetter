@@ -1,5 +1,7 @@
 package cassetter
 
+import "bytes"
+
 func (t *Transport) record(interaction HTTPInteraction, order uint64) error {
 	interaction = scrubbed(interaction, t.config.security)
 
@@ -40,6 +42,10 @@ func (t *Transport) verify(interaction HTTPInteraction, recorded HTTPResponse) e
 	interaction = scrubbed(interaction, t.config.security)
 	live := interaction.Response
 	recorded.Headers = recorded.Headers.Clone()
+	recorded.Body.Content = normalizeJSONValueContent(recorded.Body.Content)
+	if content, ok := recorded.Body.Content.([]byte); ok {
+		recorded.Body.Content = bytes.Clone(content)
+	}
 	if t.config.beforeCompare != nil {
 		recorded, live = t.config.beforeCompare(recorded, live)
 	}

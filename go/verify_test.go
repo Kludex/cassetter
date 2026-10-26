@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -100,6 +102,63 @@ func TestVerifyComparesLiveResponseWithRecording(t *testing.T) {
 			live:     respond(200, "text/event-stream", "data: {\"t\": \"b\"}\n\n"),
 			options:  []cassetter.Option{cassetter.WithCompare(cassetter.Compare{SSE: true})},
 			mismatch: true,
+		},
+		{
+			name:     "status ignores tolerance",
+			recorded: respond(200, "", ""),
+			live:     respond(201, "", ""),
+			options:  []cassetter.Option{cassetter.WithCompare(cassetter.Compare{FloatTolerance: 10})},
+			mismatch: true,
+		},
+		{
+			name:     "large integers",
+			recorded: respond(200, "application/json", `{"id": 9007199254740992}`),
+			live:     respond(200, "application/json", `{"id": 9007199254740993}`),
+			mismatch: true,
+		},
+		{
+			name:     "JSON string and number",
+			recorded: respond(200, "application/json", `{"v": "1"}`),
+			live:     respond(200, "application/json", `{"v": 1}`),
+			mismatch: true,
+		},
+		{
+			name:     "top-level JSON string and boolean",
+			recorded: respond(200, "application/json", `"true"`),
+			live:     respond(200, "application/json", `true`),
+			mismatch: true,
+		},
+		{
+			name:     "text trailing newline",
+			recorded: respond(200, "text/plain", "a\n"),
+			live:     respond(200, "text/plain", "a"),
+			mismatch: true,
+		},
+		{
+			name:     "body type",
+			recorded: respond(200, "text/plain", "1"),
+			live:     respond(200, "application/json", "1"),
+			mismatch: true,
+		},
+		{
+			name:     "ignored array element",
+			recorded: respond(200, "application/json", `{"items": [{"id": 1}, 2]}`),
+			live:     respond(200, "application/json", `{"items": [{"id": 9, "x": 1}, 2]}`),
+			options:  []cassetter.Option{cassetter.WithCompare(cassetter.Compare{JSONIgnore: []string{"items[0]"}})},
+		},
+		{
+			name:     "header casing variants merged",
+			recorded: withHeader("X-Price", "1", respond(200, "text/plain", "ok")),
+			live:     respond(200, "text/plain", "ok"),
+			options: []cassetter.Option{
+				cassetter.WithCompare(cassetter.Compare{Headers: []string{"x-price"}}),
+				cassetter.WithBeforeCompareResponse(
+					func(recorded, live cassetter.HTTPResponse) (cassetter.HTTPResponse, cassetter.HTTPResponse) {
+						live.Headers = http.Header{"X-PRICE": {"1"}}
+						return recorded, live
+					},
+				),
+			},
 		},
 		{
 			name:     "scrubbed and decompressed",
@@ -201,6 +260,67 @@ func TestVerifyRejectsUnmatchedRequestsAndNeverWrites(t *testing.T) {
 	}
 	if calls.Load() != 2 || !bytes.Equal(before, after) {
 		t.Fatalf("calls = %d, cassette changed = %v", calls.Load(), !bytes.Equal(before, after))
+	}
+}
+
+func TestVerifyHookReceivesACopyOfTheRecording(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(respond(200, "application/json", `{"v": [1]}`))
+	t.Cleanup(server.Close)
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	get(t, cassetter.NewTransport(nil, cassetter.WithPath(path)), server.URL)
+
+	var seen []string
+	transport := cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeVerify),
+		cassetter.WithBeforeCompareResponse(
+			func(recorded, live cassetter.HTTPResponse) (cassetter.HTTPResponse, cassetter.HTTPResponse) {
+				content := recorded.Body.Content.(map[string]any)
+				seen = append(seen, fmt.Sprint(content["v"]))
+				content["v"].([]any)[0] = "mutated"
+				delete(content, "v")
+				delete(live.Body.Content.(map[string]any), "v")
+				return recorded, live
+			},
+		),
+	)
+	get(t, transport, server.URL)
+	get(t, transport, server.URL)
+	if err := transport.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(seen, []string{"[1]", "[1]"}) {
+		t.Fatalf("recorded bodies seen by the hook = %v", seen)
+	}
+}
+
+func TestVerifyMismatchReportsScrubbedURI(t *testing.T) {
+	t.Parallel()
+	var status atomic.Int64
+	status.Store(200)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(int(status.Load()))
+	}))
+	t.Cleanup(server.Close)
+	path := filepath.Join(t.TempDir(), "cassette.yaml")
+	url := server.URL + "/value?api_key=secret"
+	get(t, cassetter.NewTransport(nil, cassetter.WithPath(path)), url)
+
+	status.Store(500)
+	transport := cassetter.NewTransport(
+		nil,
+		cassetter.WithPath(path),
+		cassetter.WithRecordMode(cassetter.RecordModeVerify),
+	)
+	_, err := (&http.Client{Transport: transport}).Get(url)
+	var mismatch *cassetter.ResponseMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(mismatch.Error(), "secret") || !strings.Contains(mismatch.URI, "api_key=") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
