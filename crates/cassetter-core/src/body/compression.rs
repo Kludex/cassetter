@@ -83,6 +83,15 @@ mod tests {
     }
 
     #[test]
+    fn test_zstd_roundtrip() {
+        let original = b"hello world";
+        let compressed = zstd::stream::encode_all(&original[..], 0).unwrap();
+
+        let result = decompress(&compressed, "zstd", DEFAULT_MAX_DECOMPRESSED).unwrap();
+        assert_eq!(result, original);
+    }
+
+    #[test]
     fn test_identity() {
         let data = b"unchanged";
         let result = decompress(data, "identity", DEFAULT_MAX_DECOMPRESSED).unwrap();
