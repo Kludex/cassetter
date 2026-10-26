@@ -41,7 +41,10 @@ BeforeCompareResponse = Callable[[HttpResponse, HttpResponse], tuple[HttpRespons
 
 def compare_responses(compare: Compare, recorded: HttpResponse, live: HttpResponse, label: str) -> None:
     """Raise `ResponseMismatchError` with a unified diff when `live` is not equivalent to `recorded`."""
-    _diff(compare, _normalize(compare, recorded), _normalize(compare, live), label)
+    expected = _normalize(compare, recorded)
+    actual = _normalize(compare, live)
+    actual["body"] = _tolerate(expected["body"], actual["body"], compare.float_tolerance)
+    _diff(_render(expected), _render(actual), label)
 
 
 def compare_grpc_responses(
@@ -52,17 +55,19 @@ def compare_grpc_responses(
     label: str,
 ) -> None:
     """Like `compare_responses`, for the status and the messages `messages` decodes from each body."""
-    _diff(compare, _grpc(compare, recorded, messages), _grpc(compare, live, messages), label)
+    expected = _grpc(compare, recorded, messages)
+    actual = _tolerate(expected, _grpc(compare, live, messages), compare.float_tolerance)
+    _diff(_render_sections(expected), _render_sections(actual), label)
 
 
 def compare_ws_frames(compare: Compare, recorded: list[WsFrame], live: list[WsFrame], label: str) -> None:
     """Like `compare_responses`, for the frames received in order. Sent frames are ignored."""
-    _diff(compare, _received(compare, recorded), _received(compare, live), label)
+    expected = _received(compare, recorded)
+    actual = _tolerate(expected, _received(compare, live), compare.float_tolerance)
+    _diff(_render_sections(expected), _render_sections(actual), label)
 
 
-def _diff(compare: Compare, recorded: dict[str, Any], live: dict[str, Any], label: str) -> None:
-    expected = _render(recorded)
-    actual = _render(_tolerate(recorded, live, compare.float_tolerance))
+def _diff(expected: list[str], actual: list[str], label: str) -> None:
     if expected == actual:
         return
     diff = difflib.unified_diff(expected, actual, "recorded", "live", lineterm="")
@@ -70,12 +75,12 @@ def _diff(compare: Compare, recorded: dict[str, Any], live: dict[str, Any], labe
 
 
 def _normalize(compare: Compare, response: HttpResponse) -> dict[str, Any]:
-    headers = {
-        name: values
-        for name, values in sorted(response.headers.items())
-        if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers)
-    }
-    return {"status": response.status, "headers": headers, "body": _body(compare, response)}
+    headers: dict[str, list[str]] = {}
+    for name, values in sorted(response.headers.items(), key=lambda item: item[0].lower()):
+        if any(fnmatch.fnmatch(name.lower(), pattern.lower()) for pattern in compare.headers):
+            headers.setdefault(name.lower(), []).extend(values)
+    body = {"type": response.body.body_type, "content": _body(compare, response)}
+    return {"status": response.status, "headers": headers, "body": body}
 
 
 def _body(compare: Compare, response: HttpResponse) -> Any:
@@ -127,6 +132,8 @@ def _sse_events(text: str) -> list[Any]:
 
 
 def _drop_paths(value: Any, paths: list[str], current: str) -> Any:
+    if current in paths:
+        return None
     if isinstance(value, dict):
         prefix = f"{current}." if current else ""
         return {key: _drop_paths(item, paths, prefix + key) for key, item in value.items() if prefix + key not in paths}
@@ -153,19 +160,25 @@ def _is_number(value: Any) -> bool:
 
 
 def _render(normalized: dict[str, Any]) -> list[str]:
+    lines = [f"status: {normalized['status']}", "@@ headers @@"]
+    lines += [f"{name}: {value}" for name, values in normalized["headers"].items() for value in values]
+    lines.append(f"@@ {normalized['body']['type']} body @@")
+    return lines + _content_lines(normalized["body"]["content"])
+
+
+def _render_sections(normalized: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     for section, value in normalized.items():
-        if section == "headers":
-            lines.append("@@ headers @@")
-            lines += [f"{name}: {item}" for name, items in value.items() for item in items]
-        elif section != "body" and isinstance(value, (int, str, bytes)):
+        if isinstance(value, bytes) or (isinstance(value, str) and "\n" not in value):
             lines.append(f"{section}: {value!r}" if isinstance(value, bytes) else f"{section}: {value}")
         else:
-            lines.append(f"@@ {section} @@")
-            if isinstance(value, bytes):
-                lines.append(repr(value))
-            elif isinstance(value, str):
-                lines += value.splitlines()
-            else:
-                lines += json.dumps(value, indent=2, sort_keys=True).splitlines()
+            lines += [f"@@ {section} @@", *_content_lines(value)]
     return lines
+
+
+def _content_lines(content: Any) -> list[str]:
+    if isinstance(content, bytes):
+        return [repr(content)]
+    if isinstance(content, str):
+        return content.split("\n")
+    return json.dumps(content, indent=2, sort_keys=True).splitlines()

@@ -534,7 +534,8 @@ class Cassette:
             live = interaction.response
             if self._before_compare_response is not None:
                 expected, live = self._before_compare_response(expected, live)
-            compare_responses(self._compare, expected, live, f"cassette {self._path}, {method} {uri}")
+            label = f"cassette {self._path}, {method} {interaction.request.uri}"
+            compare_responses(self._compare, expected, live, label)
             return interaction.response
 
         if self._inner is None:
@@ -684,9 +685,8 @@ class Cassette:
         interaction = scrub_ws_interaction(interaction, self._security_config)
 
         if expected is not None:
-            compare_ws_frames(
-                self._compare, expected.frames, interaction.frames, f"cassette {self._path}, WebSocket {uri}"
-            )
+            label = f"cassette {self._path}, WebSocket {interaction.uri}"
+            compare_ws_frames(self._compare, expected.frames, interaction.frames, label)
             return
 
         if self._inner is None:
