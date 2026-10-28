@@ -255,7 +255,7 @@ Available matchers: `method`, `uri`, `headers`, `body`, `json_body`.
 | **aiohttp** | HTTP | Session `_request` patch |
 | **requests** | HTTP | Session `send` patch |
 | **urllib3** | HTTP | `HTTPConnectionPool.urlopen` patch |
-| **pyreqwest** | HTTP | Request builder middleware |
+| **pyreqwest** (Python 3.11+) | HTTP | Request builder middleware |
 | **primp** | HTTP | `Client` method patches |
 | **grpcio** | gRPC | `grpc.aio.Channel` wrapper |
 | **websockets** | WebSocket | `websockets.connect` patch |

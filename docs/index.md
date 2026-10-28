@@ -97,7 +97,7 @@ Notice what is **not** there: no `authorization` header, no cookies, no API keys
 | aiohttp | HTTP |
 | requests | HTTP |
 | urllib3 | HTTP |
-| pyreqwest | HTTP |
+| pyreqwest (Python 3.11+) | HTTP |
 | primp | HTTP |
 | grpcio | gRPC |
 | websockets | WebSocket |

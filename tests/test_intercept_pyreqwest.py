@@ -105,6 +105,13 @@ def test_streamed_request_and_response(url: str, path: str, received: list[tuple
     assert received == [("POST", b"abcd")]
     assert cassette.interactions[0].request.body.content == "abcd"
 
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+        with SyncClientBuilder().build() as client:
+            request = client.post(f"{url}/upload").body_stream(iter([b"ab", b"cd"])).build_streamed()
+            with request as response:
+                assert json.loads(response.body_reader.bytes().to_bytes()) == {"path": "/upload", "calls": 1}
+    assert len(received) == 1
+
 
 @pytest.mark.anyio
 async def test_async_streamed_request_body(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
