@@ -5,14 +5,14 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pyreqwest_impersonate as pri
+import primp as pri
 import pytest
 
 from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
 from cassetter.cassette import NoMatchError
 from cassetter.context import use_cassette
-from cassetter.intercept._pyreqwest_impersonate import (
-    PyreqwestImpersonateInterceptor,
+from cassetter.intercept._primp import (
+    PrimpInterceptor,
     ReplayResponse,
     build_replay_response,
     extract_body,
@@ -36,7 +36,7 @@ def test_interceptor_replay(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest-impersonate"]):
+    with use_cassette(path, record_mode="none", intercept=["primp"]):
         client = pri.Client()
         response = client.get("https://example.com/api")
         assert response.status_code == 200
@@ -47,7 +47,7 @@ def test_interceptor_replay_via_request_method(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest-impersonate"]):
+    with use_cassette(path, record_mode="none", intercept=["primp"]):
         client = pri.Client()
         response = client.request("GET", "https://example.com/api")
         assert response.status_code == 200
@@ -58,14 +58,14 @@ def test_interceptor_no_match_cant_record(tmp_path: Path) -> None:
     path = os.path.join(str(tmp_path), "test.yaml")
     _preload_cassette(path)
 
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest-impersonate"]):
+    with use_cassette(path, record_mode="none", intercept=["primp"]):
         client = pri.Client()
         with pytest.raises(NoMatchError):
             client.delete("https://example.com/unknown")
 
 
 def test_interceptor_install_uninstall() -> None:
-    interceptor = PyreqwestImpersonateInterceptor()
+    interceptor = PrimpInterceptor()
     original_get = pri.Client.get
 
     interceptor.install()
@@ -163,7 +163,7 @@ def test_record_uses_request_url_not_response_url(tmp_path: Path) -> None:
         return FakeResponse()
 
     with patch.object(pri.Client, "get", fake_get):
-        with use_cassette(path, record_mode="all", intercept=["pyreqwest-impersonate"]) as cassette:
+        with use_cassette(path, record_mode="all", intercept=["primp"]) as cassette:
             client = pri.Client()
             client.get("https://example.com/original")
 
@@ -173,7 +173,7 @@ def test_record_uses_request_url_not_response_url(tmp_path: Path) -> None:
             assert "content-encoding" not in recorded.response.headers
 
     # Replay with the original request URL must match
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest-impersonate"]):
+    with use_cassette(path, record_mode="none", intercept=["primp"]):
         client = pri.Client()
         response = client.get("https://example.com/original")
         assert response.status_code == 200

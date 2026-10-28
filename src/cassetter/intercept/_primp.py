@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import patch
 
-import pyreqwest_impersonate as pri
+import primp as pri
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
@@ -19,7 +19,7 @@ ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "requ
 
 @dataclass
 class ReplayResponse:
-    """Lightweight stand-in for pyreqwest_impersonate's native Response.
+    """Lightweight stand-in for primp's native Response.
 
     The native ``Response`` cannot be constructed from Python, so we mimic its
     public interface for cassette playback.
@@ -48,8 +48,8 @@ class ReplayResponse:
         return json.loads(self.content)
 
 
-class PyreqwestImpersonateInterceptor:
-    """Intercepts pyreqwest_impersonate by patching every Client HTTP method."""
+class PrimpInterceptor:
+    """Intercepts primp by patching every Client HTTP method."""
 
     def __init__(self) -> None:
         self._patchers: list[Any] = []
@@ -128,7 +128,7 @@ def intercept(
 
     order = cassette.reserve_record_order()
     real_response = original(client, *original_args, **kwargs)
-    # pyreqwest decompresses the body, so drop content-encoding to prevent
+    # primp decompresses the body, so drop content-encoding to prevent
     # double-decompression when recording
     resp_headers = extract_headers(real_response.headers)
     resp_headers.pop("content-encoding", None)

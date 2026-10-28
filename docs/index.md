@@ -98,7 +98,7 @@ Notice what is **not** there: no `authorization` header, no cookies, no API keys
 | requests | HTTP |
 | urllib3 | HTTP |
 | pyreqwest | HTTP |
-| pyreqwest-impersonate | HTTP |
+| primp | HTTP |
 | grpcio | gRPC |
 | websockets | WebSocket |
 

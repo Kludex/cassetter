@@ -43,9 +43,9 @@ except ImportError:  # pragma: no cover
     PyreqwestInterceptor = None  # type: ignore[assignment, misc]
 
 try:
-    from cassetter.intercept._pyreqwest_impersonate import PyreqwestImpersonateInterceptor
+    from cassetter.intercept._primp import PrimpInterceptor
 except ImportError:  # pragma: no cover
-    PyreqwestImpersonateInterceptor = None  # type: ignore[assignment, misc]
+    PrimpInterceptor = None  # type: ignore[assignment, misc]
 
 _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "httpx": HttpxInterceptor,
@@ -56,7 +56,7 @@ _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "websockets": WebSocketInterceptor,
     "urllib3": Urllib3Interceptor,
     "pyreqwest": PyreqwestInterceptor,
-    "pyreqwest-impersonate": PyreqwestImpersonateInterceptor,
+    "primp": PrimpInterceptor,
 }
 
 # Interceptors auto-detected by default, in order. requests is intentionally

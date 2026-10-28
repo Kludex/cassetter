@@ -12,7 +12,7 @@ import aiohttp
 import anyio
 import httpx
 import httpx2
-import pyreqwest_impersonate as pri
+import primp as pri
 import pytest
 import requests
 import urllib3
@@ -103,7 +103,7 @@ CLIENTS: dict[str, tuple[str, Callable[[str], object]]] = {
     "requests": ("requests", requests.get),
     "urllib3": ("urllib3", lambda url: urllib3.PoolManager().request("GET", url)),
     "aiohttp": ("aiohttp", _aiohttp),
-    "pyreqwest-impersonate": ("pyreqwest-impersonate", lambda url: pri.Client().get(url)),
+    "primp": ("primp", lambda url: pri.Client().get(url)),
 }
 
 

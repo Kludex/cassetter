@@ -62,10 +62,10 @@ with use_cassette("cassette.yaml", intercept=["httpx"]):
     ...
 ```
 
-The available names are `httpx`, `httpx2`, `aiohttp`, `requests`, `urllib3`, `pyreqwest`, `pyreqwest-impersonate`, `grpc`, and `websockets`.
+The available names are `httpx`, `httpx2`, `aiohttp`, `requests`, `urllib3`, `pyreqwest`, `primp`, `grpc`, and `websockets`.
 
 !!! tip
-    `pyreqwest-impersonate`, gRPC, and WebSocket interception are not part of auto detection. Add `"pyreqwest-impersonate"`, `"grpc"`, or `"websockets"` explicitly when you need them. See [gRPC](../protocols/grpc.md) and [WebSockets](../protocols/websockets.md).
+    `primp`, gRPC, and WebSocket interception are not part of auto detection. Add `"primp"`, `"grpc"`, or `"websockets"` explicitly when you need them. See [gRPC](../protocols/grpc.md) and [WebSockets](../protocols/websockets.md).
 
 ## Nesting
 
