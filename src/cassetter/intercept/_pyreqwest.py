@@ -5,12 +5,16 @@ from typing import Any
 
 from pyreqwest.middleware import Next, SyncNext
 from pyreqwest.request import (
+    ConsumedRequest,
     OneOffRequestBuilder,
     Request,
     RequestBody,
     RequestBuilder,
+    StreamRequest,
+    SyncConsumedRequest,
     SyncOneOffRequestBuilder,
     SyncRequestBuilder,
+    SyncStreamRequest,
 )
 from pyreqwest.response import BaseResponse, Response, ResponseBuilder, SyncResponse
 
@@ -20,6 +24,8 @@ from cassetter.cassette import Cassette, NoMatchError, RawRequest
 from cassetter.compare import body_to_bytes
 from cassetter.intercept._shared import apply_before_record_request, extract_headers
 
+INTERCEPTED = "cassetter.intercepted"
+
 
 class PyreqwestInterceptor:
     """Intercepts pyreqwest by adding a middleware to every request it builds."""
@@ -28,18 +34,22 @@ class PyreqwestInterceptor:
         self._originals: list[tuple[type[Any], str, Any]] = []
 
     def install(self) -> None:
-        patches: list[tuple[type[Any], str, Any]] = [
-            (RequestBuilder, "build", async_middleware),
-            (RequestBuilder, "build_streamed", async_middleware),
-            (SyncRequestBuilder, "build", sync_middleware),
-            (SyncRequestBuilder, "build_streamed", sync_middleware),
-            (OneOffRequestBuilder, "send", async_middleware),
-            (SyncOneOffRequestBuilder, "send", sync_middleware),
+        patches: list[tuple[type[Any], str, Callable[[Any], Any]]] = [
+            (RequestBuilder, "build", build_with(async_middleware)),
+            (RequestBuilder, "build_streamed", build_with(async_middleware)),
+            (SyncRequestBuilder, "build", build_with(sync_middleware)),
+            (SyncRequestBuilder, "build_streamed", build_with(sync_middleware)),
+            (OneOffRequestBuilder, "send", send_with(async_middleware)),
+            (SyncOneOffRequestBuilder, "send", send_with(sync_middleware)),
+            (ConsumedRequest, "send", require_intercepted),
+            (SyncConsumedRequest, "send", require_intercepted),
+            (StreamRequest, "__aenter__", require_intercepted),
+            (SyncStreamRequest, "__enter__", require_intercepted),
         ]
-        for cls, name, middleware in patches:
+        for cls, name, wrap in patches:
             original = getattr(cls, name)
             self._originals.append((cls, name, original))
-            setattr(cls, name, with_middleware(original, middleware))
+            setattr(cls, name, wrap(original))
 
     def uninstall(self) -> None:
         for cls, name, original in reversed(self._originals):
@@ -47,8 +57,39 @@ class PyreqwestInterceptor:
         self._originals.clear()
 
 
-def with_middleware(original: Callable[[Any], Any], middleware: Any) -> Callable[[Any], Any]:
-    return lambda builder: original(builder.with_middleware(middleware))
+def build_with(middleware: Any) -> Callable[[Any], Any]:
+    def wrap(original: Callable[[Any], Request]) -> Callable[[Any], Request]:
+        def build(builder: Any) -> Request:
+            request = original(builder.with_middleware(middleware))
+            request.extensions = {**request.extensions, INTERCEPTED: True}
+            return request
+
+        return build
+
+    return wrap
+
+
+def send_with(middleware: Any) -> Callable[[Any], Any]:
+    return lambda original: lambda builder: original(builder.with_middleware(middleware))
+
+
+def require_intercepted(original: Callable[[Request], Any]) -> Callable[[Request], Any]:
+    """Refuse to send a request built before the cassette was entered, since it has no middleware to replay it."""
+
+    def send(request: Request) -> Any:
+        cassette = get_current_cassette()
+        if (
+            cassette is not None
+            and INTERCEPTED not in request.extensions
+            and not cassette.should_bypass(str(request.url))
+        ):
+            raise RuntimeError(
+                f"{request.method} {request.url} was built before the cassette was entered, so it cannot be "
+                "recorded or replayed. Build pyreqwest requests inside the cassette."
+            )
+        return original(request)
+
+    return send
 
 
 async def async_middleware(request: Request, next_handler: Next) -> Response:

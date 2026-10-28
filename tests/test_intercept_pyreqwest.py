@@ -184,6 +184,34 @@ def test_request_sent_after_cassette_exits_goes_live(url: str, path: str, receiv
     assert len(received) == 1
 
 
+def test_request_built_before_cassette_is_refused(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with SyncClientBuilder().build() as client:
+        request = client.get(f"{url}/early").build()
+        with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+            with pytest.raises(RuntimeError, match="built before the cassette was entered"):
+                request.send()
+    assert received == []
+
+
+@pytest.mark.anyio
+async def test_streamed_request_built_before_cassette_is_refused(url: str, path: str) -> None:
+    async with ClientBuilder().build() as client:
+        request = client.get(f"{url}/early").build_streamed()
+        with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+            with pytest.raises(RuntimeError, match="built before the cassette was entered"):
+                await request.__aenter__()
+
+
+def test_bypassed_request_built_before_cassette_goes_live(
+    url: str, path: str, received: list[tuple[str, bytes]]
+) -> None:
+    with SyncClientBuilder().build() as client:
+        request = client.get(f"{url}/early").build()
+        with use_cassette(path, record_mode="none", intercept=["pyreqwest"], ignore_localhost=True):
+            assert request.send().status == 200
+    assert len(received) == 1
+
+
 def test_uninstall_restores_builders(path: str) -> None:
     original = RequestBuilder.build
     with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
