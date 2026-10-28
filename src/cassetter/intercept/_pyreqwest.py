@@ -1,188 +1,141 @@
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterable, Callable, Iterable
 from typing import Any
-from unittest.mock import patch
 
-import pyreqwest_impersonate as pri
+from pyreqwest.middleware import Next, SyncNext
+from pyreqwest.request import (
+    OneOffRequestBuilder,
+    Request,
+    RequestBody,
+    RequestBuilder,
+    SyncOneOffRequestBuilder,
+    SyncRequestBuilder,
+)
+from pyreqwest.response import BaseResponse, Response, ResponseBuilder, SyncResponse
 
 from cassetter._core import HttpResponse as _HttpResponse
 from cassetter._state import get_current_cassette
-from cassetter.cassette import NoMatchError
+from cassetter.cassette import Cassette, NoMatchError, RawRequest
 from cassetter.compare import body_to_bytes
-from cassetter.intercept._shared import apply_before_record_request
-
-METHODS_WITH_BODY = frozenset({"post", "put", "patch"})
-ALL_METHODS = ("get", "head", "options", "delete", "post", "put", "patch", "request")
-
-
-@dataclass
-class ReplayResponse:
-    """Lightweight stand-in for pyreqwest_impersonate's native Response.
-
-    The native ``Response`` cannot be constructed from Python, so we mimic its
-    public interface for cassette playback.
-    """
-
-    status_code: int
-    headers: dict[str, str]
-    content: bytes
-    url: str
-    cookies: dict[str, str] = field(default_factory=dict)
-    encoding: str = "UTF-8"
-
-    @property
-    def text(self) -> str:
-        return self.content.decode(self.encoding, errors="replace")
-
-    @property
-    def text_plain(self) -> str:
-        return self.text
-
-    @property
-    def text_markdown(self) -> str:
-        return self.text
-
-    def json(self) -> Any:
-        return json.loads(self.content)
+from cassetter.intercept._shared import apply_before_record_request, extract_headers
 
 
 class PyreqwestInterceptor:
-    """Intercepts pyreqwest_impersonate by patching every Client HTTP method."""
+    """Intercepts pyreqwest by adding a middleware to every request it builds."""
 
     def __init__(self) -> None:
-        self._patchers: list[Any] = []
+        self._originals: list[tuple[type[Any], str, Any]] = []
 
     def install(self) -> None:
-        for method_name in ALL_METHODS:
-            original = getattr(pri.Client, method_name)
-            patcher = patch.object(
-                pri.Client,
-                method_name,
-                make_wrapper(method_name, original),
-            )
-            patcher.start()
-            self._patchers.append(patcher)
+        patches: list[tuple[type[Any], str, Any]] = [
+            (RequestBuilder, "build", async_middleware),
+            (RequestBuilder, "build_streamed", async_middleware),
+            (SyncRequestBuilder, "build", sync_middleware),
+            (SyncRequestBuilder, "build_streamed", sync_middleware),
+            (OneOffRequestBuilder, "send", async_middleware),
+            (SyncOneOffRequestBuilder, "send", sync_middleware),
+        ]
+        for cls, name, middleware in patches:
+            original = getattr(cls, name)
+            self._originals.append((cls, name, original))
+            setattr(cls, name, with_middleware(original, middleware))
 
     def uninstall(self) -> None:
-        for patcher in reversed(self._patchers):
-            patcher.stop()
-        self._patchers.clear()
+        for cls, name, original in reversed(self._originals):
+            setattr(cls, name, original)
+        self._originals.clear()
 
 
-def make_wrapper(
-    method_name: str,
-    original: Any,
-) -> Any:
-    if method_name == "request":
-
-        def request_wrapper(client: Any, method: str, url: str, **kwargs: Any) -> Any:
-            return intercept(original, client, method.upper(), url, (method, url), kwargs)
-
-        return request_wrapper
-
-    http_method = method_name.upper()
-
-    def method_wrapper(client: Any, url: str, **kwargs: Any) -> Any:
-        return intercept(original, client, http_method, url, (url,), kwargs)
-
-    return method_wrapper
+def with_middleware(original: Callable[[Any], Any], middleware: Any) -> Callable[[Any], Any]:
+    return lambda builder: original(builder.with_middleware(middleware))
 
 
-def intercept(
-    original: Any,
-    client: Any,
-    method: str,
-    url: str,
-    original_args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-) -> Any:
+async def async_middleware(request: Request, next_handler: Next) -> Response:
     cassette = get_current_cassette()
-    if cassette is None:  # pragma: no cover - patch active without a cassette context
-        return original(client, *original_args, **kwargs)
+    if cassette is None or cassette.should_bypass(str(request.url)):
+        return await next_handler.run(request)
 
-    if cassette.should_bypass(url):
-        return original(client, *original_args, **kwargs)
+    if request.body is not None and isinstance(stream := request.body.get_stream(), AsyncIterable):
+        body = b"".join([bytes(chunk) async for chunk in stream])
+        request = request.from_request_and_body(request, RequestBody.from_bytes(body))
 
-    norm_headers = extract_headers(kwargs.get("headers"))
-    body = extract_body(
-        content=kwargs.get("content"),
-        data=kwargs.get("data"),
-        json_payload=kwargs.get("json"),
+    raw = apply_before_record_request(cassette, *describe(request))
+    if raw is None:
+        return await next_handler.run(request)
+    replay, expected = lookup(cassette, raw)
+    if replay is not None:
+        return await replay.build()
+
+    order = cassette.reserve_record_order()
+    response = await next_handler.run(request)
+    record(cassette, raw, response, (await response.bytes()).to_bytes(), order, expected)
+    return response
+
+
+def sync_middleware(request: Request, next_handler: SyncNext) -> SyncResponse:
+    cassette = get_current_cassette()
+    if cassette is None or cassette.should_bypass(str(request.url)):
+        return next_handler.run(request)
+
+    if request.body is not None and isinstance(stream := request.body.get_stream(), Iterable):
+        body = b"".join(bytes(chunk) for chunk in stream)
+        request = request.from_request_and_body(request, RequestBody.from_bytes(body))
+
+    raw = apply_before_record_request(cassette, *describe(request))
+    if raw is None:
+        return next_handler.run(request)
+    replay, expected = lookup(cassette, raw)
+    if replay is not None:
+        return replay.build_sync()
+
+    order = cassette.reserve_record_order()
+    response = next_handler.run(request)
+    record(cassette, raw, response, response.bytes().to_bytes(), order, expected)
+    return response
+
+
+def describe(request: Request) -> tuple[str, str, dict[str, list[str]], bytes | None]:
+    body = request.body.copy_bytes() if request.body is not None else None
+    return (
+        request.method,
+        str(request.url),
+        extract_headers(request.headers.items()),
+        body.to_bytes() if body is not None else None,
     )
 
-    raw = apply_before_record_request(cassette, method, url, norm_headers, body)
-    if raw is None:
-        return original(client, *original_args, **kwargs)
-    method, url, norm_headers, body = raw.method, raw.uri, raw.headers, raw.body
 
+def lookup(cassette: Cassette, raw: RawRequest) -> tuple[ResponseBuilder | None, tuple[int, _HttpResponse] | None]:
+    """Return a builder for the recorded response, or the `verify` expectation to compare a live call against."""
     try:
-        expected = cassette.match(method, url, norm_headers, body)
-        if not cassette.verifies:
-            return build_replay_response(url, expected[1])
+        expected = cassette.match(raw.method, raw.uri, raw.headers, raw.body)
     except NoMatchError:
         if not cassette.can_record:
             raise
-        expected = None
+        return None, None
+    if cassette.verifies:
+        return None, expected
+    response = expected[1]
+    headers = [(name, value) for name, values in response.headers.items() for value in values]
+    return ResponseBuilder().status(response.status).headers(headers).body_bytes(body_to_bytes(response.body)), None
 
-    order = cassette.reserve_record_order()
-    real_response = original(client, *original_args, **kwargs)
-    # pyreqwest decompresses the body, so drop content-encoding to prevent
-    # double-decompression when recording
-    resp_headers = extract_headers(real_response.headers)
-    resp_headers.pop("content-encoding", None)
 
+def record(
+    cassette: Cassette,
+    raw: RawRequest,
+    response: BaseResponse,
+    body: bytes,
+    order: int,
+    expected: tuple[int, _HttpResponse] | None,
+) -> None:
     cassette.record(
-        method=method,
-        # record the request URL: replay matches on it, and real_response.url
-        # is post-redirect/normalized so it would never match
-        uri=url,
-        request_headers=norm_headers,
-        request_body=body,
-        status=real_response.status_code,
-        response_headers=resp_headers,
-        response_body=real_response.content,
+        method=raw.method,
+        uri=raw.uri,
+        request_headers=raw.headers,
+        request_body=raw.body,
+        status=response.status,
+        response_headers=extract_headers(response.headers.items()),
+        response_body=body,
         order=order,
         expected=expected,
-    )
-    return real_response
-
-
-def extract_headers(headers: dict[str, str] | None) -> dict[str, list[str]]:
-    if headers is None:
-        return {}
-    return {k.lower(): [v] for k, v in headers.items()}
-
-
-def extract_body(
-    *,
-    content: bytes | None,
-    data: dict[str, str] | str | None,
-    json_payload: Any,
-) -> bytes | None:
-    if content is not None:
-        return content
-    if data is not None:
-        if isinstance(data, bytes):
-            return data
-        if isinstance(data, str):
-            return data.encode()
-    if json_payload is not None:
-        return json.dumps(json_payload).encode()
-    return None
-
-
-def build_replay_response(url: str, response: _HttpResponse) -> ReplayResponse:
-    content = body_to_bytes(response.body)
-
-    flat_headers: dict[str, str] = {}
-    for key, values in response.headers.items():
-        flat_headers[key] = values[-1] if values else ""
-
-    return ReplayResponse(
-        status_code=response.status,
-        headers=flat_headers,
-        content=content,
-        url=url,
     )

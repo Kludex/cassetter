@@ -31,7 +31,8 @@ aiohttp = ["aiohttp>=3.9"]
 requests = ["requests>=2.28"]
 grpc = ["grpcio>=1.60"]
 websockets = ["websockets>=14.0"]
-pyreqwest = ["pyreqwest-impersonate>=0.5,<0.5.5"]
+pyreqwest = ["pyreqwest>=0.15 ; python_full_version >= '3.11'"]
+pyreqwest-impersonate = ["pyreqwest-impersonate>=0.5,<0.5.5"]
 httpx2 = [
     "httpx2>=2.0",
 ]
@@ -76,6 +77,7 @@ dev = [
     "httpx2>=2.0",
     "pytest-xdist>=3.8.0",
     "types-pyyaml>=6.0.12.20260724",
+    "pyreqwest>=0.15 ; python_full_version >= '3.11'",
 ]
 docs = [
     "zensical>=0.0.46",

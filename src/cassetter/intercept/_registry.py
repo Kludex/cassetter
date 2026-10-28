@@ -42,6 +42,11 @@ try:
 except ImportError:  # pragma: no cover
     PyreqwestInterceptor = None  # type: ignore[assignment, misc]
 
+try:
+    from cassetter.intercept._pyreqwest_impersonate import PyreqwestImpersonateInterceptor
+except ImportError:  # pragma: no cover
+    PyreqwestImpersonateInterceptor = None  # type: ignore[assignment, misc]
+
 _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "httpx": HttpxInterceptor,
     "httpx2": Httpx2Interceptor,
@@ -51,13 +56,14 @@ _INTERCEPTOR_MAP: dict[str, type[InterceptorProtocol] | None] = {
     "websockets": WebSocketInterceptor,
     "urllib3": Urllib3Interceptor,
     "pyreqwest": PyreqwestInterceptor,
+    "pyreqwest-impersonate": PyreqwestImpersonateInterceptor,
 }
 
 # Interceptors auto-detected by default, in order. requests is intentionally
 # omitted: requests traffic flows through urllib3, so recording both layers
 # would capture each request twice. Callers who want requests can name it
 # explicitly.
-_AUTO_DETECT_ORDER: list[str] = ["httpx", "httpx2", "urllib3", "aiohttp"]
+_AUTO_DETECT_ORDER: list[str] = ["httpx", "httpx2", "urllib3", "aiohttp", "pyreqwest"]
 
 
 def resolve_interceptors(names: list[str] | None = None) -> list[type[InterceptorProtocol]]:
@@ -86,5 +92,5 @@ def _auto_detect_interceptors() -> list[type[InterceptorProtocol]]:
         if _INTERCEPTOR_MAP.get(name) is not None:
             available.append(name)
     if not available:
-        raise ImportError("no HTTP interceptors available - install httpx, httpx2, urllib3, or aiohttp")
+        raise ImportError("no HTTP interceptors available - install httpx, httpx2, urllib3, aiohttp, or pyreqwest")
     return [_INTERCEPTOR_MAP[name] for name in available]  # type: ignore[misc]

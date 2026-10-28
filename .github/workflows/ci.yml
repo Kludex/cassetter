@@ -115,7 +115,8 @@ jobs:
       # POSIX file-permission tests skipped on Windows) would otherwise leave
       # their bodies uncovered there.
       - if: matrix.os == 'ubuntu-latest'
-        run: uv run coverage report
+        # pyreqwest requires Python 3.11+, so its interceptor and tests never run on 3.10.
+        run: uv run coverage report ${{ matrix.python-version == '3.10' && '--omit=src/cassetter/intercept/_pyreqwest.py,tests/test_intercept_pyreqwest.py' || '' }}
 
   node:
     runs-on: ${{ matrix.os }}

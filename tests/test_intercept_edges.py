@@ -146,14 +146,14 @@ async def test_aiohttp_hook_rewrites_to_match(tmp_path: Path) -> None:
     assert resp.status == 200
 
 
-# --- pyreqwest ---
+# --- pyreqwest-impersonate ---
 
 
 def test_pyreqwest_bypass_passes_through(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "prq_bypass.yaml")
     _preload(path, "http://example.com/x")
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest"], ignore_localhost=True):
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest-impersonate"], ignore_localhost=True):
         with pytest.raises(Exception):
             pri.Client().get(_REFUSED)
 
@@ -165,7 +165,7 @@ def test_pyreqwest_hook_rewrites_to_match(tmp_path: Path) -> None:
     with use_cassette(
         path,
         record_mode="none",
-        intercept=["pyreqwest"],
+        intercept=["pyreqwest-impersonate"],
         before_record_request=_rewrite_to("https://api.example.com/real"),
     ):
         resp = pri.Client().get("https://api.example.com/original")
@@ -185,7 +185,7 @@ def test_pyreqwest_replay_with_bytes_body(tmp_path: Path) -> None:
         )
     )
     c.save(path)
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest-impersonate"]):
         resp = pri.Client().post("https://api.example.com/post", data=b"raw-bytes")
     assert resp.status_code == 200
 
@@ -220,7 +220,7 @@ def test_pyreqwest_hook_skip_recording_passes_through(tmp_path: Path) -> None:
         raise SkipRecording
 
     path = os.path.join(str(tmp_path), "prq_skip.yaml")
-    with use_cassette(path, record_mode="all", intercept=["pyreqwest"], before_record_request=hook):
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest-impersonate"], before_record_request=hook):
         with pytest.raises(Exception):
             pri.Client().get(_REFUSED)
 
