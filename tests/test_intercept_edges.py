@@ -13,7 +13,7 @@ from pathlib import Path
 
 import aiohttp
 import httpx
-import pyreqwest_impersonate as pri
+import primp as pri
 import pytest
 import requests
 import urllib3
@@ -146,33 +146,33 @@ async def test_aiohttp_hook_rewrites_to_match(tmp_path: Path) -> None:
     assert resp.status == 200
 
 
-# --- pyreqwest ---
+# --- primp ---
 
 
-def test_pyreqwest_bypass_passes_through(tmp_path: Path) -> None:
+def test_primp_bypass_passes_through(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "prq_bypass.yaml")
     _preload(path, "http://example.com/x")
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest"], ignore_localhost=True):
+    with use_cassette(path, record_mode="none", intercept=["primp"], ignore_localhost=True):
         with pytest.raises(Exception):
             pri.Client().get(_REFUSED)
 
 
-def test_pyreqwest_hook_rewrites_to_match(tmp_path: Path) -> None:
+def test_primp_hook_rewrites_to_match(tmp_path: Path) -> None:
 
     path = os.path.join(str(tmp_path), "prq_hook.yaml")
     _preload(path, "https://api.example.com/real")
     with use_cassette(
         path,
         record_mode="none",
-        intercept=["pyreqwest"],
+        intercept=["primp"],
         before_record_request=_rewrite_to("https://api.example.com/real"),
     ):
         resp = pri.Client().get("https://api.example.com/original")
     assert resp.status_code == 200
 
 
-def test_pyreqwest_replay_with_bytes_body(tmp_path: Path) -> None:
+def test_primp_replay_with_bytes_body(tmp_path: Path) -> None:
     """A bytes `data=` body exercises extract_body's bytes branch."""
 
     path = os.path.join(str(tmp_path), "prq_body.yaml")
@@ -185,7 +185,7 @@ def test_pyreqwest_replay_with_bytes_body(tmp_path: Path) -> None:
         )
     )
     c.save(path)
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+    with use_cassette(path, record_mode="none", intercept=["primp"]):
         resp = pri.Client().post("https://api.example.com/post", data=b"raw-bytes")
     assert resp.status_code == 200
 
@@ -214,13 +214,13 @@ async def test_aiohttp_hook_skip_recording_passes_through(tmp_path: Path) -> Non
                 await session.get(_REFUSED)
 
 
-def test_pyreqwest_hook_skip_recording_passes_through(tmp_path: Path) -> None:
+def test_primp_hook_skip_recording_passes_through(tmp_path: Path) -> None:
 
     def hook(request: RawRequest) -> RawRequest:
         raise SkipRecording
 
     path = os.path.join(str(tmp_path), "prq_skip.yaml")
-    with use_cassette(path, record_mode="all", intercept=["pyreqwest"], before_record_request=hook):
+    with use_cassette(path, record_mode="all", intercept=["primp"], before_record_request=hook):
         with pytest.raises(Exception):
             pri.Client().get(_REFUSED)
 

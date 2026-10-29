@@ -2,179 +2,222 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from collections.abc import AsyncIterator, Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import patch
 
-import pyreqwest_impersonate as pri
 import pytest
+from pyreqwest.client import ClientBuilder, SyncClientBuilder
+from pyreqwest.request import RequestBuilder
+from pyreqwest.simple.request import pyreqwest_get as async_get
+from pyreqwest.simple.sync_request import pyreqwest_get, pyreqwest_post
 
-from cassetter._core import Body, Cassette as RustCassette, HttpInteraction, HttpRequest, HttpResponse
-from cassetter.cassette import NoMatchError
-from cassetter.context import use_cassette
-from cassetter.intercept._pyreqwest import (
-    PyreqwestInterceptor,
-    ReplayResponse,
-    build_replay_response,
-    extract_body,
-    extract_headers,
-)
+from cassetter import NoMatchError, RawRequest, ResponseMismatchError, SkipRecording, use_cassette
 
 
-def _preload_cassette(path: str) -> None:
-    c = RustCassette()
-    c.add_interaction(
-        HttpInteraction(
-            request=HttpRequest("GET", "https://example.com/api"),
-            response=HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"data": "hello"})),
-            recorded_at="2026-01-01T00:00:00Z",
-        )
-    )
-    c.save(path)
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
 
 
-def test_interceptor_replay(tmp_path: Path) -> None:
-    path = os.path.join(str(tmp_path), "test.yaml")
-    _preload_cassette(path)
+@pytest.fixture
+def received() -> list[tuple[str, bytes]]:
+    return []
+
+
+@pytest.fixture
+def url(received: list[tuple[str, bytes]]) -> Iterator[str]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.reply()
+
+        def do_POST(self) -> None:
+            self.reply()
+
+        def reply(self) -> None:
+            length = int(self.headers.get("content-length", 0))
+            received.append((self.command, self.rfile.read(length)))
+            body = json.dumps({"path": self.path, "calls": len(received)}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("x-tag", "a")
+            self.send_header("x-tag", "b")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture
+def path(tmp_path: Path) -> str:
+    return os.path.join(tmp_path, "pyreqwest.yaml")
+
+
+def test_sync_client_records_and_replays(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]) as cassette:
+        with SyncClientBuilder().build() as client:
+            recorded = client.post(f"{url}/items").body_json({"name": "x"}).build().send()
+    assert recorded.json() == {"path": "/items", "calls": 1}
+    assert cassette.interactions[0].request.body.content == {"name": "x"}
 
     with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
-        client = pri.Client()
-        response = client.get("https://example.com/api")
-        assert response.status_code == 200
-        assert response.json() == {"data": "hello"}
+        with SyncClientBuilder().build() as client:
+            replayed = client.post(f"{url}/items").body_json({"name": "x"}).build().send()
+    assert replayed.status == 200
+    assert replayed.json() == {"path": "/items", "calls": 1}
+    assert replayed.get_header_all("x-tag") == ["a", "b"]
+    assert len(received) == 1
 
 
-def test_interceptor_replay_via_request_method(tmp_path: Path) -> None:
-    path = os.path.join(str(tmp_path), "test.yaml")
-    _preload_cassette(path)
-
-    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
-        client = pri.Client()
-        response = client.request("GET", "https://example.com/api")
-        assert response.status_code == 200
-        assert response.json() == {"data": "hello"}
-
-
-def test_interceptor_no_match_cant_record(tmp_path: Path) -> None:
-    path = os.path.join(str(tmp_path), "test.yaml")
-    _preload_cassette(path)
+@pytest.mark.anyio
+async def test_async_client_records_and_replays(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        async with ClientBuilder().build() as client:
+            recorded = await client.get(f"{url}/items").build().send()
+            assert await recorded.json() == {"path": "/items", "calls": 1}
 
     with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
-        client = pri.Client()
+        async with ClientBuilder().build() as client:
+            replayed = await client.get(f"{url}/items").build().send()
+            assert await replayed.json() == {"path": "/items", "calls": 1}
+    assert len(received) == 1
+
+
+def test_streamed_request_and_response(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]) as cassette:
+        with SyncClientBuilder().build() as client:
+            request = client.post(f"{url}/upload").body_stream(iter([b"ab", b"cd"])).build_streamed()
+            with request as response:
+                assert json.loads(response.body_reader.bytes().to_bytes()) == {"path": "/upload", "calls": 1}
+    assert received == [("POST", b"abcd")]
+    assert cassette.interactions[0].request.body.content == "abcd"
+
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+        with SyncClientBuilder().build() as client:
+            request = client.post(f"{url}/upload").body_stream(iter([b"ab", b"cd"])).build_streamed()
+            with request as response:
+                assert json.loads(response.body_reader.bytes().to_bytes()) == {"path": "/upload", "calls": 1}
+    assert len(received) == 1
+
+
+@pytest.mark.anyio
+async def test_async_streamed_request_body(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    async def chunks() -> AsyncIterator[bytes]:
+        yield b"ab"
+        yield b"cd"
+
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        async with ClientBuilder().build() as client:
+            await client.post(f"{url}/upload").body_stream(chunks()).build().send()
+    assert received == [("POST", b"abcd")]
+
+
+def test_simple_requests_record_and_replay(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        pyreqwest_get(f"{url}/simple").send()
+        pyreqwest_post(f"{url}/simple").body_text("hi").send()
+
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]) as cassette:
+        assert pyreqwest_get(f"{url}/simple").send().json() == {"path": "/simple", "calls": 1}
+        assert pyreqwest_post(f"{url}/simple").body_text("hi").send().json() == {"path": "/simple", "calls": 2}
+    assert cassette.all_played
+    assert len(received) == 2
+
+
+@pytest.mark.anyio
+async def test_async_simple_request_replays(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        await async_get(f"{url}/simple").send()
+
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+        response = await async_get(f"{url}/simple").send()
+        assert await response.json() == {"path": "/simple", "calls": 1}
+    assert len(received) == 1
+
+
+def test_no_match_raises(path: str) -> None:
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
         with pytest.raises(NoMatchError):
-            client.delete("https://example.com/unknown")
+            pyreqwest_get("https://example.com/missing").send()
 
 
-def test_interceptor_install_uninstall() -> None:
-    interceptor = PyreqwestInterceptor()
-    original_get = pri.Client.get
+def test_verify_compares_live_response(url: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        pyreqwest_get(f"{url}/verify").send()
 
-    interceptor.install()
-    assert pri.Client.get is not original_get
-
-    interceptor.uninstall()
-    assert pri.Client.get is original_get
+    with use_cassette(path, record_mode="verify", intercept=["pyreqwest"]):
+        with pytest.raises(ResponseMismatchError, match='"calls": 2'):
+            pyreqwest_get(f"{url}/verify").send()
 
 
-def test_extract_headers_none() -> None:
-    assert extract_headers(None) == {}
+@pytest.mark.anyio
+async def test_bypass_goes_live(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with use_cassette(path, record_mode="none", intercept=["pyreqwest"], ignore_localhost=True):
+        assert pyreqwest_get(f"{url}/live").send().status == 200
+        assert (await async_get(f"{url}/live").send()).status == 200
+    assert len(received) == 2
 
 
-def test_extract_headers_dict() -> None:
-    headers = {"Content-Type": "application/json", "Accept": "text/html"}
-    result = extract_headers(headers)
-    assert result == {"content-type": ["application/json"], "accept": ["text/html"]}
+@pytest.mark.anyio
+async def test_skip_recording_goes_live(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    def hook(request: RawRequest) -> RawRequest:
+        raise SkipRecording
+
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"], before_record_request=hook) as cassette:
+        assert pyreqwest_get(f"{url}/live").send().status == 200
+        assert (await async_get(f"{url}/live").send()).status == 200
+    assert cassette.interactions == []
+    assert len(received) == 2
 
 
-def test_extract_body_content_bytes() -> None:
-    assert extract_body(content=b"raw", data=None, json_payload=None) == b"raw"
+def test_request_sent_after_cassette_exits_goes_live(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with SyncClientBuilder().build() as client:
+        with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
+            request = client.get(f"{url}/later").build()
+        assert request.send().status == 200
+    assert len(received) == 1
 
 
-def test_extract_body_data_string() -> None:
-    assert extract_body(content=None, data="form=data", json_payload=None) == b"form=data"
+def test_request_built_before_cassette_is_refused(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
+    with SyncClientBuilder().build() as client:
+        request = client.get(f"{url}/early").build()
+        with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+            with pytest.raises(RuntimeError, match="built before the cassette was entered"):
+                request.send()
+    assert received == []
 
 
-def test_extract_body_json_payload() -> None:
-    result = extract_body(content=None, data=None, json_payload={"key": "val"})
-    assert json.loads(result) == {"key": "val"}  # type: ignore[arg-type]
+@pytest.mark.anyio
+async def test_streamed_request_built_before_cassette_is_refused(url: str, path: str) -> None:
+    async with ClientBuilder().build() as client:
+        request = client.get(f"{url}/early").build_streamed()
+        with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+            with pytest.raises(RuntimeError, match="built before the cassette was entered"):
+                await request.__aenter__()
 
 
-def test_extract_body_none() -> None:
-    assert extract_body(content=None, data=None, json_payload=None) is None
+def test_bypassed_request_built_before_cassette_goes_live(
+    url: str, path: str, received: list[tuple[str, bytes]]
+) -> None:
+    with SyncClientBuilder().build() as client:
+        request = client.get(f"{url}/early").build()
+        with use_cassette(path, record_mode="none", intercept=["pyreqwest"], ignore_localhost=True):
+            assert request.send().status == 200
+    assert len(received) == 1
 
 
-def test_replay_response_text() -> None:
-    r = ReplayResponse(status_code=200, headers={}, content=b"hello", url="https://x.com")
-    assert r.text == "hello"
-    assert r.text_plain == "hello"
-    assert r.text_markdown == "hello"
-
-
-def test_replay_response_json() -> None:
-    r = ReplayResponse(status_code=200, headers={}, content=b'{"a": 1}', url="https://x.com")
-    assert r.json() == {"a": 1}
-
-
-def test_build_replay_response_json_body() -> None:
-    resp = build_replay_response(
-        "https://example.com",
-        HttpResponse(200, {"content-type": ["application/json"]}, Body("json", {"key": "value"})),
-    )
-    assert resp.json() == {"key": "value"}
-    assert resp.status_code == 200
-
-
-def test_build_replay_response_text_body() -> None:
-    resp = build_replay_response(
-        "https://example.com",
-        HttpResponse(200, body=Body("text", "hello world")),
-    )
-    assert resp.text == "hello world"
-
-
-def test_build_replay_response_binary_body() -> None:
-    resp = build_replay_response(
-        "https://example.com",
-        HttpResponse(200, body=Body("binary", b"\x00\x01\x02")),
-    )
-    assert resp.content == b"\x00\x01\x02"
-
-
-def test_build_replay_response_none_body() -> None:
-    resp = build_replay_response(
-        "https://example.com",
-        HttpResponse(200, body=Body("none")),
-    )
-    assert resp.content == b""
-
-
-def test_record_uses_request_url_not_response_url(tmp_path: Path) -> None:
-    """Recording must store the request URL: responses carry post-redirect URLs
-    that would never match on replay."""
-
-    path = os.path.join(str(tmp_path), "redirect.yaml")
-
-    class FakeResponse:
-        url = "https://example.com/redirected-target"
-        status_code = 200
-        headers = {"content-type": "application/json", "content-encoding": "gzip"}
-        content = b'{"ok": true}'
-
-    def fake_get(self: object, url: str, **kwargs: object) -> FakeResponse:
-        return FakeResponse()
-
-    with patch.object(pri.Client, "get", fake_get):
-        with use_cassette(path, record_mode="all", intercept=["pyreqwest"]) as cassette:
-            client = pri.Client()
-            client.get("https://example.com/original")
-
-            recorded = cassette.interactions[0]
-            assert recorded.request.uri == "https://example.com/original"
-            # decompressed content is recorded, so the encoding header is dropped
-            assert "content-encoding" not in recorded.response.headers
-
-    # Replay with the original request URL must match
+def test_uninstall_restores_builders(path: str) -> None:
+    original = RequestBuilder.build
     with use_cassette(path, record_mode="none", intercept=["pyreqwest"]):
-        client = pri.Client()
-        response = client.get("https://example.com/original")
-        assert response.status_code == 200
-        assert response.json() == {"ok": True}
+        assert RequestBuilder.build is not original
+    assert RequestBuilder.build is original
