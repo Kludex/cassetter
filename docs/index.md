@@ -15,7 +15,7 @@ The key features are:
 
 ## Requirements
 
-Python 3.10+
+Python 3.11+
 
 Cassetter has no required runtime dependencies. It intercepts the HTTP libraries you already have installed.
 

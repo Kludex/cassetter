@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Marcelo Trylesinski", email = "marcelotryle@gmail.com" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
@@ -83,7 +83,7 @@ docs = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "FA", "UP", "RUF100"]
