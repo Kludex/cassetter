@@ -660,7 +660,7 @@ bindings - see its README for the contract.
 
 ## Development
 
-Requires Rust 1.88+, Python 3.10+, and Node 18+ for the Node binding.
+Requires Rust 1.88+, Python 3.11+, and Node 18+ for the Node binding.
 
 ```bash
 git clone https://github.com/Kludex/cassetter.git

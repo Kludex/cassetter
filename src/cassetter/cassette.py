@@ -9,7 +9,7 @@ import warnings
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
@@ -369,11 +369,11 @@ class Cassette:
         if newest is None:
             return
 
-        cutoff = datetime.now(timezone.utc) - self._max_age
+        cutoff = datetime.now(UTC) - self._max_age
         if newest >= cutoff:
             return
 
-        age_days = (datetime.now(timezone.utc) - newest).days
+        age_days = (datetime.now(UTC) - newest).days
         msg = f"cassette {self._path!r} is {age_days} days old (max_age={self._max_age})"
 
         if self._on_expiry == "fail":
@@ -542,7 +542,7 @@ class Cassette:
 
         request = HttpRequest(method, uri, request_headers, req_body)
         response = HttpResponse(status, clean_resp_headers, resp_body)
-        recorded_at = datetime.now(timezone.utc).isoformat()
+        recorded_at = datetime.now(UTC).isoformat()
         interaction = HttpInteraction(request, response, recorded_at)
 
         # Apply security filtering
@@ -669,7 +669,7 @@ class Cassette:
         """
         request = GrpcRequest(method, metadata, request_body)
         response = GrpcResponse(status_code, status_message, response_metadata, response_body)
-        recorded_at = datetime.now(timezone.utc).isoformat()
+        recorded_at = datetime.now(UTC).isoformat()
         interaction = GrpcInteraction(request, response, recorded_at, json_debug)
 
         # Apply security filtering
@@ -743,7 +743,7 @@ class Cassette:
             expected: The recording `play_ws()` matched in `verify` mode. The received frames are compared
                 against it instead of being recorded.
         """
-        recorded_at = datetime.now(timezone.utc).isoformat()
+        recorded_at = datetime.now(UTC).isoformat()
         interaction = WsInteraction(uri, headers, self._recorded_frames(frames), recorded_at)
 
         # Apply security filtering

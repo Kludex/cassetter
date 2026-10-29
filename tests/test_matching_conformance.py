@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NotRequired
 
 import pytest
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 from cassetter._core import Body, Cassette, HttpRequest, MatchConfig
 
