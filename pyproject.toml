@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Marcelo Trylesinski", email = "marcelotryle@gmail.com" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
@@ -31,7 +31,7 @@ aiohttp = ["aiohttp>=3.9"]
 requests = ["requests>=2.28"]
 grpc = ["grpcio>=1.60"]
 websockets = ["websockets>=14.0"]
-pyreqwest = ["pyreqwest>=0.15 ; python_full_version >= '3.11'"]
+pyreqwest = ["pyreqwest>=0.15"]
 primp = ["primp>=2.0"]
 httpx2 = [
     "httpx2>=2.0",
@@ -77,7 +77,7 @@ dev = [
     "httpx2>=2.0",
     "pytest-xdist>=3.8.0",
     "types-pyyaml>=6.0.12.20260724",
-    "pyreqwest>=0.15 ; python_full_version >= '3.11'",
+    "pyreqwest>=0.15",
 ]
 docs = [
     "zensical>=0.0.46",
@@ -85,7 +85,7 @@ docs = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "FA", "UP", "RUF100"]

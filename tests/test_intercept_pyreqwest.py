@@ -8,9 +8,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-
-pytest.importorskip("pyreqwest")
-
 from pyreqwest.client import ClientBuilder, SyncClientBuilder
 from pyreqwest.request import RequestBuilder
 from pyreqwest.simple.request import pyreqwest_get as async_get

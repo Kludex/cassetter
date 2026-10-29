@@ -15,7 +15,7 @@ The key features are:
 
 ## Requirements
 
-Python 3.10+
+Python 3.11+
 
 Cassetter has no required runtime dependencies. It intercepts the HTTP libraries you already have installed.
 
@@ -97,7 +97,7 @@ Notice what is **not** there: no `authorization` header, no cookies, no API keys
 | aiohttp | HTTP |
 | requests | HTTP |
 | urllib3 | HTTP |
-| pyreqwest (Python 3.11+) | HTTP |
+| pyreqwest | HTTP |
 | primp | HTTP |
 | grpcio | gRPC |
 | websockets | WebSocket |
