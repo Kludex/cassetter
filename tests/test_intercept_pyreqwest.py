@@ -110,6 +110,27 @@ def test_streamed_request_and_response(url: str, path: str, received: list[tuple
     assert len(received) == 1
 
 
+def test_recorded_streamed_response_body_is_readable(url: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        with SyncClientBuilder().build() as client:
+            with client.get(f"{url}/items").build_streamed() as response:
+                assert response.status == 200
+                assert response.get_header_all("x-tag") == ["a", "b"]
+                chunk = response.body_reader.read(1024)
+                assert chunk is not None
+                assert json.loads(chunk.to_bytes()) == {"path": "/items", "calls": 1}
+
+
+@pytest.mark.anyio
+async def test_async_recorded_streamed_response_body_is_readable(url: str, path: str) -> None:
+    with use_cassette(path, record_mode="all", intercept=["pyreqwest"]):
+        async with ClientBuilder().build() as client:
+            async with client.get(f"{url}/items").build_streamed() as response:
+                chunk = await response.body_reader.read_chunk()
+                assert chunk is not None
+                assert json.loads(chunk.to_bytes()) == {"path": "/items", "calls": 1}
+
+
 @pytest.mark.anyio
 async def test_async_streamed_request_body(url: str, path: str, received: list[tuple[str, bytes]]) -> None:
     async def chunks() -> AsyncIterator[bytes]:
