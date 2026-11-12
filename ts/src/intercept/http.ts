@@ -13,7 +13,7 @@ import { Readable, Transform, Writable, addAbortSignal, pipeline } from "node:st
 
 import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap, type HttpResponse } from "../types.js";
-import { isLocalhost, liveRequests, type Interceptor } from "./base.js";
+import { liveRequests, type Interceptor } from "./base.js";
 
 type RequestFn = (...args: unknown[]) => http.ClientRequest;
 type Module = Record<"request" | "get", RequestFn>;
@@ -53,7 +53,7 @@ export class HttpInterceptor implements Interceptor {
         if (!requestPatch.active) return activeRequest(requestPatch.previous)(...args);
         const live = activeRequest(requestPatch.previous);
         const { url, options, callback } = parseArgs(defaultProtocol, args);
-        if (liveRequests.getStore() || (cassette.ignoreLocalhost && isLocalhost(url)) || isTunnel(options)) {
+        if (liveRequests.getStore() || isTunnel(options) || cassette.shouldBypass(url)) {
           return live(...args);
         }
         return new CassetteRequest(cassette, live, args, url, options, callback) as unknown as http.ClientRequest;

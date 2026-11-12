@@ -102,6 +102,8 @@ export interface CassetteConfig extends MatchConfig, SecurityConfig {
   maxAge?: string;
   onExpiry?: "warn" | "fail" | "rerecord";
   ignoreLocalhost?: boolean;
+  /** Host globs whose requests bypass the cassette, neither recorded nor replayed. */
+  ignoreHosts?: string[];
   /** What `verify` mode compares between a recorded and a live response. */
   compare?: Compare;
   /** Receives `(recorded, live)` in `verify` mode and returns both normalized. */
