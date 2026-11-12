@@ -193,6 +193,27 @@ describe("useCassette", () => {
 
     expect(hits).toBe(1);
   });
+
+  it("bypasses the cassette for ignored hosts", async () => {
+    const hosts: string[] = [];
+    stubUpstream((req) => {
+      hosts.push(new URL(req.url).hostname);
+      return new Response("live", { status: 200 });
+    });
+
+    const cassette = await useCassette(
+      join(dir, "ignored.yaml"),
+      { ignoreHosts: ["*.googleapis.com", "auth?.example.com"] },
+      async () => {
+        await fetch("https://aiplatform.eu.rep.googleapis.com/predict");
+        await fetch("https://AUTH2.example.com/token");
+        await fetch("https://api.example.com/data");
+      },
+    );
+
+    expect(hosts).toEqual(["aiplatform.eu.rep.googleapis.com", "auth2.example.com", "api.example.com"]);
+    expect(cassette.interactions.map((i) => i.request.uri)).toEqual(["https://api.example.com/data"]);
+  });
 });
 
 describe("useCassette options", () => {
@@ -517,6 +538,16 @@ describe("node:http", () => {
     const cassette = await useCassette(
       join(dir, "local.yaml"),
       { recordMode: "none", ignoreLocalhost: true },
+      () => send(`${origin}/health`),
+    );
+    expect(hits).toBe(1);
+    expect(cassette.interactions).toHaveLength(0);
+  });
+
+  it("bypasses the cassette for ignored hosts", async () => {
+    const cassette = await useCassette(
+      join(dir, "ignored.yaml"),
+      { recordMode: "none", ignoreHosts: ["127.0.0.[0-9]"] },
       () => send(`${origin}/health`),
     );
     expect(hits).toBe(1);

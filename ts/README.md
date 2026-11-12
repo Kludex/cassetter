@@ -251,6 +251,19 @@ await useCassette("cassette.yaml", { intercept: ["fetch"] }, async () => { ... }
 upgrade, and `Expect: 100-continue` requests always go live, since they trade data
 before or instead of a response.
 
+`ignoreHosts` does the same for hosts matching any of its globs. `*`, `?`, `[seq]`,
+and `[!seq]` work as in Python's `fnmatch`. A matching request is neither recorded
+nor replayed, so a live token exchange or model call keeps working while the rest
+is recorded:
+
+```ts
+await useCassette(
+  "cassette.yaml",
+  { ignoreHosts: ["aiplatform.*.googleapis.com", "oauth2.googleapis.com"] },
+  async () => { ... },
+);
+```
+
 > [!NOTE]
 > The `http` interceptor swaps the functions on the module. Code that saved
 > `http.request` into a variable before the cassette started keeps the original.

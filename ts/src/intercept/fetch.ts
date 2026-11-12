@@ -4,7 +4,7 @@
 
 import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap, type HttpResponse } from "../types.js";
-import { isLocalhost, liveRequests, type Interceptor } from "./base.js";
+import { liveRequests, type Interceptor } from "./base.js";
 
 type FetchPatch = {
   active: boolean;
@@ -44,7 +44,7 @@ export class FetchInterceptor implements Interceptor {
       const request = new Request(input, init);
       const { method, url: uri } = request;
 
-      if (cassette.ignoreLocalhost && isLocalhost(uri)) {
+      if (cassette.shouldBypass(uri)) {
         return patch.previous(input, init);
       }
 

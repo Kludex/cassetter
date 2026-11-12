@@ -12,6 +12,7 @@ import { existsSync, rmSync, statSync } from "node:fs";
 import { compareResponses, type BeforeCompareResponse, type Compare } from "./compare.js";
 import { native, processBody, scrubInteraction, scrubGrpcInteraction, scrubWsInteraction } from "./binding.js";
 import type { NativeCassette } from "./binding.js";
+import { isLocalhost } from "./intercept/base.js";
 import { DISCARDING_MODES, RecordMode, parseDuration } from "./recording.js";
 import { NONE_BODY, bodyToBuffer } from "./types.js";
 import type {
@@ -72,6 +73,7 @@ export interface CassetteOptions {
   maxAge?: string;
   onExpiry?: "warn" | "fail" | "rerecord";
   ignoreLocalhost?: boolean;
+  ignoreHosts?: string[];
   compare?: Compare;
   beforeCompareResponse?: BeforeCompareResponse;
 }
@@ -84,6 +86,7 @@ export class Cassette {
   private readonly _maxAge: number | null;
   private readonly _onExpiry: "warn" | "fail" | "rerecord";
   private readonly _ignoreLocalhost: boolean;
+  private readonly _ignoreHosts: RegExp[];
   private readonly _compare: Compare;
   private readonly _beforeCompareResponse: BeforeCompareResponse | undefined;
 
@@ -107,6 +110,7 @@ export class Cassette {
     this._maxAge = options.maxAge ? parseDuration(options.maxAge) : null;
     this._onExpiry = options.onExpiry ?? "warn";
     this._ignoreLocalhost = options.ignoreLocalhost ?? false;
+    this._ignoreHosts = (options.ignoreHosts ?? []).map(globToRegExp);
     this._compare = options.compare ?? {};
     this._beforeCompareResponse = options.beforeCompareResponse;
   }
@@ -129,6 +133,13 @@ export class Cassette {
   /** Whether localhost traffic bypasses the cassette entirely. */
   get ignoreLocalhost(): boolean {
     return this._ignoreLocalhost;
+  }
+
+  /** Whether a request to `uri` bypasses the cassette, neither recorded nor replayed. */
+  shouldBypass(uri: string): boolean {
+    if (this._ignoreLocalhost && isLocalhost(uri)) return true;
+    const { hostname } = new URL(uri);
+    return this._ignoreHosts.some((pattern) => pattern.test(hostname));
   }
 
   /** The recorded HTTP interactions, empty before `load()`. */
@@ -551,4 +562,15 @@ export function getHeader(headers: HeaderMap, name: string): string | null {
     }
   }
   return null;
+}
+
+/** Compile a host glob with `fnmatch` semantics: `*`, `?`, `[seq]`, and `[!seq]`. */
+function globToRegExp(pattern: string): RegExp {
+  const source = pattern
+    .toLowerCase()
+    .replace(/[.+^${}()|\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
+    .replace(/\[!/g, "[^");
+  return new RegExp(`^${source}$`);
 }
