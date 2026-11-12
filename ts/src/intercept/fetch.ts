@@ -4,7 +4,7 @@
 
 import { NoMatchError, type Cassette } from "../cassette.js";
 import { bodyToBuffer, type HeaderMap, type HttpResponse } from "../types.js";
-import { isLocalhost, liveRequests, type Interceptor } from "./base.js";
+import { handles, isLocalhost, liveRequests, type Interceptor } from "./base.js";
 
 type FetchPatch = {
   active: boolean;
@@ -37,7 +37,7 @@ export class FetchInterceptor implements Interceptor {
       input: string | URL | Request,
       init?: RequestInit,
     ): Promise<Response> => {
-      if (!patch.active) {
+      if (!patch.active || !handles(cassette)) {
         return activeFetch(patch.previous)(input, init);
       }
 

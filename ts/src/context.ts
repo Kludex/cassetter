@@ -12,7 +12,7 @@
 import { Cassette } from "./cassette.js";
 import { FetchInterceptor } from "./intercept/fetch.js";
 import { HttpInterceptor } from "./intercept/http.js";
-import type { Interceptor } from "./intercept/base.js";
+import { openCassettes, scopes, type Interceptor } from "./intercept/base.js";
 import { RecordMode, parseRecordMode } from "./recording.js";
 import type { CassetteConfig } from "./types.js";
 
@@ -81,9 +81,11 @@ export async function useCassette(
     interceptor.install(cassette);
   }
 
+  openCassettes.add(cassette);
   try {
-    await fn(cassette);
+    await scopes.run(cassette, () => fn(cassette));
   } finally {
+    openCassettes.delete(cassette);
     for (const interceptor of [...interceptors].reverse()) {
       interceptor.uninstall();
     }
