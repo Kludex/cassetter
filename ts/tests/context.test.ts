@@ -203,15 +203,21 @@ describe("useCassette", () => {
 
     const cassette = await useCassette(
       join(dir, "ignored.yaml"),
-      { ignoreHosts: ["*.googleapis.com", "auth?.example.com"] },
+      { ignoreHosts: ["*.googleapis.com", "auth?.example.com", "::1"] },
       async () => {
         await fetch("https://aiplatform.eu.rep.googleapis.com/predict");
         await fetch("https://AUTH2.example.com/token");
+        await fetch("http://[::1]:8080/health");
         await fetch("https://api.example.com/data");
       },
     );
 
-    expect(hosts).toEqual(["aiplatform.eu.rep.googleapis.com", "auth2.example.com", "api.example.com"]);
+    expect(hosts).toEqual([
+      "aiplatform.eu.rep.googleapis.com",
+      "auth2.example.com",
+      "[::1]",
+      "api.example.com",
+    ]);
     expect(cassette.interactions.map((i) => i.request.uri)).toEqual(["https://api.example.com/data"]);
   });
 });
@@ -650,6 +656,18 @@ describe("node:http", () => {
     });
     expect(hits).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
+  });
+
+  it("sends CONNECT requests through a proxy port live with ignoreHosts set", async () => {
+    server.once("connect", (_req, socket) => socket.end("HTTP/1.1 200 Connection Established\r\n\r\n"));
+    await useCassette(join(dir, "connect.yaml"), { recordMode: "none", ignoreHosts: ["*.example.com"] }, async () => {
+      const { hostname, port } = new URL(origin);
+      const req = httpRequest({ hostname, port, method: "CONNECT", path: "example.com:443" });
+      req.end();
+      const [res, socket] = await once(req, "connect");
+      socket.destroy();
+      expect(res.statusCode).toBe(200);
+    });
   });
 });
 

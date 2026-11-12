@@ -53,7 +53,7 @@ export class HttpInterceptor implements Interceptor {
         if (!requestPatch.active) return activeRequest(requestPatch.previous)(...args);
         const live = activeRequest(requestPatch.previous);
         const { url, options, callback } = parseArgs(defaultProtocol, args);
-        if (liveRequests.getStore() || cassette.shouldBypass(url) || isTunnel(options)) {
+        if (liveRequests.getStore() || isTunnel(options) || cassette.shouldBypass(url)) {
           return live(...args);
         }
         return new CassetteRequest(cassette, live, args, url, options, callback) as unknown as http.ClientRequest;

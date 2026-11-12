@@ -138,8 +138,13 @@ export class Cassette {
   /** Whether a request to `uri` bypasses the cassette, neither recorded nor replayed. */
   shouldBypass(uri: string): boolean {
     if (this._ignoreLocalhost && isLocalhost(uri)) return true;
-    const { hostname } = new URL(uri);
-    return this._ignoreHosts.some((pattern) => pattern.test(hostname));
+    let host: string;
+    try {
+      host = new URL(uri).hostname.replace(/^\[(.*)\]$/, "$1");
+    } catch {
+      return false;
+    }
+    return this._ignoreHosts.some((pattern) => pattern.test(host));
   }
 
   /** The recorded HTTP interactions, empty before `load()`. */
