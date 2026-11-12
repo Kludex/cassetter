@@ -399,6 +399,69 @@ describe("overlapping scopes", () => {
     expect(upstream).toBe(1);
     expect(cassette.interactions).toHaveLength(0);
   });
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const paths = (cassette: Cassette) => cassette.interactions.map((i) => new URL(i.request.uri).pathname);
+
+  it("keeps the requests of concurrent scopes in their own cassettes", async () => {
+    stubUpstream(() => new Response("{}", { status: 200 }));
+    const run = (recordMode: string) =>
+      Promise.all([
+        useCassette(join(dir, "a.yaml"), { recordMode }, async () => {
+          await sleep(10);
+          await fetch("https://api.example.com/a");
+        }),
+        useCassette(join(dir, "b.yaml"), { recordMode }, async () => {
+          await sleep(30);
+          await fetch("https://api.example.com/b");
+        }),
+      ]);
+
+    const [a, b] = await run("all");
+    expect(paths(a)).toEqual(["/a"]);
+    expect(paths(b)).toEqual(["/b"]);
+
+    stubUpstream(() => {
+      throw new Error("replay went live");
+    });
+    await run("none");
+  });
+
+  it("records a nested scope's fetch only in the inner cassette", async () => {
+    stubUpstream(() => new Response("{}", { status: 200 }));
+    const outer = await useCassette(join(dir, "outer.yaml"), { recordMode: "none" }, async () => {
+      const inner = await useCassette(join(dir, "inner.yaml"), () => fetch("https://api.example.com/nested"));
+      expect(paths(inner)).toEqual(["/nested"]);
+    });
+    expect(outer.interactions).toHaveLength(0);
+  });
+
+  it("hands a request sent from outside any scope to the only open cassette", async () => {
+    let upstream = 0;
+    stubUpstream(() => {
+      upstream += 1;
+      return new Response("{}", { status: 200 });
+    });
+    let open!: () => void;
+    const opened = new Promise<void>((resolve) => (open = resolve));
+    const pooled = opened.then(() => fetch("https://api.example.com/pooled"));
+
+    const cassette = await useCassette(join(dir, "pooled.yaml"), async () => {
+      open();
+      await pooled;
+    });
+    expect(paths(cassette)).toEqual(["/pooled"]);
+
+    const sendPooled = () => sleep(10).then(() => fetch("https://api.example.com/pooled"));
+    const ambiguous = sendPooled();
+    const [a, b] = await Promise.all([
+      useCassette(join(dir, "a.yaml"), () => ambiguous),
+      useCassette(join(dir, "b.yaml"), () => ambiguous),
+    ]);
+    expect(a.interactions).toHaveLength(0);
+    expect(b.interactions).toHaveLength(0);
+    expect(upstream).toBe(2);
+  });
 });
 
 describe("node:http", () => {
@@ -591,6 +654,22 @@ describe("node:http", () => {
     });
     expect(outer.interactions).toHaveLength(0);
     expect(hits).toBe(1);
+  });
+
+  it("keeps the requests of concurrent scopes in their own cassettes", async () => {
+    const [a, b] = await Promise.all([
+      useCassette(join(dir, "a.yaml"), async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await send(`${origin}/a`);
+      }),
+      useCassette(join(dir, "b.yaml"), async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        await send(`${origin}/b`);
+      }),
+    ]);
+    expect(a.interactions.map((i) => i.request.uri)).toEqual([`${origin}/a`]);
+    expect(b.interactions.map((i) => i.request.uri)).toEqual([`${origin}/b`]);
+    expect(hits).toBe(2);
   });
 
   it("aborts a replayed request through its signal", async () => {

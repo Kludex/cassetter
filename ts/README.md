@@ -255,6 +255,22 @@ before or instead of a response.
 > The `http` interceptor swaps the functions on the module. Code that saved
 > `http.request` into a variable before the cassette started keeps the original.
 
+## Concurrency
+
+Each `useCassette` scope gets its own cassette, tracked with `AsyncLocalStorage`, so
+scopes that run at the same time never mix their requests:
+
+```ts
+await Promise.all(
+  cases.map((name) => useCassette(`cassettes/${name}.yaml`, () => runCase(name))),
+);
+```
+
+A nested scope takes the requests sent inside it. A request sent from a context
+created before any scope, such as a pool or a timer, goes to the open cassette when
+there is exactly one, and live otherwise, since guessing would record it into
+another task's cassette.
+
 ## Development
 
 Requires a Rust toolchain and Node 18+.
