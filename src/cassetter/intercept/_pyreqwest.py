@@ -110,8 +110,9 @@ async def async_middleware(request: Request, next_handler: Next) -> Response:
 
     order = cassette.reserve_record_order()
     response = await next_handler.run(request)
-    record(cassette, raw, response, (await response.bytes()).to_bytes(), order, expected)
-    return response
+    body = (await response.bytes()).to_bytes()
+    record(cassette, raw, response, body, order, expected)
+    return await rebuild(response, body).build()
 
 
 def sync_middleware(request: Request, next_handler: SyncNext) -> SyncResponse:
@@ -132,8 +133,9 @@ def sync_middleware(request: Request, next_handler: SyncNext) -> SyncResponse:
 
     order = cassette.reserve_record_order()
     response = next_handler.run(request)
-    record(cassette, raw, response, response.bytes().to_bytes(), order, expected)
-    return response
+    body = response.bytes().to_bytes()
+    record(cassette, raw, response, body, order, expected)
+    return rebuild(response, body).build_sync()
 
 
 def describe(request: Request) -> tuple[str, str, dict[str, list[str]], bytes | None]:
@@ -159,6 +161,18 @@ def lookup(cassette: Cassette, raw: RawRequest) -> tuple[ResponseBuilder | None,
     response = expected[1]
     headers = [(name, value) for name, values in response.headers.items() for value in values]
     return ResponseBuilder().status(response.status).headers(headers).body_bytes(body_to_bytes(response.body)), None
+
+
+def rebuild(response: BaseResponse, body: bytes) -> ResponseBuilder:
+    """Rebuild the live response, since reading its body to record it leaves a streamed `body_reader` at EOF."""
+    return (
+        ResponseBuilder()
+        .status(response.status)
+        .version(response.version)
+        .headers(list(response.headers.items()))
+        .extensions(response.extensions)
+        .body_bytes(body)
+    )
 
 
 def record(
