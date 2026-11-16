@@ -3,7 +3,7 @@ module github.com/Kludex/cassetter/go
 go 1.26.0
 
 require (
-	github.com/andybalholm/brotli v1.2.7
+	github.com/andybalholm/brotli v1.2.8
 	github.com/coder/websocket v1.8.15
 	github.com/klauspost/compress v1.20.3
 	github.com/pelletier/go-toml/v2 v2.4.3
