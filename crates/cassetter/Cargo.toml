@@ -28,7 +28,7 @@ tonic = [
 
 [dependencies]
 cassetter-core.workspace = true
-jiff = { version = "0.2.15", default-features = false, features = ["std"] }
+jiff = { version = "1.0.0", default-features = false, features = ["std"] }
 bytes = { version = "1", optional = true }
 http = { version = "1", optional = true }
 http-body = { version = "1", optional = true }
